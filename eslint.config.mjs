@@ -14,6 +14,10 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/*.config.*',
       'eslint.config.mjs',
+      // Native-/RN-Schicht: benötigt RN-Toolchain (react-native-Typen, Metro) —
+      // wird in dieser Umgebung nicht getypt/gelintet (siehe docs/11-Native-und-App.md).
+      'apps/**',
+      'native/**',
     ],
   },
   {

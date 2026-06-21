@@ -1,0 +1,98 @@
+import Foundation
+import React
+
+/// React-Native-Bridge des nativen NEXUS-Kernmoduls. Exportiert Secure-Storage, die
+/// verschlüsselte DB und den Exchange-Transport an JS (siehe apps/nexus-mobile/src/native).
+/// Methoden sind Promise-basiert (resolve/reject).
+@objc(NexusNative)
+final class NexusModule: NSObject {
+  @objc static func requiresMainQueueSetup() -> Bool { false }
+
+  // MARK: Secure-Storage
+
+  @objc(secureSet:value:resolver:rejecter:)
+  func secureSet(_ key: String, value: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { try NexusSecureStore.set(key, value: value); resolve(nil) }
+    catch { reject("secure_set", "\(error)", error) }
+  }
+
+  @objc(secureGet:resolver:rejecter:)
+  func secureGet(_ key: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { resolve(try NexusSecureStore.get(key)) }
+    catch { reject("secure_get", "\(error)", error) }
+  }
+
+  @objc(secureDelete:resolver:rejecter:)
+  func secureDelete(_ key: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { try NexusSecureStore.delete(key); resolve(nil) }
+    catch { reject("secure_delete", "\(error)", error) }
+  }
+
+  @objc(secureWipe:rejecter:)
+  func secureWipe(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { try NexusSecureStore.wipe(); resolve(nil) }
+    catch { reject("secure_wipe", "\(error)", error) }
+  }
+
+  // MARK: Verschlüsselte DB
+
+  @objc(dbInit:rejecter:)
+  func dbInit(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { try NexusDatabase.shared.initialize(); resolve(nil) }
+    catch { reject("db_init", "\(error)", error) }
+  }
+
+  @objc(dbExec:params:resolver:rejecter:)
+  func dbExec(_ sql: String, params: [Any], resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { resolve(try NexusDatabase.shared.exec(sql, params: params)) }
+    catch { reject("db_exec", "\(error)", error) }
+  }
+
+  @objc(dbQuery:params:resolver:rejecter:)
+  func dbQuery(_ sql: String, params: [Any], resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    do { resolve(try NexusDatabase.shared.query(sql, params: params)) }
+    catch { reject("db_query", "\(error)", error) }
+  }
+
+  // MARK: Transport (async → Promise)
+
+  @objc(transportDiscover:credentialsJson:resolver:rejecter:)
+  func transportDiscover(_ email: String, credentialsJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.discover(email: email, credentialsJson: credentialsJson)) }
+      catch { reject("transport_discover", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSyncMessages:folderId:syncKey:resolver:rejecter:)
+  func transportSyncMessages(_ accountId: String, folderId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.syncMessages(accountId: accountId, folderId: folderId, syncKey: syncKey)) }
+      catch { reject("transport_sync", "\(error)", error) }
+    }
+  }
+
+  @objc(transportApplyOperation:resolver:rejecter:)
+  func transportApplyOperation(_ operationJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { try await NexusTransport.shared.applyOperation(operationJson: operationJson); resolve(nil) }
+      catch { reject("transport_apply", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSendMessage:messageJson:resolver:rejecter:)
+  func transportSendMessage(_ accountId: String, messageJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.sendMessage(accountId: accountId, messageJson: messageJson)) }
+      catch { reject("transport_send", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSearchServer:query:resolver:rejecter:)
+  func transportSearchServer(_ accountId: String, query: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.searchServer(accountId: accountId, query: query)) }
+      catch { reject("transport_search", "\(error)", error) }
+    }
+  }
+}

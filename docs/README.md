@@ -62,6 +62,7 @@ Begründung und Trade-offs: siehe [ADR-001](./00-Architektur-Entscheidungen-ADR.
 | 08 | [Entwicklungsplan](./08-Entwicklungsplan.md) | Epics, Tasks, Milestones, Sprints |
 | 09 | [Risikoanalyse](./09-Risikoanalyse.md) | Technische & strategische Risiken + Mitigation |
 | 10 | [Implementierung](./10-Implementierung.md) | Repo-Struktur, Standards, Architekturregeln, CI/CD, Teststrategie |
+| 11 | [Native-Schicht & App](./11-Native-und-App.md) | Native Module (Swift/Kotlin), RN-App, Bridge, Status |
 
 ---
 

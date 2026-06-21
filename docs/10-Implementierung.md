@@ -20,8 +20,9 @@ verifizierbar (kein Xcode/Swift, kein Android SDK). Deshalb liefert Iteration 1 
 | `@nexus/services` (Use-Cases: Mail-/Ordner-Sync, Outbox, Suche, Setup, Kalender, Kontakte, Compose/Delegation, Regelmaschine) | ✅ umgesetzt + getestet |
 | `@nexus/ui-kit` (Design-Tokens) | ✅ umgesetzt + getestet |
 | CI/CD (GitHub Actions, TS-Core) | ✅ umgesetzt |
-| Native Module (`native/ios`, `native/android`) | ⏳ Folge-Iteration |
-| RN-Apps (`apps/nexus-mobile`, `apps/nexus-desktop`) | ⏳ Folge-Iteration |
+| Native Module (`native/ios`, `native/android`) | 🟧 Gerüst angelegt (nicht CI-baubar) — siehe [docs/11](./11-Native-und-App.md) |
+| RN-App (`apps/nexus-mobile`) | 🟧 Gerüst angelegt (nicht CI-baubar) — siehe [docs/11](./11-Native-und-App.md) |
+| RN-Desktop (`apps/nexus-desktop`) | ⏳ Folge-Iteration |
 
 ---
 

@@ -44,6 +44,7 @@ Das vollständige Strategie- und Architektur-Fundament liegt in **[`/docs`](./do
 9. [Entwicklungsplan](./docs/08-Entwicklungsplan.md)
 10. [Risikoanalyse](./docs/09-Risikoanalyse.md)
 11. [Implementierung](./docs/10-Implementierung.md)
+12. [Native-Schicht & App](./docs/11-Native-und-App.md)
 
 ## 🛠️ Entwicklung
 
