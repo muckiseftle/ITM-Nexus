@@ -1,10 +1,19 @@
-import { groupByConversation, markRead, toAccountId, toFolderId, toMessageId } from '@nexus/domain';
-import type { MailMessage } from '@nexus/domain';
+import {
+  BodyType,
+  createMailAddress,
+  groupByConversation,
+  markRead,
+  toAccountId,
+  toFolderId,
+  toMessageId,
+} from '@nexus/domain';
+import type { MailMessage, Mailbox } from '@nexus/domain';
 import type { SyncDelta } from '@nexus/core-transport';
 import { createOperation, outboxCommand } from '@nexus/core-transport';
 import { describe, expect, it } from 'vitest';
 import { InMemoryMailStore, InMemorySecureStore } from './in-memory-store';
 import { AccountSetupService } from './account-setup-service';
+import { ComposeService } from './compose-service';
 import { OutboxProcessor } from './outbox-processor';
 import { SearchService } from './search-service';
 import { SyncService } from './sync-service';
@@ -127,5 +136,45 @@ describe('Integration: Offline-Triage', () => {
     // 7) Suche findet die Angebots-Konversation lokal-first.
     const hits = await search.search(account, 'angebot');
     expect(hits.map((h) => h.messageId).sort()).toEqual(['m1', 'm2']);
+  });
+});
+
+/**
+ * Szenario „Persona Sandra" (Assistenz): sendet eine Nachricht im Auftrag des
+ * delegierten Vorstands-Postfachs über den Outbox-Pfad.
+ */
+describe('Integration: Delegation (Senden im Auftrag)', () => {
+  it('löst SendOnBehalf auf und stellt die Nachricht über die Outbox zu', async () => {
+    const store = new InMemoryMailStore();
+    const transport = new FakeMailTransport();
+    const clock = new ManualClock(0);
+    const outbox = new OutboxProcessor(transport, store, clock);
+    const compose = new ComposeService(outbox, clock);
+
+    const sandra = createMailAddress('assistenz@example.com');
+    const bossMailbox: Mailbox = {
+      id: 'boss',
+      kind: 'delegated',
+      address: createMailAddress('vorstand@example.com'),
+      displayName: 'Vorstand',
+      permissions: ['read', 'write', 'sendOnBehalf'],
+    };
+
+    await compose.send(account, 'op-onbehalf', bossMailbox, sandra, {
+      subject: 'Terminbestätigung',
+      body: { type: BodyType.Text, content: 'Der Termin ist bestätigt.' },
+      recipients: [{ kind: 'to', address: createMailAddress('extern@example.com') }],
+    });
+
+    const summary = await outbox.drain(account);
+    expect(summary).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+
+    const applied = transport.appliedOps[0];
+    expect(applied?.command.type).toBe('send');
+    if (applied?.command.type === 'send') {
+      // Erscheint als „Vorstand", Sender ist die Assistenz (im Auftrag).
+      expect(applied.command.message.from.address).toBe('vorstand@example.com');
+      expect(applied.command.message.sender?.address).toBe('assistenz@example.com');
+    }
   });
 });

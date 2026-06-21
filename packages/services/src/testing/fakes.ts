@@ -9,7 +9,7 @@ import type {
   MessageId,
   OutgoingMessage,
 } from '@nexus/domain';
-import { toContactId, toEventId, toMessageId } from '@nexus/domain';
+import { FolderType, toContactId, toEventId, toFolderId, toMessageId } from '@nexus/domain';
 import type {
   AutodiscoverResult,
   Clock,
@@ -35,6 +35,7 @@ export interface FakeTransportConfig {
   readonly capabilities?: TransportCapabilities;
   readonly discoverResult?: AutodiscoverResult;
   readonly messageDelta?: SyncDelta<MailMessage>;
+  readonly folderDelta?: SyncDelta<MailFolder>;
   readonly calendarDelta?: SyncDelta<CalendarEvent>;
   readonly contactDelta?: SyncDelta<Contact>;
   readonly serverHits?: readonly SearchHit[];
@@ -106,7 +107,7 @@ export class FakeMailTransport implements MailTransport {
     return Promise.reject(new Error('FakeMailTransport: loadAccount nicht konfiguriert'));
   }
   syncFolders(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<MailFolder>> {
-    return Promise.reject(new Error('FakeMailTransport: syncFolders nicht konfiguriert'));
+    return Promise.resolve(this.config.folderDelta ?? emptyDelta<MailFolder>());
   }
   syncCalendar(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<CalendarEvent>> {
     return Promise.resolve(this.config.calendarDelta ?? emptyDelta<CalendarEvent>());
@@ -144,6 +145,25 @@ export function makeMessage(params: {
     hasAttachments: false,
     attachments: [],
     preview: params.preview ?? '',
+  };
+}
+
+/** Baut einen {@link MailFolder} mit Defaults für Tests. */
+export function makeFolder(params: {
+  readonly id: string;
+  readonly accountId: AccountId;
+  readonly displayName: string;
+  readonly type?: FolderType;
+  readonly parentId?: string;
+}): MailFolder {
+  return {
+    id: toFolderId(params.id),
+    accountId: params.accountId,
+    displayName: params.displayName,
+    type: params.type ?? FolderType.Custom,
+    ...(params.parentId !== undefined ? { parentId: toFolderId(params.parentId) } : {}),
+    unreadCount: 0,
+    totalCount: 0,
   };
 }
 

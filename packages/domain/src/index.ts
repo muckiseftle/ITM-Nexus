@@ -4,3 +4,5 @@ export * from './models';
 export * from './mail-address';
 export * from './message-ops';
 export * from './threading';
+export * from './folder-tree';
+export * from './mailbox';

@@ -86,3 +86,10 @@ export interface ContactStore {
   deleteContacts(accountId: AccountId, contactIds: readonly string[]): Promise<void>;
   search(accountId: AccountId, query: string): Promise<readonly Contact[]>;
 }
+
+/** Lokale, verschlüsselte Persistenz für die Ordnerstruktur (SQLCipher) hinter einem Port. */
+export interface FolderStore {
+  upsertFolders(folders: readonly MailFolder[]): Promise<void>;
+  deleteFolders(accountId: AccountId, folderIds: readonly string[]): Promise<void>;
+  listFolders(accountId: AccountId): Promise<readonly MailFolder[]>;
+}

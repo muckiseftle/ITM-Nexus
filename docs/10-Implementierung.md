@@ -17,7 +17,7 @@ verifizierbar (kein Xcode/Swift, kein Android SDK). Deshalb liefert Iteration 1 
 | Monorepo (pnpm Workspaces) + Tooling | ✅ umgesetzt |
 | `@nexus/domain` (Modelle, IDs, Helfer) | ✅ umgesetzt + getestet |
 | `@nexus/core-transport` (Ports, Fehler, reine Logik) | ✅ umgesetzt + getestet |
-| `@nexus/services` (Use-Cases: Mail-Sync, Outbox, Suche, Setup, Kalender, Kontakte) | ✅ umgesetzt + getestet |
+| `@nexus/services` (Use-Cases: Mail-/Ordner-Sync, Outbox, Suche, Setup, Kalender, Kontakte, Compose/Delegation) | ✅ umgesetzt + getestet |
 | `@nexus/ui-kit` (Design-Tokens) | ✅ umgesetzt + getestet |
 | CI/CD (GitHub Actions, TS-Core) | ✅ umgesetzt |
 | Native Module (`native/ios`, `native/android`) | ⏳ Folge-Iteration |
@@ -92,11 +92,12 @@ flowchart TD
 ```
 
 > `@nexus/services` enthält die **JS-Orchestrierung** (laut „Thin-JS/Native-Core" bewusst
-> in TypeScript): `SyncService`, `OutboxProcessor`, `SearchService`, `AccountSetupService`,
-> `CalendarService`, `ContactsService`. Sie hängen ausschließlich von den **Ports** ab —
-> die nativen Adapter und (später) die React-Native-UI binden dieselben Verträge. Ein
-> End-to-End-Integrationstest (`integration.test.ts`) verdrahtet den gesamten Stack
-> (Setup → Sync → Offline-Triage → Outbox-Drain → Suche) mit den In-Memory-Adaptern.
+> in TypeScript): `SyncService`, `FolderSyncService`, `OutboxProcessor`, `SearchService`,
+> `AccountSetupService`, `CalendarService`, `ContactsService`, `ComposeService`
+> (inkl. Delegation/„im Auftrag von"). Sie hängen ausschließlich von den **Ports** ab —
+> die nativen Adapter und (später) die React-Native-UI binden dieselben Verträge.
+> Integrationstests (`integration.test.ts`) verdrahten den gesamten Stack
+> (Setup → Sync → Offline-Triage → Outbox-Drain → Suche; sowie Senden im Auftrag).
 
 1. **Schichtentrennung (per ESLint erzwungen):** `@nexus/domain` darf
    `@nexus/core-transport` und `@nexus/ui-kit` **nicht** importieren. Abhängigkeiten
@@ -137,7 +138,7 @@ flowchart TB
 
 - **Unit (Schwerpunkt, hier umgesetzt):** reine Logik + Service-Orchestrierung mit
   **Vitest**, deterministisch (injizierte `Clock`/Jitter, In-Memory-Adapter, `FakeMailTransport`).
-  Aktueller Stand: **70 Tests** (inkl. ein End-to-End-Integrationstest), Coverage **> 97 %**
+  Aktueller Stand: **85 Tests** (inkl. End-to-End-Integrationstests), Coverage **> 97 %**
   der Logikpfade. Coverage-Schwellen in `vitest.config.ts` (lines/functions 80, branches 75).
 - **Integration (Folge-Iteration):** Port-Adapter (EWS/EAS/SecureStore/MailStore) gegen
   eine dedizierte **On-Prem-Exchange-Testumgebung** (mehrere Server-Versionen).

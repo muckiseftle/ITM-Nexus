@@ -85,6 +85,10 @@ export interface CalendarEvent {
 
 /** Eine noch nicht versendete Nachricht (Composer-Ausgabe → Outbox). */
 export interface OutgoingMessage {
+  /** Absender-Identität (From-Header). */
+  readonly from: MailAddress;
+  /** Gesetzt beim Senden „im Auftrag von" (Sender-Header, Delegation). */
+  readonly sender?: MailAddress;
   readonly subject: string;
   readonly body: MessageBody;
   readonly recipients: readonly Recipient[];

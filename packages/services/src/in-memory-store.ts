@@ -3,12 +3,14 @@ import type {
   CalendarEvent,
   Contact,
   FolderId,
+  MailFolder,
   MailMessage,
   MessageId,
 } from '@nexus/domain';
 import type {
   CalendarStore,
   ContactStore,
+  FolderStore,
   MailStore,
   OutboxState,
   SearchHit,
@@ -169,5 +171,33 @@ export class InMemoryContactStore implements ContactStore {
           c.emailAddresses.some((a) => a.address.toLowerCase().includes(needle))),
     );
     return Promise.resolve(matches);
+  }
+}
+
+/** In-Memory-{@link FolderStore} (Referenz/Test-Double). Produktiv: SQLCipher. */
+export class InMemoryFolderStore implements FolderStore {
+  private readonly folders = new Map<string, MailFolder>();
+
+  private static key(accountId: AccountId, folderId: string): string {
+    return `${accountId}::${folderId}`;
+  }
+
+  upsertFolders(folders: readonly MailFolder[]): Promise<void> {
+    for (const folder of folders) {
+      this.folders.set(InMemoryFolderStore.key(folder.accountId, folder.id), folder);
+    }
+    return Promise.resolve();
+  }
+
+  deleteFolders(accountId: AccountId, folderIds: readonly string[]): Promise<void> {
+    for (const id of folderIds) {
+      this.folders.delete(InMemoryFolderStore.key(accountId, id));
+    }
+    return Promise.resolve();
+  }
+
+  listFolders(accountId: AccountId): Promise<readonly MailFolder[]> {
+    const own = [...this.folders.values()].filter((f) => f.accountId === accountId);
+    return Promise.resolve(own);
   }
 }
