@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       '@nexus/domain': pkg('domain'),
       '@nexus/core-transport': pkg('core-transport'),
+      '@nexus/services': pkg('services'),
       '@nexus/ui-kit': pkg('ui-kit'),
     },
   },
@@ -17,7 +18,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],
-      exclude: ['packages/*/src/**/*.test.ts', 'packages/*/src/index.ts'],
+      exclude: [
+        'packages/*/src/**/*.test.ts',
+        'packages/*/src/index.ts',
+        'packages/*/src/testing/**',
+      ],
       thresholds: {
         lines: 80,
         functions: 80,

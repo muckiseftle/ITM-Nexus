@@ -59,6 +59,7 @@ export interface SecureStore {
 /** Lokale, verschlüsselte Persistenz (SQLCipher) hinter einem Port. */
 export interface MailStore {
   upsertMessages(messages: readonly MailMessage[]): Promise<void>;
+  deleteMessages(accountId: AccountId, messageIds: readonly string[]): Promise<void>;
   getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage | undefined>;
   listFolder(
     accountId: AccountId,

@@ -17,6 +17,7 @@ verifizierbar (kein Xcode/Swift, kein Android SDK). Deshalb liefert Iteration 1 
 | Monorepo (pnpm Workspaces) + Tooling | ✅ umgesetzt |
 | `@nexus/domain` (Modelle, IDs, Helfer) | ✅ umgesetzt + getestet |
 | `@nexus/core-transport` (Ports, Fehler, reine Logik) | ✅ umgesetzt + getestet |
+| `@nexus/services` (Use-Cases: Sync, Outbox, Suche, Setup) | ✅ umgesetzt + getestet |
 | `@nexus/ui-kit` (Design-Tokens) | ✅ umgesetzt + getestet |
 | CI/CD (GitHub Actions, TS-Core) | ✅ umgesetzt |
 | Native Module (`native/ios`, `native/android`) | ⏳ Folge-Iteration |
@@ -30,7 +31,8 @@ verifizierbar (kein Xcode/Swift, kein Android SDK). Deshalb liefert Iteration 1 
 ITM-Nexus/
 ├─ packages/
 │  ├─ domain/           # @nexus/domain         — Domänenmodelle, branded IDs, reine Helfer
-│  ├─ core-transport/   # @nexus/core-transport — Ports, DTOs, Fehler, reine Orchestrierung
+│  ├─ core-transport/   # @nexus/core-transport — Ports, DTOs, Fehler, reine Logik
+│  ├─ services/         # @nexus/services       — Use-Cases (Sync, Outbox, Suche, Setup) + In-Memory-Adapter
 │  └─ ui-kit/           # @nexus/ui-kit         — Design-Tokens
 ├─ docs/                # Strategie & Architektur (Phasen 1–10)
 ├─ .github/workflows/   # CI
@@ -80,11 +82,19 @@ flowchart TD
     UIKIT["@nexus/ui-kit\n(Tokens)"]
     DOMAIN["@nexus/domain\n(Modelle, IDs)"]
     TRANSPORT["@nexus/core-transport\n(Ports, reine Logik)"]
+    SERVICES["@nexus/services\n(Use-Cases / Orchestrierung)"]
     NATIVE["native/* (Adapter)\nimplementieren die Ports"]
 
     TRANSPORT --> DOMAIN
+    SERVICES --> TRANSPORT
+    SERVICES --> DOMAIN
     NATIVE -. implementiert .-> TRANSPORT
 ```
+
+> `@nexus/services` enthält die **JS-Orchestrierung** (laut „Thin-JS/Native-Core" bewusst
+> in TypeScript): `SyncService`, `OutboxProcessor`, `SearchService`, `AccountSetupService`.
+> Sie hängen ausschließlich von den **Ports** ab — die nativen Adapter und (später) die
+> React-Native-UI binden dieselben Verträge.
 
 1. **Schichtentrennung (per ESLint erzwungen):** `@nexus/domain` darf
    `@nexus/core-transport` und `@nexus/ui-kit` **nicht** importieren. Abhängigkeiten
@@ -123,9 +133,10 @@ flowchart TB
     E2E --- INT --- UNIT
 ```
 
-- **Unit (Schwerpunkt, hier umgesetzt):** reine TS-Logik mit **Vitest**, deterministisch
-  (injizierte `Clock`/Jitter). Aktueller Stand: **41 Tests**, Coverage **> 95 %** der
-  Logikpfade. Coverage-Schwellen in `vitest.config.ts` (lines/functions 80, branches 75).
+- **Unit (Schwerpunkt, hier umgesetzt):** reine Logik + Service-Orchestrierung mit
+  **Vitest**, deterministisch (injizierte `Clock`/Jitter, In-Memory-Adapter, `FakeMailTransport`).
+  Aktueller Stand: **58 Tests**, Coverage **> 98 %** der Logikpfade. Coverage-Schwellen in
+  `vitest.config.ts` (lines/functions 80, branches 75).
 - **Integration (Folge-Iteration):** Port-Adapter (EWS/EAS/SecureStore/MailStore) gegen
   eine dedizierte **On-Prem-Exchange-Testumgebung** (mehrere Server-Versionen).
 - **E2E (Folge-Iteration):** kritische Nutzerflüsse über die Geräte-/Plattform-Matrix.

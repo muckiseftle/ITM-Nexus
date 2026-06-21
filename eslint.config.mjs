@@ -25,6 +25,13 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    rules: {
+      // Absichtlich ungenutzte Parameter (z. B. Interface-Implementierungen) per `_`-Präfix.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+      ],
+    },
   },
   {
     // Architektur-Grenze: Die Domänenschicht darf keine oberen/seitlichen Schichten kennen.

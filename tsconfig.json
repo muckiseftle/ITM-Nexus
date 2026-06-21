@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/domain" },
     { "path": "packages/core-transport" },
+    { "path": "packages/services" },
     { "path": "packages/ui-kit" }
   ]
 }

@@ -38,6 +38,15 @@ importers:
 
   packages/domain: {}
 
+  packages/services:
+    dependencies:
+      '@nexus/core-transport':
+        specifier: workspace:*
+        version: link:../core-transport
+      '@nexus/domain':
+        specifier: workspace:*
+        version: link:../domain
+
   packages/ui-kit: {}
 
 packages:
