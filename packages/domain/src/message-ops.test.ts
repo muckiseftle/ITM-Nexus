@@ -15,6 +15,7 @@ function message(flags: MessageFlag[]): MailMessage {
     receivedAt: 0,
     importance: 'normal',
     flags,
+    categories: [],
     hasAttachments: false,
     attachments: [],
     preview: '',

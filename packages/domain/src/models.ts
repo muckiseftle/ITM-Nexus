@@ -40,6 +40,7 @@ export interface MailMessage {
   readonly sentAt?: number;
   readonly importance: Importance;
   readonly flags: readonly MessageFlag[];
+  readonly categories: readonly string[];
   readonly hasAttachments: boolean;
   readonly attachments: readonly Attachment[];
   readonly preview: string;

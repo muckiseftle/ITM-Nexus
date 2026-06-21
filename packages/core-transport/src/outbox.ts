@@ -20,7 +20,12 @@ export type OutboxCommand =
       readonly value: boolean;
     }
   | { readonly type: 'delete'; readonly messageId: MessageId }
-  | { readonly type: 'markRead'; readonly messageId: MessageId; readonly read: boolean };
+  | { readonly type: 'markRead'; readonly messageId: MessageId; readonly read: boolean }
+  | {
+      readonly type: 'setCategories';
+      readonly messageId: MessageId;
+      readonly categories: readonly string[];
+    };
 
 export type OutboxCommandType = OutboxCommand['type'];
 
@@ -51,6 +56,11 @@ export const outboxCommand = {
     type: 'markRead',
     messageId,
     read,
+  }),
+  setCategories: (messageId: MessageId, categories: readonly string[]): OutboxCommand => ({
+    type: 'setCategories',
+    messageId,
+    categories,
   }),
 } as const;
 

@@ -142,6 +142,7 @@ export function makeMessage(params: {
     receivedAt: params.receivedAt ?? 0,
     importance: 'normal',
     flags: [],
+    categories: [],
     hasAttachments: false,
     attachments: [],
     preview: params.preview ?? '',

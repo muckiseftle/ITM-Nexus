@@ -6,4 +6,5 @@ export * from './account-setup-service';
 export * from './calendar-service';
 export * from './contacts-service';
 export * from './compose-service';
+export * from './rule-processor';
 export * from './in-memory-store';

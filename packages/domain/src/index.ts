@@ -6,3 +6,5 @@ export * from './message-ops';
 export * from './threading';
 export * from './folder-tree';
 export * from './mailbox';
+export * from './categories';
+export * from './rules';

@@ -21,6 +21,7 @@ function message(
     receivedAt,
     importance: 'normal',
     flags,
+    categories: [],
     hasAttachments: false,
     attachments: [],
     preview: '',
