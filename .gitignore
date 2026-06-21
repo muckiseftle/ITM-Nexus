@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build-Output
+dist/
+*.tsbuildinfo
+
+# Test / Coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

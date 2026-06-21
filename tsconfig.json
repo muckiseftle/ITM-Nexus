@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/domain" },
+    { "path": "packages/core-transport" },
+    { "path": "packages/ui-kit" }
+  ]
+}

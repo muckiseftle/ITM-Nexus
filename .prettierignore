@@ -1,0 +1,8 @@
+# Handgeschriebene Dokumentation (bewusste Formatierung, Tabellen, Mermaid)
+**/*.md
+
+# Generiert / Lockfiles / Build-Output
+pnpm-lock.yaml
+**/dist/**
+coverage/
+**/*.tsbuildinfo

@@ -1,0 +1,72 @@
+import type {
+  Account,
+  AccountId,
+  CalendarEvent,
+  Contact,
+  FolderId,
+  MailFolder,
+  MailMessage,
+  MessageId,
+  OutgoingMessage,
+} from '@nexus/domain';
+import type { AutodiscoverResult, Credentials, SyncDelta, TransportCapabilities } from './dto';
+import type { OutboxOperation, OutboxState } from './outbox';
+import type { SearchHit } from './search-merge';
+
+/** Injizierbare Zeitquelle — entkoppelt Logik von `Date.now()` (Testbarkeit). */
+export interface Clock {
+  now(): number;
+}
+
+/**
+ * Zentrale Transport-Abstraktion (ADR-002). EWS/EAS sind konkrete Implementierungen in den
+ * nativen Modulen; obere Schichten kennen ausschließlich dieses Interface. Ein späterer
+ * Graph-Connector kann als weitere Implementierung ergänzt werden — ohne Rewrite.
+ */
+export interface MailTransport {
+  readonly capabilities: TransportCapabilities;
+
+  discover(email: string, credentials: Credentials): Promise<AutodiscoverResult>;
+  loadAccount(accountId: AccountId): Promise<Account>;
+
+  syncFolders(accountId: AccountId, syncKey?: string): Promise<SyncDelta<MailFolder>>;
+  syncMessages(
+    accountId: AccountId,
+    folderId: FolderId,
+    syncKey?: string,
+  ): Promise<SyncDelta<MailMessage>>;
+  syncCalendar(accountId: AccountId, syncKey?: string): Promise<SyncDelta<CalendarEvent>>;
+  syncContacts(accountId: AccountId, syncKey?: string): Promise<SyncDelta<Contact>>;
+
+  getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage>;
+  sendMessage(accountId: AccountId, message: OutgoingMessage): Promise<MessageId>;
+
+  /** Führt eine Outbox-Operation gegen den Server aus (idempotent). */
+  applyOperation(operation: OutboxOperation): Promise<void>;
+
+  searchServer(accountId: AccountId, query: string): Promise<readonly SearchHit[]>;
+}
+
+/** Sicherer Schlüssel/Wert-Speicher (Keychain / Android Keystore). */
+export interface SecureStore {
+  set(key: string, value: string): Promise<void>;
+  get(key: string): Promise<string | undefined>;
+  delete(key: string): Promise<void>;
+  /** Krypto-Shredding aller Werte (lokaler/remote Wipe). */
+  wipe(): Promise<void>;
+}
+
+/** Lokale, verschlüsselte Persistenz (SQLCipher) hinter einem Port. */
+export interface MailStore {
+  upsertMessages(messages: readonly MailMessage[]): Promise<void>;
+  getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage | undefined>;
+  listFolder(
+    accountId: AccountId,
+    folderId: FolderId,
+    limit: number,
+    offset: number,
+  ): Promise<readonly MailMessage[]>;
+  searchLocal(accountId: AccountId, query: string): Promise<readonly SearchHit[]>;
+  loadOutbox(accountId: AccountId): Promise<OutboxState>;
+  saveOutbox(accountId: AccountId, state: OutboxState): Promise<void>;
+}

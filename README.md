@@ -25,7 +25,7 @@ Cloud-Abhängigkeit, ohne Tracking, ohne Analytics, ohne Werbung, ohne unnötige
 | **Tech-Stack** | React Native CLI + Native-Core (Swift/Kotlin) |
 | **Plattformen** | iOS · iPadOS · macOS · Android |
 | **Exchange** | EWS + EAS (ActiveSync) hybrid, mit Autodiscover |
-| **Status** | Strategie- & Architektur-Fundament (Phasen 1–9) abgeschlossen |
+| **Status** | Phasen 1–9 abgeschlossen · Phase 10 Iteration 1 (Monorepo + getesteter TS-Core) umgesetzt |
 
 ---
 
@@ -43,7 +43,16 @@ Das vollständige Strategie- und Architektur-Fundament liegt in **[`/docs`](./do
 8. [Outlook-Ersatz-Feature-Mapping](./docs/07-Outlook-Ersatz-Feature-Mapping.md)
 9. [Entwicklungsplan](./docs/08-Entwicklungsplan.md)
 10. [Risikoanalyse](./docs/09-Risikoanalyse.md)
+11. [Implementierung](./docs/10-Implementierung.md)
 
-> **Implementierung (Phase 10):** folgt in der nächsten Iteration — die Architektur,
-> das Monorepo-Layout, Coding-Standards und die Teststrategie sind in den Dokumenten
-> bereits spezifiziert.
+## 🛠️ Entwicklung
+
+Das Monorepo (pnpm Workspaces) enthält die plattformunabhängigen TypeScript-Pakete
+`@nexus/domain`, `@nexus/core-transport` und `@nexus/ui-kit`. Native Module (Swift/Kotlin)
+und die React-Native-Apps folgen in den nächsten Iterationen
+(siehe [docs/10](./docs/10-Implementierung.md) und [CONTRIBUTING.md](./CONTRIBUTING.md)).
+
+```bash
+pnpm install
+pnpm verify   # typecheck + lint + test (mit Coverage)
+```

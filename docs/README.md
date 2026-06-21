@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Phase** | 1–9 abgeschlossen (Strategie & Architektur) |
-| **Implementierung** | Phase 10 — folgt in nächster Iteration |
+| **Implementierung** | Phase 10 — Iteration 1 umgesetzt (Monorepo + getesteter TS-Core) |
 | **Tech-Stack** | React Native CLI + Native-Core (Swift/Kotlin) |
 | **Plattformen** | iOS · iPadOS · macOS · Android |
 | **Exchange-Transport** | EWS + EAS (ActiveSync) hybrid, mit Autodiscover |
@@ -61,6 +61,7 @@ Begründung und Trade-offs: siehe [ADR-001](./00-Architektur-Entscheidungen-ADR.
 | 07 | [Outlook-Ersatz-Feature-Mapping](./07-Outlook-Ersatz-Feature-Mapping.md) | Bewertung aller Outlook-Funktionen |
 | 08 | [Entwicklungsplan](./08-Entwicklungsplan.md) | Epics, Tasks, Milestones, Sprints |
 | 09 | [Risikoanalyse](./09-Risikoanalyse.md) | Technische & strategische Risiken + Mitigation |
+| 10 | [Implementierung](./10-Implementierung.md) | Repo-Struktur, Standards, Architekturregeln, CI/CD, Teststrategie |
 
 ---
 

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Plattformunabhängiger TypeScript-Core: hier vollständig baubar & verifizierbar.
+  core:
+    name: TypeScript-Core (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pnpm aktivieren
+        uses: pnpm/action-setup@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Abhängigkeiten installieren
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint (inkl. Architektur-Grenzen)
+        run: pnpm lint
+
+      - name: Format-Check
+        run: pnpm format
+
+      - name: Tests + Coverage
+        run: pnpm test:cov
+
+      - name: Build
+        run: pnpm build
+  # ────────────────────────────────────────────────────────────────────────────
+  # AUSBLICK (noch inaktiv — benötigt native Toolchains, siehe docs/10-Implementierung.md):
+  #
+  # ios-android:
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - { platform: ios,     runner: macos-14 }   # Xcode/Swift, RN-iOS-Build + Tests
+  #         - { platform: android, runner: ubuntu-latest } # Android SDK, Kotlin-Unit-Tests
+  #   ...
+  # macos-desktop:
+  #   runs-on: macos-14   # React Native macOS Build
+  # ────────────────────────────────────────────────────────────────────────────

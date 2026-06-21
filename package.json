@@ -1,0 +1,36 @@
+{
+  "name": "nexus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "NEXUS — unabhängiger, datensouveräner Exchange-Client (Monorepo)",
+  "packageManager": "pnpm@10.33.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "clean": "tsc -b --clean",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test:cov"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
