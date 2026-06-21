@@ -9,7 +9,7 @@ import type {
   MessageId,
   OutgoingMessage,
 } from '@nexus/domain';
-import { toMessageId } from '@nexus/domain';
+import { toContactId, toEventId, toMessageId } from '@nexus/domain';
 import type {
   AutodiscoverResult,
   Clock,
@@ -35,11 +35,17 @@ export interface FakeTransportConfig {
   readonly capabilities?: TransportCapabilities;
   readonly discoverResult?: AutodiscoverResult;
   readonly messageDelta?: SyncDelta<MailMessage>;
+  readonly calendarDelta?: SyncDelta<CalendarEvent>;
+  readonly contactDelta?: SyncDelta<Contact>;
   readonly serverHits?: readonly SearchHit[];
   /** Lässt die ersten N `applyOperation`-Aufrufe fehlschlagen (Retry-Tests). */
   readonly failApplyTimes?: number;
   /** Lässt `searchServer` werfen (Degradations-Tests). */
   readonly failServerSearch?: boolean;
+}
+
+function emptyDelta<T>(): SyncDelta<T> {
+  return { syncKey: 'sk-0', created: [], updated: [], deletedIds: [], hasMore: false };
 }
 
 /** Konfigurierbarer In-Memory-{@link MailTransport} für deterministische Service-Tests. */
@@ -103,10 +109,10 @@ export class FakeMailTransport implements MailTransport {
     return Promise.reject(new Error('FakeMailTransport: syncFolders nicht konfiguriert'));
   }
   syncCalendar(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<CalendarEvent>> {
-    return Promise.reject(new Error('FakeMailTransport: syncCalendar nicht konfiguriert'));
+    return Promise.resolve(this.config.calendarDelta ?? emptyDelta<CalendarEvent>());
   }
   syncContacts(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<Contact>> {
-    return Promise.reject(new Error('FakeMailTransport: syncContacts nicht konfiguriert'));
+    return Promise.resolve(this.config.contactDelta ?? emptyDelta<Contact>());
   }
   getMessage(_accountId: AccountId, _messageId: MessageId): Promise<MailMessage> {
     return Promise.reject(new Error('FakeMailTransport: getMessage nicht konfiguriert'));
@@ -138,6 +144,41 @@ export function makeMessage(params: {
     hasAttachments: false,
     attachments: [],
     preview: params.preview ?? '',
+  };
+}
+
+/** Baut einen {@link CalendarEvent} mit Defaults für Tests. */
+export function makeEvent(params: {
+  readonly id: string;
+  readonly accountId: AccountId;
+  readonly subject?: string;
+  readonly startAt: number;
+  readonly endAt: number;
+}): CalendarEvent {
+  return {
+    id: toEventId(params.id),
+    accountId: params.accountId,
+    subject: params.subject ?? 'Termin',
+    startAt: params.startAt,
+    endAt: params.endAt,
+    isAllDay: false,
+    organizer: { address: 'organizer@example.com' },
+    attendees: [],
+  };
+}
+
+/** Baut einen {@link Contact} mit Defaults für Tests. */
+export function makeContact(params: {
+  readonly id: string;
+  readonly accountId: AccountId;
+  readonly displayName: string;
+  readonly email?: string;
+}): Contact {
+  return {
+    id: toContactId(params.id),
+    accountId: params.accountId,
+    displayName: params.displayName,
+    emailAddresses: params.email !== undefined ? [{ address: params.email }] : [],
   };
 }
 

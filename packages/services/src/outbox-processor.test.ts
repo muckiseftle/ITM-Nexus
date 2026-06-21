@@ -1,5 +1,6 @@
-import { toAccountId } from '@nexus/domain';
+import { toAccountId, toFolderId, toMessageId } from '@nexus/domain';
 import type { BackoffPolicy, OutboxOperation } from '@nexus/core-transport';
+import { createOperation, outboxCommand } from '@nexus/core-transport';
 import { describe, expect, it } from 'vitest';
 import { InMemoryMailStore } from './in-memory-store';
 import { OutboxProcessor } from './outbox-processor';
@@ -9,7 +10,12 @@ const account = toAccountId('acc-1');
 const policy: BackoffPolicy = { baseMs: 100, factor: 2, maxMs: 10_000, maxAttempts: 3 };
 
 function moveOp(id: string): OutboxOperation {
-  return { id, kind: 'move', accountId: account, payload: { to: 'archive' }, createdAt: 0 };
+  return createOperation(
+    id,
+    account,
+    outboxCommand.move(toMessageId('m-1'), toFolderId('archive')),
+    0,
+  );
 }
 
 describe('OutboxProcessor', () => {

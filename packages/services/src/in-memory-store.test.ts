@@ -1,6 +1,5 @@
 import { toAccountId, toFolderId, toMessageId } from '@nexus/domain';
-import { enqueue } from '@nexus/core-transport';
-import type { OutboxOperation } from '@nexus/core-transport';
+import { createOperation, enqueue, outboxCommand } from '@nexus/core-transport';
 import { describe, expect, it } from 'vitest';
 import { InMemoryMailStore, InMemorySecureStore } from './in-memory-store';
 import { makeMessage } from './testing/fakes';
@@ -55,13 +54,7 @@ describe('InMemoryMailStore', () => {
     const store = new InMemoryMailStore();
     expect((await store.loadOutbox(account)).entries).toHaveLength(0);
 
-    const op: OutboxOperation = {
-      id: 'op-1',
-      kind: 'flag',
-      accountId: account,
-      payload: {},
-      createdAt: 0,
-    };
+    const op = createOperation('op-1', account, outboxCommand.markRead(toMessageId('m1'), true), 0);
     await store.saveOutbox(account, enqueue(await store.loadOutbox(account), op));
     expect((await store.loadOutbox(account)).entries).toHaveLength(1);
   });

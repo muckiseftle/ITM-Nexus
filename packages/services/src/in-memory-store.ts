@@ -1,5 +1,19 @@
-import type { AccountId, FolderId, MailMessage, MessageId } from '@nexus/domain';
-import type { MailStore, OutboxState, SearchHit, SecureStore } from '@nexus/core-transport';
+import type {
+  AccountId,
+  CalendarEvent,
+  Contact,
+  FolderId,
+  MailMessage,
+  MessageId,
+} from '@nexus/domain';
+import type {
+  CalendarStore,
+  ContactStore,
+  MailStore,
+  OutboxState,
+  SearchHit,
+  SecureStore,
+} from '@nexus/core-transport';
 import { emptyOutbox } from '@nexus/core-transport';
 
 /**
@@ -91,5 +105,69 @@ export class InMemorySecureStore implements SecureStore {
   wipe(): Promise<void> {
     this.values.clear();
     return Promise.resolve();
+  }
+}
+
+/** In-Memory-{@link CalendarStore} (Referenz/Test-Double). Produktiv: SQLCipher. */
+export class InMemoryCalendarStore implements CalendarStore {
+  private readonly events = new Map<string, CalendarEvent>();
+
+  private static key(accountId: AccountId, eventId: string): string {
+    return `${accountId}::${eventId}`;
+  }
+
+  upsertEvents(events: readonly CalendarEvent[]): Promise<void> {
+    for (const event of events) {
+      this.events.set(InMemoryCalendarStore.key(event.accountId, event.id), event);
+    }
+    return Promise.resolve();
+  }
+
+  deleteEvents(accountId: AccountId, eventIds: readonly string[]): Promise<void> {
+    for (const id of eventIds) {
+      this.events.delete(InMemoryCalendarStore.key(accountId, id));
+    }
+    return Promise.resolve();
+  }
+
+  listRange(accountId: AccountId, fromMs: number, toMs: number): Promise<readonly CalendarEvent[]> {
+    const inRange = [...this.events.values()]
+      .filter((e) => e.accountId === accountId && e.startAt < toMs && e.endAt > fromMs)
+      .sort((a, b) => a.startAt - b.startAt);
+    return Promise.resolve(inRange);
+  }
+}
+
+/** In-Memory-{@link ContactStore} (Referenz/Test-Double). Produktiv: SQLCipher. */
+export class InMemoryContactStore implements ContactStore {
+  private readonly contacts = new Map<string, Contact>();
+
+  private static key(accountId: AccountId, contactId: string): string {
+    return `${accountId}::${contactId}`;
+  }
+
+  upsertContacts(contacts: readonly Contact[]): Promise<void> {
+    for (const contact of contacts) {
+      this.contacts.set(InMemoryContactStore.key(contact.accountId, contact.id), contact);
+    }
+    return Promise.resolve();
+  }
+
+  deleteContacts(accountId: AccountId, contactIds: readonly string[]): Promise<void> {
+    for (const id of contactIds) {
+      this.contacts.delete(InMemoryContactStore.key(accountId, id));
+    }
+    return Promise.resolve();
+  }
+
+  search(accountId: AccountId, query: string): Promise<readonly Contact[]> {
+    const needle = query.toLowerCase();
+    const matches = [...this.contacts.values()].filter(
+      (c) =>
+        c.accountId === accountId &&
+        (c.displayName.toLowerCase().includes(needle) ||
+          c.emailAddresses.some((a) => a.address.toLowerCase().includes(needle))),
+    );
+    return Promise.resolve(matches);
   }
 }

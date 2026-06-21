@@ -1,21 +1,28 @@
-import { toAccountId } from '@nexus/domain';
+import { toAccountId, toFolderId, toMessageId } from '@nexus/domain';
 import { describe, expect, it } from 'vitest';
 import type { BackoffPolicy } from './backoff';
 import type { OutboxOperation } from './outbox';
 import {
   conflicts,
+  createOperation,
   emptyOutbox,
   enqueue,
   markInFlight,
   nextRunnable,
   onFailure,
   onSuccess,
+  outboxCommand,
 } from './outbox';
 
 const account = toAccountId('acc-1');
 
 function op(id: string, createdAt = 0): OutboxOperation {
-  return { id, kind: 'move', accountId: account, payload: { to: 'archive' }, createdAt };
+  return createOperation(
+    id,
+    account,
+    outboxCommand.move(toMessageId('m-1'), toFolderId('archive')),
+    createdAt,
+  );
 }
 
 const fastPolicy: BackoffPolicy = { baseMs: 100, factor: 2, maxMs: 10_000, maxAttempts: 3 };

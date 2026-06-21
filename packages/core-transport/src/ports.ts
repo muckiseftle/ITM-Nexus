@@ -71,3 +71,18 @@ export interface MailStore {
   loadOutbox(accountId: AccountId): Promise<OutboxState>;
   saveOutbox(accountId: AccountId, state: OutboxState): Promise<void>;
 }
+
+/** Lokale, verschlüsselte Persistenz für Kalendertermine (SQLCipher) hinter einem Port. */
+export interface CalendarStore {
+  upsertEvents(events: readonly CalendarEvent[]): Promise<void>;
+  deleteEvents(accountId: AccountId, eventIds: readonly string[]): Promise<void>;
+  /** Termine, die das Fenster `[fromMs, toMs)` schneiden, aufsteigend nach Start. */
+  listRange(accountId: AccountId, fromMs: number, toMs: number): Promise<readonly CalendarEvent[]>;
+}
+
+/** Lokale, verschlüsselte Persistenz für Kontakte (SQLCipher) hinter einem Port. */
+export interface ContactStore {
+  upsertContacts(contacts: readonly Contact[]): Promise<void>;
+  deleteContacts(accountId: AccountId, contactIds: readonly string[]): Promise<void>;
+  search(accountId: AccountId, query: string): Promise<readonly Contact[]>;
+}

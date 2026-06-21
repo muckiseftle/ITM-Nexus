@@ -1,4 +1,4 @@
-import type { AccountId } from '@nexus/domain';
+import type { AccountId, FolderId, MessageFlag, MessageId, OutgoingMessage } from '@nexus/domain';
 import type { BackoffPolicy } from './backoff';
 import { computeBackoff, defaultBackoff } from './backoff';
 
@@ -9,15 +9,59 @@ import { computeBackoff, defaultBackoff } from './backoff';
  * siehe `MailStore` / `MailTransport`.
  */
 
-export type OutboxOpKind = 'send' | 'move' | 'flag' | 'delete' | 'markRead';
+/** Typsicher diskriminierte Outbox-Befehle (statt eines losen Payloads). */
+export type OutboxCommand =
+  | { readonly type: 'send'; readonly message: OutgoingMessage }
+  | { readonly type: 'move'; readonly messageId: MessageId; readonly targetFolderId: FolderId }
+  | {
+      readonly type: 'flag';
+      readonly messageId: MessageId;
+      readonly flag: MessageFlag;
+      readonly value: boolean;
+    }
+  | { readonly type: 'delete'; readonly messageId: MessageId }
+  | { readonly type: 'markRead'; readonly messageId: MessageId; readonly read: boolean };
+
+export type OutboxCommandType = OutboxCommand['type'];
 
 export interface OutboxOperation {
   /** Idempotenz-Schlüssel: identische IDs werden nicht doppelt eingereiht. */
   readonly id: string;
-  readonly kind: OutboxOpKind;
   readonly accountId: AccountId;
-  readonly payload: Readonly<Record<string, unknown>>;
+  readonly command: OutboxCommand;
   readonly createdAt: number;
+}
+
+/** Bequeme, typsichere Konstruktoren für {@link OutboxCommand}. */
+export const outboxCommand = {
+  send: (message: OutgoingMessage): OutboxCommand => ({ type: 'send', message }),
+  move: (messageId: MessageId, targetFolderId: FolderId): OutboxCommand => ({
+    type: 'move',
+    messageId,
+    targetFolderId,
+  }),
+  flag: (messageId: MessageId, flag: MessageFlag, value: boolean): OutboxCommand => ({
+    type: 'flag',
+    messageId,
+    flag,
+    value,
+  }),
+  remove: (messageId: MessageId): OutboxCommand => ({ type: 'delete', messageId }),
+  markRead: (messageId: MessageId, read: boolean): OutboxCommand => ({
+    type: 'markRead',
+    messageId,
+    read,
+  }),
+} as const;
+
+/** Baut eine vollständige {@link OutboxOperation} (Envelope + Befehl). */
+export function createOperation(
+  id: string,
+  accountId: AccountId,
+  command: OutboxCommand,
+  createdAt: number,
+): OutboxOperation {
+  return { id, accountId, command, createdAt };
 }
 
 export type OutboxStatus = 'pending' | 'inFlight' | 'failed' | 'conflict';
@@ -37,7 +81,7 @@ export interface OutboxState {
 /** Für die UI sichtbar gemachter, nicht mehr automatisch auflösbarer Konflikt. */
 export interface ConflictCopy {
   readonly operationId: string;
-  readonly kind: OutboxOpKind;
+  readonly commandType: OutboxCommandType;
   readonly accountId: AccountId;
   readonly attempts: number;
   readonly lastError: string;
@@ -124,7 +168,7 @@ export function conflicts(state: OutboxState): ConflictCopy[] {
     .filter((e) => e.status === 'conflict')
     .map((e) => ({
       operationId: e.op.id,
-      kind: e.op.kind,
+      commandType: e.op.command.type,
       accountId: e.op.accountId,
       attempts: e.attempts,
       lastError: e.lastError ?? 'unbekannt',
