@@ -1,24 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { toAccountId, type MailMessage, type MessageId } from '@nexus/domain';
+import { type AccountId, type MailMessage, type MessageId } from '@nexus/domain';
 import { color, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
-import { DEMO_ACCOUNT_ID } from '../config';
 
 interface Props {
   readonly container: AppContainer;
+  readonly account: AccountId;
   readonly messageId: MessageId;
   readonly onBack: () => void;
 }
 
-const ACCOUNT = toAccountId(DEMO_ACCOUNT_ID);
-
-export function MessageScreen({ container, messageId, onBack }: Props): React.JSX.Element {
+export function MessageScreen({ container, account, messageId, onBack }: Props): React.JSX.Element {
   const [message, setMessage] = useState<MailMessage | undefined>(undefined);
 
   useEffect(() => {
-    void container.mailStore.getMessage(ACCOUNT, messageId).then(setMessage);
-  }, [container, messageId]);
+    void container.mailStore.getMessage(account, messageId).then(setMessage);
+  }, [container, account, messageId]);
 
   return (
     <View style={styles.container}>

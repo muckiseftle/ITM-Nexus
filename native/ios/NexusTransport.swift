@@ -1,21 +1,58 @@
 import Foundation
 
-/// Exchange-Transport (EWS) mit Autodiscover, TLS und Certificate Pinning.
-/// Erste funktionale Implementierung des `MailTransport`-Ports; Ergebnisse als JSON über
-/// die Bridge. EAS/WBXML, NTLM/Kerberos und Härtung des Parsings folgen iterativ
-/// (siehe docs/11-Native-und-App.md).
-final class NexusTransport {
+/// Exchange-Transport (EWS) mit Autodiscover, TLS, Certificate Pinning und Auth
+/// (Basic + NTLM). Ergebnisse als JSON über die Bridge. NTLM wird vom System über die
+/// URLSession-Challenge abgewickelt; Basic wird zusätzlich preemptiv als Header gesetzt.
+/// EAS/WBXML und Kerberos folgen iterativ (siehe docs/11-Native-und-App.md).
+final class NexusTransport: NSObject, URLSessionDelegate {
   static let shared = NexusTransport()
 
   /// Laufzeit-Konfiguration (aus Autodiscover/Account-Setup gesetzt).
   var ewsUrl: URL?
   var basicAuthHeader: String?
+  private var username: String?
+  private var password: String?
 
   private lazy var session: URLSession = {
     let config = URLSessionConfiguration.ephemeral
     config.tlsMinimumSupportedProtocolVersion = .TLSv12
-    return URLSession(configuration: config, delegate: PinningDelegate(), delegateQueue: nil)
+    return URLSession(configuration: config, delegate: self, delegateQueue: nil)
   }()
+
+  /// Auth-Challenges: NTLM/Basic/Digest mit gespeicherten Credentials beantworten;
+  /// Server-Trust (TLS/Pinning) separat behandeln.
+  func urlSession(
+    _ session: URLSession,
+    didReceive challenge: URLAuthenticationChallenge,
+    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+  ) {
+    switch challenge.protectionSpace.authenticationMethod {
+    case NSURLAuthenticationMethodServerTrust:
+      if let trust = challenge.protectionSpace.serverTrust {
+        // TODO(iterativ): SPKI-Pinning (Fail-Closed). Aktuell System-Trust.
+        completionHandler(.useCredential, URLCredential(trust: trust))
+      } else {
+        completionHandler(.cancelAuthenticationChallenge, nil)
+      }
+    case NSURLAuthenticationMethodNTLM,
+      NSURLAuthenticationMethodHTTPBasic,
+      NSURLAuthenticationMethodHTTPDigest,
+      NSURLAuthenticationMethodDefault:
+      if challenge.previousFailureCount > 0 {
+        completionHandler(.cancelAuthenticationChallenge, nil)
+        return
+      }
+      if let user = username, let pass = password {
+        completionHandler(
+          .useCredential,
+          URLCredential(user: user, password: pass, persistence: .forSession))
+      } else {
+        completionHandler(.performDefaultHandling, nil)
+      }
+    default:
+      completionHandler(.performDefaultHandling, nil)
+    }
+  }
 
   // MARK: Autodiscover
 
@@ -25,6 +62,8 @@ final class NexusTransport {
     }
     let creds = try JSONSerialization.jsonObject(with: Data(credentialsJson.utf8)) as? [String: Any]
     if let user = creds?["username"] as? String, let secret = creds?["secret"] as? String {
+      username = user
+      password = secret
       basicAuthHeader = Self.basicAuth(user: user, password: secret)
     }
 
@@ -250,23 +289,5 @@ final class NexusTransport {
   private static func json(_ value: Any) throws -> String {
     let data = try JSONSerialization.data(withJSONObject: value, options: [])
     return String(decoding: data, as: UTF8.self)
-  }
-}
-
-/// Public-Key-Certificate-Pinning. Pin-Set per MDM/AppConfig (On-Prem-CAs).
-final class PinningDelegate: NSObject, URLSessionDelegate {
-  func urlSession(
-    _ session: URLSession,
-    didReceive challenge: URLAuthenticationChallenge,
-    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-  ) {
-    guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-          let trust = challenge.protectionSpace.serverTrust
-    else {
-      completionHandler(.cancelAuthenticationChallenge, nil)
-      return
-    }
-    // TODO(iterativ): SPKI-Hash gegen konfiguriertes Pin-Set prüfen (Fail-Closed).
-    completionHandler(.useCredential, URLCredential(trust: trust))
   }
 }

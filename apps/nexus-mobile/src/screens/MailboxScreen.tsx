@@ -1,38 +1,44 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { isUnread, toAccountId, toFolderId, type MailMessage, type MessageId } from '@nexus/domain';
+import {
+  isUnread,
+  toFolderId,
+  type AccountId,
+  type MailMessage,
+  type MessageId,
+} from '@nexus/domain';
 import { color, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
-import { DEMO_ACCOUNT_ID, DEMO_INBOX_ID } from '../config';
+import { DEMO_INBOX_ID } from '../config';
 
 interface Props {
   readonly container: AppContainer;
+  readonly account: AccountId;
   readonly onOpenMessage: (messageId: MessageId) => void;
 }
 
-// Aktives Konto/Ordner. In der echten App aus Konto-Setup/Sidebar; hier aus der Config.
-const ACCOUNT = toAccountId(DEMO_ACCOUNT_ID);
+// Posteingang. EWS mappt 'inbox' serverseitig auf die DistinguishedFolderId.
 const INBOX = toFolderId(DEMO_INBOX_ID);
 
-export function MailboxScreen({ container, onOpenMessage }: Props): React.JSX.Element {
+export function MailboxScreen({ container, account, onOpenMessage }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<readonly MailMessage[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const items = await container.mailStore.listFolder(ACCOUNT, INBOX, 100, 0);
+    const items = await container.mailStore.listFolder(account, INBOX, 100, 0);
     setMessages(items);
-  }, [container]);
+  }, [container, account]);
 
   const sync = useCallback(async () => {
     setRefreshing(true);
     try {
-      await container.sync.syncMessages(ACCOUNT, INBOX);
-      await container.outbox.drain(ACCOUNT);
+      await container.sync.syncMessages(account, INBOX);
+      await container.outbox.drain(account);
       await load();
     } finally {
       setRefreshing(false);
     }
-  }, [container, load]);
+  }, [container, account, load]);
 
   useEffect(() => {
     void load();
