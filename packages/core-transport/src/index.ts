@@ -1,5 +1,6 @@
 export * from './dto';
 export * from './errors';
+export * from './error-info';
 export * from './ports';
 export * from './outbox';
 export * from './backoff';

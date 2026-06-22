@@ -101,7 +101,11 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     if let auth = basicAuthHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
     req.httpBody = Data(pox.utf8)
     let (data, response) = try await session.data(for: req)
-    guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    if status == 401 || status == 403 {
+      throw NexusError.transport("AUTH: Anmeldung abgelehnt (HTTP \(status))")
+    }
+    guard status == 200 else { return nil }
     // Pragmatisch: <EwsUrl>…</EwsUrl> aus der Antwort lesen (on-device gehärtet).
     let text = String(decoding: data, as: UTF8.self)
     guard let range = text.range(of: "<EwsUrl>"), let end = text.range(of: "</EwsUrl>") else { return nil }
@@ -248,7 +252,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     req.httpBody = Data(soap.utf8)
     let (data, response) = try await session.data(for: req)
     let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard code == 200 else { throw NexusError.transport("EWS HTTP \(code)") }
+    if code == 401 || code == 403 {
+      throw NexusError.transport("AUTH: Anmeldung abgelehnt (HTTP \(code))")
+    }
+    guard code == 200 else { throw NexusError.transport("SERVER: EWS HTTP \(code)") }
     return data
   }
 

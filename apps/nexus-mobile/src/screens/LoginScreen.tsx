@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toAccountId, type AccountId } from '@nexus/domain';
+import { classifyError, type ErrorInfo } from '@nexus/core-transport';
 import { color, radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 
@@ -18,18 +19,25 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(null);
+  const [showTechnical, setShowTechnical] = useState(false);
 
   const submit = async (): Promise<void> => {
     const trimmedEmail = email.trim();
     if (trimmedEmail.length === 0 || password.length === 0) {
-      setError('Bitte E-Mail und Passwort eingeben.');
+      setError({
+        kind: 'unknown',
+        title: 'Angaben fehlen',
+        detail: 'Bitte E-Mail-Adresse und Passwort eingeben.',
+        technical: 'leere Eingabe',
+      });
       return;
     }
     // Anmeldename: separat eingebbar (z. B. DOMÄNE\Benutzername oder UPN). Leer → E-Mail.
     const loginName = username.trim().length > 0 ? username.trim() : trimmedEmail;
     setBusy(true);
     setError(null);
+    setShowTechnical(false);
     try {
       await container.setup.setUp(trimmedEmail, {
         username: loginName,
@@ -38,7 +46,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
       });
       onLoggedIn(toAccountId(trimmedEmail.toLowerCase()), trimmedEmail);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Anmeldung fehlgeschlagen');
+      setError(classifyError(e));
     } finally {
       setBusy(false);
     }
@@ -77,7 +85,23 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
         onChangeText={setPassword}
       />
 
-      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
+      {error !== null ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>{error.title}</Text>
+          <Text style={styles.errorDetail}>{error.detail}</Text>
+          {error.hint !== undefined ? <Text style={styles.errorHint}>{error.hint}</Text> : null}
+          <Pressable
+            onPress={() => {
+              setShowTechnical((v) => !v);
+            }}
+          >
+            <Text style={styles.errorToggle}>
+              {showTechnical ? 'Details ausblenden' : 'Technische Details'}
+            </Text>
+          </Pressable>
+          {showTechnical ? <Text style={styles.errorTechnical}>{error.technical}</Text> : null}
+        </View>
+      ) : null}
 
       <Pressable
         style={[styles.button, busy ? styles.buttonDisabled : null]}
@@ -115,7 +139,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: space.lg,
   },
-  error: { color: color.danger, marginBottom: space.sm },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderColor: color.danger,
+    borderLeftWidth: 3,
+    borderRadius: radius.sm,
+    marginBottom: space.sm,
+    padding: space.md,
+  },
+  errorDetail: { color: color.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
+  errorHint: { color: color.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
+  errorTechnical: {
+    color: color.textSecondary,
+    fontSize: typography.caption.size,
+    marginTop: space.xs,
+  },
+  errorTitle: { color: color.danger, fontSize: typography.body.size, fontWeight: '700' },
+  errorToggle: {
+    color: color.brandPrimary,
+    fontSize: typography.caption.size,
+    marginTop: space.xs,
+  },
   hint: {
     color: color.textSecondary,
     fontSize: typography.caption.size,
