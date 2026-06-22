@@ -76,6 +76,27 @@ SQL-/Mapping-Logik plattformunabhängig.
 | SQLCipher-Aufrufe aktiv schalten | ⏳ beim Einbinden der Abhängigkeit |
 | EAS/WBXML, NTLM/Kerberos, Pinning-Verifikation (Fail-Closed) | ⏳ iterativ |
 
+## iPhone ohne Mac: unsignierte IPA + Sideloadly
+
+GitHub baut auf den macOS-Runnern eine **unsignierte IPA** (`nexus-demo-ipa`-Artefakt).
+Die signierst du mit deiner **kostenlosen Apple-ID** selbst — einmal mit einem Tool auf
+einem Computer (Windows **oder** Mac), danach läuft die App **7 Tage** auf dem iPhone
+(danach erneut signieren).
+
+**So geht's (Windows oder Mac):**
+1. Im grünen Workflow-Run unter **Artifacts → `nexus-demo-ipa`** die `.ipa` herunterladen
+   (ZIP entpacken).
+2. **[Sideloadly](https://sideloadly.io/)** installieren (Windows/Mac) und iPhone per USB
+   anschließen (iTunes/Apple-Geräte-Treiber müssen vorhanden sein).
+3. In Sideloadly die IPA wählen, deine **Apple-ID** (kostenlos) eintragen, **Start**.
+   Sideloadly signiert die App mit deinem Free-Account und installiert sie aufs iPhone.
+4. Am iPhone unter **Einstellungen → Allgemein → VPN & Geräteverwaltung** das Entwickler-
+   Zertifikat **vertrauen**. App starten — sie läuft im Demo-Modus (Beispieldaten, kein Login).
+5. Nach 7 Tagen Schritt 1–3 wiederholen (Free-Account-Limit).
+
+> Alternative ohne 7-Tage-Limit: das kostenpflichtige Apple Developer Program (99 €/Jahr)
+> + TestFlight — dann lädt GitHub die App direkt zu TestFlight, ganz ohne Computer.
+
 ## App auf dem Handy testen
 
 Diese Cloud-/Linux-Umgebung **baut die App nicht** — das geschieht auf deinem Rechner.

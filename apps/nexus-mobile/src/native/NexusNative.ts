@@ -41,13 +41,26 @@ export interface NexusNativeModule {
   transportGetMessage(accountId: string, messageId: string): Promise<string>;
 }
 
-const native = NativeModules.NexusNative as NexusNativeModule | undefined;
-
-if (native === undefined) {
-  throw new Error(
-    'Natives Modul "NexusNative" nicht gefunden. iOS: Pods installieren & neu bauen; ' +
-      'Android: NexusPackage registrieren. Siehe docs/11-Native-und-App.md.',
-  );
+function resolveNative(): NexusNativeModule {
+  const native = NativeModules.NexusNative as NexusNativeModule | undefined;
+  if (native === undefined) {
+    throw new Error(
+      'Natives Modul "NexusNative" nicht gefunden. Wird nur im Live-Modus benötigt — ' +
+        'iOS: Pods installieren & neu bauen; Android: NexusPackage registrieren. ' +
+        'Siehe docs/11-Native-und-App.md.',
+    );
+  }
+  return native;
 }
 
-export const NexusNative: NexusNativeModule = native;
+/**
+ * **Lazy** Zugriff: Das native Modul wird erst beim tatsächlichen Methodenaufruf aufgelöst,
+ * nicht beim Import. So bleibt der **Demo-Modus** (In-Memory, ohne native Module) lauffähig,
+ * selbst wenn `NexusNative` gar nicht eingebunden ist.
+ */
+export const NexusNative: NexusNativeModule = new Proxy({} as NexusNativeModule, {
+  get(_target, property: string | symbol) {
+    const native = resolveNative() as unknown as Record<string | symbol, unknown>;
+    return native[property];
+  },
+});
