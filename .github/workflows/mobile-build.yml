@@ -65,3 +65,25 @@ jobs:
           name: nexus-demo-ipa
           path: artifacts/nexus-demo-unsigned.ipa
           if-no-files-found: error
+
+  ios-live:
+    name: iOS Live-Build (mit nativem Modul)
+    runs-on: macos-14
+    # Darf scheitern, ohne den Demo-Build/Artefakte zu blockieren (native Integration
+    # wird iterativ über die CI-Logs gehärtet — siehe docs/11-Native-und-App.md).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: iOS-Live bauen (natives Modul via Pod)
+        run: bash .github/scripts/build-mobile.sh ios-live
+      - name: Live-IPA als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-live-ipa
+          path: artifacts/nexus-live-unsigned.ipa
+          if-no-files-found: error
