@@ -1,0 +1,61 @@
+name: Mobile Build (Demo-APK)
+
+# Baut die NEXUS-App im Demo-Modus auf GitHubs Runnern.
+# - Android: erzeugt eine installierbare Debug-APK (kein Signing/Account nötig) → Artefakt.
+# - iOS: kompiliert für den Simulator (ohne Signing) zur Validierung. Für ein echtes iPhone
+#   sind Apple-Developer-Account + Signing/TestFlight nötig (siehe docs/11-Native-und-App.md).
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['claude/**', 'main']
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'native/**'
+      - '.github/workflows/mobile-build.yml'
+      - '.github/scripts/build-mobile.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android Demo-APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: APK bauen
+        run: bash .github/scripts/build-mobile.sh android
+      - name: APK als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-demo-apk
+          path: artifacts/nexus-demo-debug.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS Simulator-Build
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: iOS kompilieren (Simulator, ohne Signing)
+        run: bash .github/scripts/build-mobile.sh ios
