@@ -25,9 +25,15 @@ src/
 Leitprinzip „Thin-JS / Native-Core" (ADR-001): UI/Orchestrierung in TS, sicherheits-/
 performancekritische Pfade nativ (Keychain/Keystore, SQLCipher, EWS/EAS, Pinning).
 
+## Modi (`src/config.ts` → `APP_MODE`)
+
+- **`demo` (Standard):** In-Memory-Adapter + Beispieldaten — App läuft **sofort ohne Server
+  und ohne native Module**. Ideal zum Ausprobieren auf Gerät/Simulator.
+- **`live`:** native Module (Keychain/Keystore, SQLCipher, EWS-Transport) gegen Exchange.
+
 ## Inbetriebnahme (sobald Toolchain vorhanden)
 
 1. `apps/*` in `pnpm-workspace.yaml` aufnehmen, dann `pnpm install`.
-2. Native Module einbinden (iOS: Pods; Android: `NexusPackage` registrieren) — siehe
-   [`../../native`](../../native).
-3. `pnpm --filter @nexus/mobile ios` bzw. `... android`.
+2. Für `demo`: direkt `pnpm --filter @nexus/mobile ios` bzw. `... android` — fertig.
+3. Für `live`: native Module einbinden (iOS: Pods; Android: `NexusPackage` registrieren) —
+   siehe [`../../native`](../../native) und [docs/11](../../docs/11-Native-und-App.md).

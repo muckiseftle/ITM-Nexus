@@ -1,4 +1,4 @@
-import type { Clock, TransportCapabilities } from '@nexus/core-transport';
+import type { Clock, MailStore, MailTransport, SecureStore } from '@nexus/core-transport';
 import {
   AccountSetupService,
   ComposeService,
@@ -11,14 +11,14 @@ import { NexusNative } from '../native/NexusNative';
 import { NativeMailTransport, NativeSecureStore, SqlMailStore } from '../native/adapters';
 
 /**
- * Composition-Root der App: konstruiert die nativen Adapter (Ports) und verdrahtet sie mit
- * den plattformunabhängigen `@nexus/services`. Die UI hängt nur an diesem Container, nie an
- * konkreten Adaptern — austauschbar gegen In-Memory-Adapter für Tests/Storybook.
+ * App-Container: das Interface, an dem die UI hängt — port-/service-typisiert, damit sowohl
+ * der **Live-Container** (native Adapter) als auch der **Demo-Container** (In-Memory) ihn
+ * erfüllen. Siehe `demoContainer.ts` für den serverlosen Demo-Modus.
  */
 export interface AppContainer {
-  readonly secureStore: NativeSecureStore;
-  readonly mailStore: SqlMailStore;
-  readonly transport: NativeMailTransport;
+  readonly secureStore: SecureStore;
+  readonly mailStore: MailStore;
+  readonly transport: MailTransport;
   readonly setup: AccountSetupService;
   readonly sync: SyncService;
   readonly outbox: OutboxProcessor;
@@ -29,15 +29,16 @@ export interface AppContainer {
 
 const systemClock: Clock = { now: () => Date.now() };
 
-const DEFAULT_CAPABILITIES: TransportCapabilities = {
+const DEFAULT_CAPABILITIES = {
   ews: true,
   activeSync: true,
   directPush: true,
   publicFolders: true,
   delegation: true,
   serverSearch: true,
-};
+} as const;
 
+/** Live-Container: nutzt die nativen Module (Keychain/Keystore, SQLCipher, EWS/EAS). */
 export async function createContainer(): Promise<AppContainer> {
   await NexusNative.dbInit();
 

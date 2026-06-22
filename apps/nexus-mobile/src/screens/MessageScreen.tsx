@@ -5,12 +5,13 @@ import { toAccountId, type MailMessage } from '@nexus/domain';
 import { color, space, typography } from '@nexus/ui-kit';
 import type { RootStackParamList } from '../App';
 import type { AppContainer } from '../composition/container';
+import { DEMO_ACCOUNT_ID } from '../config';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Message'> & {
   readonly container: AppContainer;
 };
 
-const ACCOUNT = toAccountId('primary');
+const ACCOUNT = toAccountId(DEMO_ACCOUNT_ID);
 
 export function MessageScreen({ route, container }: Props): React.JSX.Element {
   const [message, setMessage] = useState<MailMessage | undefined>(undefined);

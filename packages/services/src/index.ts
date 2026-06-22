@@ -8,3 +8,6 @@ export * from './contacts-service';
 export * from './compose-service';
 export * from './rule-processor';
 export * from './in-memory-store';
+export * from './in-memory-transport';
+export * from './in-memory-container';
+export * from './demo-seed';

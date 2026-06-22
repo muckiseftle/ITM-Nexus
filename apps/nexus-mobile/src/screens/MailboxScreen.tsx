@@ -5,14 +5,15 @@ import { isUnread, toAccountId, toFolderId, type MailMessage } from '@nexus/doma
 import { color, space, typography } from '@nexus/ui-kit';
 import type { RootStackParamList } from '../App';
 import type { AppContainer } from '../composition/container';
+import { DEMO_ACCOUNT_ID, DEMO_INBOX_ID } from '../config';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Mailbox'> & {
   readonly container: AppContainer;
 };
 
-// Demonstrativ: aktives Konto/Ordner. In der echten App aus Konto-Setup/Sidebar.
-const ACCOUNT = toAccountId('primary');
-const INBOX = toFolderId('inbox');
+// Aktives Konto/Ordner. In der echten App aus Konto-Setup/Sidebar; hier aus der Config.
+const ACCOUNT = toAccountId(DEMO_ACCOUNT_ID);
+const INBOX = toFolderId(DEMO_INBOX_ID);
 
 export function MailboxScreen({ navigation, container }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<readonly MailMessage[]>([]);

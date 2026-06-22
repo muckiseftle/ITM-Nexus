@@ -66,14 +66,43 @@ SQL-/Mapping-Logik plattformunabhängig.
 
 | Baustein | Status |
 |----------|--------|
+| **Demo-Modus** (In-Memory + Seed-Daten, App ohne Server lauffähig) | ✅ vollständig (TS-getestet) |
 | iOS/Android SecureStore (Keychain/Keystore) | ✅ vollständig |
 | DB-Schema (`messages`/`outbox`/FTS5) + Bridge | ✅ vollständig |
 | RN-Bridge (Module/Package, Promise-basiert) | ✅ vollständig |
 | JS-Adapter (Ports → Bridge) | ✅ vollständig (Messages/Outbox/Transport-Kern) |
 | RN-App-Skelett (Navigation, 2 Screens, Container) | ✅ vollständig |
+| **EWS-Transport** (Autodiscover, SyncFolderItems+GetItem, CreateItem, Update/Move/Delete, FindItem) | 🟧 erste funktionale Implementierung (on-device zu testen/härten) |
 | SQLCipher-Aufrufe aktiv schalten | ⏳ beim Einbinden der Abhängigkeit |
-| EWS-SOAP / EAS-WBXML-Parser + Autodiscover-Netzpfad | ⏳ iterativ |
-| Certificate-Pinning-Verifikation (Fail-Closed) | ⏳ iterativ |
+| EAS/WBXML, NTLM/Kerberos, Pinning-Verifikation (Fail-Closed) | ⏳ iterativ |
+
+## App auf dem Handy testen
+
+Diese Cloud-/Linux-Umgebung **baut die App nicht** — das geschieht auf deinem Rechner.
+Es gibt zwei Modi (`apps/nexus-mobile/src/config.ts` → `APP_MODE`):
+
+- **`demo` (Standard):** App startet mit In-Memory-Adaptern + Beispieldaten, **ohne Server
+  und ohne native Module**. Schnellster Weg, NEXUS auf dem Gerät zu erleben (Liste, Lesen,
+  lokale Suche, Regeln, Kategorien).
+- **`live`:** nutzt die nativen Module (Keychain/Keystore, SQLCipher, EWS-Transport) gegen
+  deinen Exchange-On-Prem-Server.
+
+### iPhone (iOS)
+1. **Mac mit Xcode** (15+) und CocoaPods.
+2. Repo klonen → `apps/*` in `pnpm-workspace.yaml` aufnehmen → `pnpm install`.
+3. `cd apps/nexus-mobile/ios && pod install` (für `live`: SQLCipher-Pod + Dateien aus
+   `native/ios` ins Projekt aufnehmen).
+4. In Xcode dein iPhone wählen, **Signing-Team** setzen (Apple-ID genügt, Sideload 7 Tage),
+   **Run** — oder `pnpm --filter @nexus/mobile ios --device`.
+
+### Android
+1. **Android Studio + SDK** (min SDK 26), USB-Debugging am Handy aktivieren.
+2. `pnpm install` (nach Workspace-Aufnahme), für `live`: Dateien aus `native/android` +
+   Gradle-Abhängigkeiten, `NexusPackage` in `MainApplication` registrieren.
+3. `pnpm --filter @nexus/mobile android` (installiert direkt aufs Gerät) oder APK bauen.
+
+> Für **echten Mailabruf** (`live`) muss zusätzlich der EWS-Transport on-device getestet/
+> gehärtet und dein Exchange-Server erreichbar sein (Autodiscover/Basic-Auth).
 
 ## Inbetriebnahme (sobald Toolchain vorhanden)
 

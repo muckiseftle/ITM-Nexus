@@ -5,7 +5,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { color } from '@nexus/ui-kit';
 import type { MessageId } from '@nexus/domain';
+import { APP_MODE } from './config';
 import { createContainer, type AppContainer } from './composition/container';
+import { createDemoContainer } from './composition/demoContainer';
 import { MailboxScreen } from './screens/MailboxScreen';
 import { MessageScreen } from './screens/MessageScreen';
 
@@ -21,7 +23,8 @@ export default function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    createContainer()
+    const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
+    factory()
       .then(setContainer)
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : 'Initialisierung fehlgeschlagen');
