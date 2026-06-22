@@ -14,7 +14,7 @@ Pod::Spec.new do |s|
   # React-Native-Bridge.
   s.dependency 'React-Core'
 
-  # SQLCipher wird aktiviert, sobald der DB-Code die echten sqlite3_*-Aufrufe nutzt
-  # (siehe NexusDatabase.swift). Bis dahin kompiliert das Modul ohne diese Abhängigkeit.
-  # s.dependency 'SQLCipher'
+  # Verschlüsselte lokale DB (at-rest, AES-256). Stellt das `SQLCipher`-Modul mit den
+  # sqlite3_*-Funktionen inkl. sqlite3_key bereit (siehe NexusDatabase.swift).
+  s.dependency 'SQLCipher'
 end
