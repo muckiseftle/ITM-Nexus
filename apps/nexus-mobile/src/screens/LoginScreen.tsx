@@ -15,25 +15,28 @@ interface Props {
  */
 export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (): Promise<void> => {
-    const trimmed = email.trim();
-    if (trimmed.length === 0 || password.length === 0) {
+    const trimmedEmail = email.trim();
+    if (trimmedEmail.length === 0 || password.length === 0) {
       setError('Bitte E-Mail und Passwort eingeben.');
       return;
     }
+    // Anmeldename: separat eingebbar (z. B. DOMÄNE\Benutzername oder UPN). Leer → E-Mail.
+    const loginName = username.trim().length > 0 ? username.trim() : trimmedEmail;
     setBusy(true);
     setError(null);
     try {
-      await container.setup.setUp(trimmed, {
-        username: trimmed,
+      await container.setup.setUp(trimmedEmail, {
+        username: loginName,
         secret: password,
         scheme: 'basic',
       });
-      onLoggedIn(toAccountId(trimmed.toLowerCase()), trimmed);
+      onLoggedIn(toAccountId(trimmedEmail.toLowerCase()), trimmedEmail);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Anmeldung fehlgeschlagen');
     } finally {
@@ -48,13 +51,22 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
 
       <TextInput
         style={styles.input}
-        placeholder="E-Mail-Adresse"
+        placeholder="E-Mail-Adresse (für Autodiscover)"
         placeholderTextColor={color.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Benutzername (optional, z. B. DOMÄNE\Benutzer)"
+        placeholderTextColor={color.textSecondary}
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={username}
+        onChangeText={setUsername}
       />
       <TextInput
         style={styles.input}
@@ -79,7 +91,10 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
         )}
       </Pressable>
 
-      <Text style={styles.hint}>Autodiscover ermittelt deinen Server automatisch.</Text>
+      <Text style={styles.hint}>
+        Autodiscover ermittelt deinen Server automatisch. Falls die Anmeldung scheitert,
+        Benutzername als DOMÄNE\Benutzer oder benutzer@domäne eingeben.
+      </Text>
     </View>
   );
 }
