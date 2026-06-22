@@ -86,4 +86,24 @@ class NexusModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun transportSearchServer(accountId: String, query: String, promise: Promise) =
     run(promise, "transport_search") { transport.searchServer(accountId, query) }
+
+  @ReactMethod
+  fun transportLoadAccount(accountId: String, promise: Promise) =
+    run(promise, "transport_account") { transport.loadAccount(accountId) }
+
+  @ReactMethod
+  fun transportSyncFolders(accountId: String, syncKey: String?, promise: Promise) =
+    run(promise, "transport_folders") { transport.syncFolders(accountId, syncKey) }
+
+  @ReactMethod
+  fun transportSyncCalendar(accountId: String, syncKey: String?, promise: Promise) =
+    run(promise, "transport_calendar") { transport.syncCalendar(accountId, syncKey) }
+
+  @ReactMethod
+  fun transportSyncContacts(accountId: String, syncKey: String?, promise: Promise) =
+    run(promise, "transport_contacts") { transport.syncContacts(accountId, syncKey) }
+
+  @ReactMethod
+  fun transportGetMessage(accountId: String, messageId: String, promise: Promise) =
+    run(promise, "transport_getmessage") { transport.getMessage(accountId, messageId) }
 }

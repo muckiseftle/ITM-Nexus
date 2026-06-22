@@ -119,6 +119,107 @@ object EwsSoap {
     """.trimIndent(),
   )
 
+  fun setFlag(itemId: String, flagged: Boolean): String = envelope(
+    """
+    <m:UpdateItem ConflictResolution="AutoResolve" MessageDisposition="SaveOnly">
+      <m:ItemChanges><t:ItemChange>
+        <t:ItemId Id="${xmlEscape(itemId)}"/>
+        <t:Updates><t:SetItemField>
+          <t:FieldURI FieldURI="item:Flag"/>
+          <t:Item><t:Flag><t:FlagStatus>${if (flagged) "Flagged" else "NotFlagged"}</t:FlagStatus></t:Flag></t:Item>
+        </t:SetItemField></t:Updates>
+      </t:ItemChange></m:ItemChanges>
+    </m:UpdateItem>
+    """.trimIndent(),
+  )
+
+  fun setCategories(itemId: String, categories: List<String>): String {
+    val strings = categories.joinToString("") { "<t:String>${xmlEscape(it)}</t:String>" }
+    return envelope(
+      """
+      <m:UpdateItem ConflictResolution="AutoResolve" MessageDisposition="SaveOnly">
+        <m:ItemChanges><t:ItemChange>
+          <t:ItemId Id="${xmlEscape(itemId)}"/>
+          <t:Updates><t:SetItemField>
+            <t:FieldURI FieldURI="item:Categories"/>
+            <t:Item><t:Categories>$strings</t:Categories></t:Item>
+          </t:SetItemField></t:Updates>
+        </t:ItemChange></m:ItemChanges>
+      </m:UpdateItem>
+      """.trimIndent(),
+    )
+  }
+
+  fun findFolders(): String = envelope(
+    """
+    <m:FindFolder Traversal="Deep">
+      <m:FolderShape><t:BaseShape>Default</t:BaseShape></m:FolderShape>
+      <m:ParentFolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:ParentFolderIds>
+    </m:FindFolder>
+    """.trimIndent(),
+  )
+
+  data class ParsedFolder(
+    var id: String = "",
+    var displayName: String = "",
+    var unread: Int = 0,
+    var total: Int = 0,
+  )
+
+  fun parseFolders(xml: String): List<ParsedFolder> {
+    val doc = parse(xml)
+    val folders = doc.getElementsByTagNameNS(TYPES_NS, "Folder")
+    return (0 until folders.length).map { i ->
+      val el = folders.item(i) as Element
+      ParsedFolder(
+        id = (el.getElementsByTagNameNS(TYPES_NS, "FolderId").item(0) as? Element)?.getAttribute("Id") ?: "",
+        displayName = text(el, "DisplayName"),
+        unread = text(el, "UnreadCount").toIntOrNull() ?: 0,
+        total = text(el, "TotalCount").toIntOrNull() ?: 0,
+      )
+    }
+  }
+
+  data class ParsedEvent(
+    var id: String = "",
+    var subject: String = "",
+    var start: Double = 0.0,
+    var end: Double = 0.0,
+    var location: String = "",
+    var organizer: String = "",
+  )
+
+  fun parseEvents(xml: String): List<ParsedEvent> {
+    val doc = parse(xml)
+    val events = doc.getElementsByTagNameNS(TYPES_NS, "CalendarItem")
+    return (0 until events.length).map { i ->
+      val el = events.item(i) as Element
+      ParsedEvent(
+        id = (el.getElementsByTagNameNS(TYPES_NS, "ItemId").item(0) as? Element)?.getAttribute("Id") ?: "",
+        subject = text(el, "Subject"),
+        start = parseIso(text(el, "Start")),
+        end = parseIso(text(el, "End")),
+        location = text(el, "Location"),
+        organizer = text(el, "Name"),
+      )
+    }
+  }
+
+  data class ParsedContact(var id: String = "", var displayName: String = "", var email: String = "")
+
+  fun parseContacts(xml: String): List<ParsedContact> {
+    val doc = parse(xml)
+    val contacts = doc.getElementsByTagNameNS(TYPES_NS, "Contact")
+    return (0 until contacts.length).map { i ->
+      val el = contacts.item(i) as Element
+      ParsedContact(
+        id = (el.getElementsByTagNameNS(TYPES_NS, "ItemId").item(0) as? Element)?.getAttribute("Id") ?: "",
+        displayName = text(el, "DisplayName"),
+        email = text(el, "Entry"),
+      )
+    }
+  }
+
   // — Response-Parsing —
 
   data class ParsedItem(

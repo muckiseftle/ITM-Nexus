@@ -34,6 +34,11 @@ export interface NexusNativeModule {
   transportApplyOperation(operationJson: string): Promise<void>;
   transportSendMessage(accountId: string, messageJson: string): Promise<string>;
   transportSearchServer(accountId: string, query: string): Promise<string>;
+  transportLoadAccount(accountId: string): Promise<string>;
+  transportSyncFolders(accountId: string, syncKey: string | null): Promise<string>;
+  transportSyncCalendar(accountId: string, syncKey: string | null): Promise<string>;
+  transportSyncContacts(accountId: string, syncKey: string | null): Promise<string>;
+  transportGetMessage(accountId: string, messageId: string): Promise<string>;
 }
 
 const native = NativeModules.NexusNative as NexusNativeModule | undefined;

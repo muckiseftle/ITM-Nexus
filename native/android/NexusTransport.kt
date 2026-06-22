@@ -91,8 +91,88 @@ class NexusTransport {
       "markRead" -> postEws(EwsSoap.setIsRead(itemId, command.optBoolean("read", true)))
       "move" -> postEws(EwsSoap.moveItem(itemId, mapFolder(command.optString("targetFolderId"))))
       "delete" -> postEws(EwsSoap.deleteItem(itemId))
-      else -> throw NotImplementedError("OutboxCommand $type noch nicht verdrahtet (iterativ).")
+      "flag" -> postEws(EwsSoap.setFlag(itemId, command.optBoolean("value", true)))
+      "setCategories" -> {
+        val cats = mutableListOf<String>()
+        val arr = command.optJSONArray("categories") ?: JSONArray()
+        for (i in 0 until arr.length()) cats.add(arr.getString(i))
+        postEws(EwsSoap.setCategories(itemId, cats))
+      }
+      "send" -> Unit // wird über sendMessage zugestellt
+      else -> throw IllegalArgumentException("Unbekannter OutboxCommand: $type")
     }
+  }
+
+  fun loadAccount(accountId: String): String = JSONObject()
+    .put("id", accountId).put("emailAddress", "").put("displayName", accountId)
+    .put("serverHost", ewsUrl ?: "").toString()
+
+  fun syncFolders(accountId: String, syncKey: String?): String {
+    val created = JSONArray()
+    EwsSoap.parseFolders(postEws(EwsSoap.findFolders())).forEach { f ->
+      created.put(
+        JSONObject()
+          .put("id", f.id).put("accountId", accountId).put("displayName", f.displayName)
+          .put("type", folderType(f.displayName))
+          .put("unreadCount", f.unread).put("totalCount", f.total),
+      )
+    }
+    return delta(syncKey, created)
+  }
+
+  fun syncCalendar(accountId: String, syncKey: String?): String {
+    val created = JSONArray()
+    val ids = EwsSoap.extractItemIds(postEws(EwsSoap.syncFolderItems("calendar", syncKey)))
+    if (ids.isNotEmpty()) {
+      EwsSoap.parseEvents(postEws(EwsSoap.getItems(ids))).forEach { e ->
+        created.put(
+          JSONObject()
+            .put("id", e.id).put("accountId", accountId).put("subject", e.subject)
+            .put("startAt", e.start).put("endAt", e.end).put("isAllDay", false)
+            .put("location", e.location)
+            .put("organizer", JSONObject().put("address", e.organizer))
+            .put("attendees", JSONArray()),
+        )
+      }
+    }
+    return delta(syncKey, created)
+  }
+
+  fun syncContacts(accountId: String, syncKey: String?): String {
+    val created = JSONArray()
+    val ids = EwsSoap.extractItemIds(postEws(EwsSoap.syncFolderItems("contacts", syncKey)))
+    if (ids.isNotEmpty()) {
+      EwsSoap.parseContacts(postEws(EwsSoap.getItems(ids))).forEach { c ->
+        val emails = JSONArray()
+        if (c.email.isNotEmpty()) emails.put(JSONObject().put("address", c.email))
+        created.put(
+          JSONObject()
+            .put("id", c.id).put("accountId", accountId).put("displayName", c.displayName)
+            .put("emailAddresses", emails),
+        )
+      }
+    }
+    return delta(syncKey, created)
+  }
+
+  fun getMessage(accountId: String, messageId: String): String {
+    val items = EwsSoap.parseItems(postEws(EwsSoap.getItems(listOf(messageId))))
+    val item = items.firstOrNull() ?: error("Nachricht nicht gefunden")
+    return messageJson(item, accountId, "inbox").toString()
+  }
+
+  private fun delta(syncKey: String?, created: JSONArray): String = JSONObject()
+    .put("syncKey", syncKey ?: "").put("created", created).put("updated", JSONArray())
+    .put("deletedIds", JSONArray()).put("hasMore", false).toString()
+
+  private fun folderType(name: String): String = when (name.lowercase()) {
+    "inbox", "posteingang" -> "inbox"
+    "sent items", "gesendete elemente", "gesendet" -> "sent"
+    "drafts", "entwürfe" -> "drafts"
+    "deleted items", "gelöschte elemente" -> "deleted"
+    "junk email", "junk-e-mail" -> "junk"
+    "archive", "archiv" -> "archive"
+    else -> "custom"
   }
 
   fun sendMessage(accountId: String, messageJson: String): String {

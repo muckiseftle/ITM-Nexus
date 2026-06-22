@@ -166,22 +166,28 @@ export class NativeMailTransport implements MailTransport {
     return JSON.parse(json) as readonly SearchHit[];
   }
 
-  // Folgende Methoden gehören zum Vertrag, sind im nativen Connector aber noch nicht
-  // verdrahtet (iterativ, siehe docs/11-Native-und-App.md). Sie folgen demselben
-  // JSON-über-Bridge-Muster wie die obigen.
-  loadAccount(_accountId: AccountId): Promise<Account> {
-    return Promise.reject(new Error('NativeMailTransport.loadAccount: noch nicht verdrahtet.'));
+  async loadAccount(accountId: AccountId): Promise<Account> {
+    const json = await NexusNative.transportLoadAccount(accountId);
+    return JSON.parse(json) as Account;
   }
-  syncFolders(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<MailFolder>> {
-    return Promise.reject(new Error('NativeMailTransport.syncFolders: noch nicht verdrahtet.'));
+
+  async syncFolders(accountId: AccountId, syncKey?: string): Promise<SyncDelta<MailFolder>> {
+    const json = await NexusNative.transportSyncFolders(accountId, syncKey ?? null);
+    return JSON.parse(json) as SyncDelta<MailFolder>;
   }
-  syncCalendar(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<CalendarEvent>> {
-    return Promise.reject(new Error('NativeMailTransport.syncCalendar: noch nicht verdrahtet.'));
+
+  async syncCalendar(accountId: AccountId, syncKey?: string): Promise<SyncDelta<CalendarEvent>> {
+    const json = await NexusNative.transportSyncCalendar(accountId, syncKey ?? null);
+    return JSON.parse(json) as SyncDelta<CalendarEvent>;
   }
-  syncContacts(_accountId: AccountId, _syncKey?: string): Promise<SyncDelta<Contact>> {
-    return Promise.reject(new Error('NativeMailTransport.syncContacts: noch nicht verdrahtet.'));
+
+  async syncContacts(accountId: AccountId, syncKey?: string): Promise<SyncDelta<Contact>> {
+    const json = await NexusNative.transportSyncContacts(accountId, syncKey ?? null);
+    return JSON.parse(json) as SyncDelta<Contact>;
   }
-  getMessage(_accountId: AccountId, _messageId: MessageId): Promise<MailMessage> {
-    return Promise.reject(new Error('NativeMailTransport.getMessage: noch nicht verdrahtet.'));
+
+  async getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage> {
+    const json = await NexusNative.transportGetMessage(accountId, messageId);
+    return JSON.parse(json) as MailMessage;
   }
 }

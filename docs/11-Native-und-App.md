@@ -72,7 +72,7 @@ SQL-/Mapping-Logik plattformunabhängig.
 | RN-Bridge (Module/Package, Promise-basiert) | ✅ vollständig |
 | JS-Adapter (Ports → Bridge) | ✅ vollständig (Messages/Outbox/Transport-Kern) |
 | RN-App-Skelett (Navigation, 2 Screens, Container) | ✅ vollständig |
-| **EWS-Transport** (Autodiscover, SyncFolderItems+GetItem, CreateItem, Update/Move/Delete, FindItem) | 🟧 erste funktionale Implementierung (on-device zu testen/härten) |
+| **EWS-Transport — volle MailTransport-Oberfläche**: Autodiscover, Folder-/Message-/Calendar-/Contact-Sync, GetItem, CreateItem (Senden), applyOperation (markRead/flag/setCategories/move/delete), FindItem-Suche, loadAccount | 🟧 funktionale Implementierung in Swift **und** Kotlin (on-device zu testen/härten) |
 | SQLCipher-Aufrufe aktiv schalten | ⏳ beim Einbinden der Abhängigkeit |
 | EAS/WBXML, NTLM/Kerberos, Pinning-Verifikation (Fail-Closed) | ⏳ iterativ |
 

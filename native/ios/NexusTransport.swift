@@ -99,9 +99,82 @@ final class NexusTransport {
       _ = try await post(EwsSoap.moveItem(itemId: itemId, toFolderId: mapFolder(command["targetFolderId"] as? String ?? "")))
     case "delete":
       _ = try await post(EwsSoap.deleteItem(itemId: itemId))
+    case "flag":
+      _ = try await post(EwsSoap.setFlag(itemId: itemId, flagged: (command["value"] as? Bool) ?? true))
+    case "setCategories":
+      let cats = (command["categories"] as? [String]) ?? []
+      _ = try await post(EwsSoap.setCategories(itemId: itemId, categories: cats))
+    case "send":
+      // 'send' wird über sendMessage zugestellt; hier no-op.
+      break
     default:
-      // flag/setCategories: analoge UpdateItem-Requests (iterativ).
-      throw NexusError.transport("OutboxCommand \(type) noch nicht verdrahtet (iterativ).")
+      throw NexusError.transport("Unbekannter OutboxCommand: \(type)")
+    }
+  }
+
+  func loadAccount(accountId: String) async throws -> String {
+    try Self.json([
+      "id": accountId, "emailAddress": "", "displayName": accountId, "serverHost": ewsUrl?.host ?? "",
+    ])
+  }
+
+  func syncFolders(accountId: String, syncKey: String?) async throws -> String {
+    let xml = try await post(EwsSoap.findFolders())
+    let created = EwsSoap.parseFolders(xml).map { (f) -> [String: Any] in
+      [
+        "id": f.id, "accountId": accountId, "displayName": f.displayName,
+        "type": Self.folderType(f.displayName), "unreadCount": f.unread, "totalCount": f.total,
+      ]
+    }
+    return try Self.json([
+      "syncKey": syncKey ?? "", "created": created, "updated": [], "deletedIds": [], "hasMore": false,
+    ])
+  }
+
+  func syncCalendar(accountId: String, syncKey: String?) async throws -> String {
+    let ids = EwsSoap.extractItemIds(try await post(EwsSoap.syncFolderItemsIdOnly(distinguished: "calendar", syncState: syncKey)))
+    var created: [[String: Any]] = []
+    if !ids.isEmpty {
+      created = EwsSoap.parseEvents(try await post(EwsSoap.getItems(ids: ids))).map { (e) in
+        [
+          "id": e.id, "accountId": accountId, "subject": e.subject, "startAt": e.start, "endAt": e.end,
+          "isAllDay": false, "location": e.location,
+          "organizer": ["address": e.organizer], "attendees": [],
+        ]
+      }
+    }
+    return try Self.json(["syncKey": syncKey ?? "", "created": created, "updated": [], "deletedIds": [], "hasMore": false])
+  }
+
+  func syncContacts(accountId: String, syncKey: String?) async throws -> String {
+    let ids = EwsSoap.extractItemIds(try await post(EwsSoap.syncFolderItemsIdOnly(distinguished: "contacts", syncState: syncKey)))
+    var created: [[String: Any]] = []
+    if !ids.isEmpty {
+      created = EwsSoap.parseContacts(try await post(EwsSoap.getItems(ids: ids))).map { (c) in
+        [
+          "id": c.id, "accountId": accountId, "displayName": c.displayName,
+          "emailAddresses": c.email.isEmpty ? [] : [["address": c.email]],
+        ]
+      }
+    }
+    return try Self.json(["syncKey": syncKey ?? "", "created": created, "updated": [], "deletedIds": [], "hasMore": false])
+  }
+
+  func getMessage(accountId: String, messageId: String) async throws -> String {
+    let items = EwsSoap.parseItems(try await post(EwsSoap.getItems(ids: [messageId])))
+    guard let item = items.first else { throw NexusError.transport("Nachricht nicht gefunden") }
+    return try Self.json(Self.messageJson(item, accountId: accountId, folderId: "inbox"))
+  }
+
+  private static func folderType(_ name: String) -> String {
+    switch name.lowercased() {
+    case "inbox", "posteingang": return "inbox"
+    case "sent items", "gesendete elemente", "gesendet": return "sent"
+    case "drafts", "entwürfe": return "drafts"
+    case "deleted items", "gelöschte elemente": return "deleted"
+    case "junk email", "junk-e-mail": return "junk"
+    case "archive", "archiv": return "archive"
+    default: return "custom"
     }
   }
 

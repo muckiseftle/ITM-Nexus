@@ -95,4 +95,44 @@ final class NexusModule: NSObject {
       catch { reject("transport_search", "\(error)", error) }
     }
   }
+
+  @objc(transportLoadAccount:resolver:rejecter:)
+  func transportLoadAccount(_ accountId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.loadAccount(accountId: accountId)) }
+      catch { reject("transport_account", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSyncFolders:syncKey:resolver:rejecter:)
+  func transportSyncFolders(_ accountId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.syncFolders(accountId: accountId, syncKey: syncKey)) }
+      catch { reject("transport_folders", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSyncCalendar:syncKey:resolver:rejecter:)
+  func transportSyncCalendar(_ accountId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.syncCalendar(accountId: accountId, syncKey: syncKey)) }
+      catch { reject("transport_calendar", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSyncContacts:syncKey:resolver:rejecter:)
+  func transportSyncContacts(_ accountId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.syncContacts(accountId: accountId, syncKey: syncKey)) }
+      catch { reject("transport_contacts", "\(error)", error) }
+    }
+  }
+
+  @objc(transportGetMessage:messageId:resolver:rejecter:)
+  func transportGetMessage(_ accountId: String, messageId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.getMessage(accountId: accountId, messageId: messageId)) }
+      catch { reject("transport_getmessage", "\(error)", error) }
+    }
+  }
 }

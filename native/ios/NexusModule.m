@@ -27,5 +27,15 @@ RCT_EXTERN_METHOD(transportSendMessage:(NSString *)accountId messageJson:(NSStri
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSearchServer:(NSString *)accountId query:(NSString *)query
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportLoadAccount:(NSString *)accountId
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportSyncFolders:(NSString *)accountId syncKey:(NSString *)syncKey
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportSyncCalendar:(NSString *)accountId syncKey:(NSString *)syncKey
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportSyncContacts:(NSString *)accountId syncKey:(NSString *)syncKey
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportGetMessage:(NSString *)accountId messageId:(NSString *)messageId
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
 @end
