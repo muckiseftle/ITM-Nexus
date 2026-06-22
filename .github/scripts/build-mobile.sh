@@ -37,12 +37,9 @@ cp "$ROOT/apps/nexus-mobile/app.json" ./app.json
 echo "::endgroup::"
 
 echo "::group::Laufzeit-Abhängigkeiten installieren"
-npm install
-npm install --save \
-  "@react-navigation/native@^7" \
-  "@react-navigation/native-stack@^7" \
-  "react-native-screens@^4" \
-  "react-native-safe-area-context@^5"
+# Die Demo-App nutzt nur react/react-native (Navigation ist schlank in App.tsx) — daher
+# keine zusätzlichen nativen Abhängigkeiten nötig.
+npm install --legacy-peer-deps
 echo "::endgroup::"
 
 echo "::group::Gebaute @nexus-Pakete in node_modules verlinken"
@@ -68,16 +65,26 @@ if [ "$PLATFORM" = "android" ]; then
 fi
 
 if [ "$PLATFORM" = "ios" ]; then
-  echo "::group::iOS-Build (Simulator, ohne Signing)"
+  echo "::group::iOS-Build (Gerät, UNSIGNIERT → IPA zum Sideloaden)"
   ( cd ios && pod install )
+  # Release-Build fürs echte Gerät, ohne Signing. Sideloadly/AltStore signiert die IPA
+  # anschließend mit deiner kostenlosen Apple-ID neu (7-Tage-Sideload).
   xcodebuild \
     -workspace ios/NEXUS.xcworkspace \
     -scheme NEXUS \
-    -configuration Debug \
-    -sdk iphonesimulator \
+    -configuration Release \
+    -sdk iphoneos \
     -derivedDataPath ios-build \
     CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" \
+    PROVISIONING_PROFILE_SPECIFIER="" \
     build
-  echo "iOS-Simulator-Build erfolgreich (kompiliert). Für ein echtes iPhone: Signing/TestFlight nötig."
+  APP_PATH="$(find ios-build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)"
+  if [ -z "$APP_PATH" ]; then echo "Kein .app-Bundle gefunden"; exit 1; fi
+  rm -rf Payload && mkdir Payload
+  cp -R "$APP_PATH" Payload/
+  zip -qry "$ARTIFACTS/nexus-demo-unsigned.ipa" Payload
+  echo "IPA: $ARTIFACTS/nexus-demo-unsigned.ipa (unsigniert — mit Sideloadly aufs iPhone)"
   echo "::endgroup::"
 fi

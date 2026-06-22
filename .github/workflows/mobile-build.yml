@@ -57,5 +57,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: iOS kompilieren (Simulator, ohne Signing)
+      - name: iOS bauen (unsignierte IPA)
         run: bash .github/scripts/build-mobile.sh ios
+      - name: IPA als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-demo-ipa
+          path: artifacts/nexus-demo-unsigned.ipa
+          if-no-files-found: error

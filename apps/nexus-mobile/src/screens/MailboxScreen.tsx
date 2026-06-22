@@ -1,21 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { isUnread, toAccountId, toFolderId, type MailMessage } from '@nexus/domain';
+import { isUnread, toAccountId, toFolderId, type MailMessage, type MessageId } from '@nexus/domain';
 import { color, space, typography } from '@nexus/ui-kit';
-import type { RootStackParamList } from '../App';
 import type { AppContainer } from '../composition/container';
 import { DEMO_ACCOUNT_ID, DEMO_INBOX_ID } from '../config';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Mailbox'> & {
+interface Props {
   readonly container: AppContainer;
-};
+  readonly onOpenMessage: (messageId: MessageId) => void;
+}
 
 // Aktives Konto/Ordner. In der echten App aus Konto-Setup/Sidebar; hier aus der Config.
 const ACCOUNT = toAccountId(DEMO_ACCOUNT_ID);
 const INBOX = toFolderId(DEMO_INBOX_ID);
 
-export function MailboxScreen({ navigation, container }: Props): React.JSX.Element {
+export function MailboxScreen({ container, onOpenMessage }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<readonly MailMessage[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -48,7 +47,7 @@ export function MailboxScreen({ navigation, container }: Props): React.JSX.Eleme
         <Pressable
           style={styles.row}
           onPress={() => {
-            navigation.navigate('Message', { messageId: item.id });
+            onOpenMessage(item.id);
           }}
         >
           <View style={[styles.dot, { opacity: isUnread(item) ? 1 : 0 }]} />
