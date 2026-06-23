@@ -52,6 +52,7 @@ export interface AppContainer {
   readonly rules: RuleProcessor;
   readonly calendar: CalendarService;
   readonly contacts: ContactsService;
+  readonly folders: FolderSyncService;
   readonly backgroundSync: BackgroundSyncService;
   /** DirectPush (Long-Poll). Nur im Live-Modus verfügbar (nativer Connector). */
   readonly push?: PushTransport;
@@ -115,6 +116,7 @@ export async function createContainer(): Promise<AppContainer> {
     rules: new RuleProcessor(mailStore, outbox, systemClock),
     calendar,
     contacts,
+    folders,
     backgroundSync: new BackgroundSyncService(
       sync,
       folders,

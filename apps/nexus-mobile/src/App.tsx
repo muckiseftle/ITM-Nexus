@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import {
   toAccountId,
   toFolderId,
   type AccountId,
+  type FolderId,
+  type MailFolder,
   type MailMessage,
   type MessageId,
 } from '@nexus/domain';
-import { color, space, typography } from '@nexus/ui-kit';
+import { space } from '@nexus/ui-kit';
 import {
   APP_MODE,
   DEMO_ACCOUNT_ID,
@@ -17,43 +19,68 @@ import {
 } from './config';
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
+import { ThemeProvider, useTheme, type AppTheme } from './theme/ThemeContext';
+import { Icon, type IconName } from './components/Icon';
+import { FolderDrawer } from './components/FolderDrawer';
 import { LoginScreen } from './screens/LoginScreen';
 import { MailboxScreen } from './screens/MailboxScreen';
 import { MessageScreen } from './screens/MessageScreen';
 import { ComposerScreen } from './screens/ComposerScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { ContactsScreen } from './screens/ContactsScreen';
-import { SearchScreen } from './screens/SearchScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 
-type Tab = 'mail' | 'calendar' | 'contacts' | 'search';
+type Tab = 'mail' | 'calendar' | 'contacts' | 'settings';
 
 type MailRoute =
   | { readonly name: 'list' }
   | { readonly name: 'message'; readonly messageId: MessageId }
   | { readonly name: 'compose'; readonly replyTo?: MailMessage };
 
-// Demo nutzt die Adresse aus dem Seed; live kommt sie aus dem Login.
 const DEMO_EMAIL = 'demo@nexus.local';
 
-const TABS: readonly { readonly key: Tab; readonly label: string }[] = [
-  { key: 'mail', label: 'Mail' },
-  { key: 'calendar', label: 'Kalender' },
-  { key: 'contacts', label: 'Kontakte' },
-  { key: 'search', label: 'Suche' },
+const TABS: readonly { readonly key: Tab; readonly label: string; readonly icon: IconName }[] = [
+  { key: 'mail', label: 'Mail', icon: 'mail' },
+  { key: 'calendar', label: 'Kalender', icon: 'calendar' },
+  { key: 'contacts', label: 'Kontakte', icon: 'contacts' },
+  { key: 'settings', label: 'Mehr', icon: 'more' },
 ];
 
-/**
- * App-Wurzel mit schlanker State-Navigation (ohne react-navigation): Tab-Leiste
- * (Mail/Kalender/Kontakte/Suche) plus Mail-Unterrouten (Liste/Nachricht/Verfassen).
- * Wählt Demo- oder Live-Container nach `APP_MODE`; im Live-Modus erscheint zuerst der Login.
- */
+function deriveName(email: string): string {
+  if (APP_MODE === 'demo') return 'NEXUS Demo';
+  const local = email.split('@')[0] ?? email;
+  return local
+    .split(/[._-]+/)
+    .map((p) => (p.length > 0 ? p.charAt(0).toUpperCase() + p.slice(1) : p))
+    .join(' ');
+}
+
 export default function App(): React.JSX.Element {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
+  );
+}
+
+/**
+ * App-Wurzel mit schlanker State-Navigation (ohne react-navigation): Icon-Tableiste
+ * (Mail/Kalender/Kontakte/Mehr) plus Mail-Unterrouten (Liste/Nachricht/Verfassen) und einem
+ * seitlichen Ordner-Schubfach. Wählt Demo- oder Live-Container nach `APP_MODE`.
+ */
+function AppInner(): React.JSX.Element {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
+
   const [container, setContainer] = useState<AppContainer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountId | null>(null);
   const [accountEmail, setAccountEmail] = useState<string>(DEMO_EMAIL);
   const [tab, setTab] = useState<Tab>('mail');
   const [mailRoute, setMailRoute] = useState<MailRoute>({ name: 'list' });
+  const [currentFolder, setCurrentFolder] = useState<FolderId>(toFolderId(DEMO_INBOX_ID));
+  const [folders, setFolders] = useState<readonly MailFolder[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
@@ -69,9 +96,13 @@ export default function App(): React.JSX.Element {
       });
   }, []);
 
+  // Ordnerstruktur für das Schubfach laden (und bei Konto-/Sync-Wechsel aktualisieren).
+  useEffect(() => {
+    if (container === null || account === null) return;
+    void container.folders.listFolders(account).then(setFolders);
+  }, [container, account]);
+
   // Hintergrund-Sync (Vordergrund-Intervall) + DirectPush-Long-Poll, sobald ein Konto offen ist.
-  // iOS-BGTaskScheduler für echte Hintergrundausführung folgt on-device; hier deckt das
-  // Intervall die aktive Nutzung ab. Im Demo-Modus sind die Server-Calls No-ops.
   useEffect(() => {
     if (container === null || account === null) return;
     let cancelled = false;
@@ -80,7 +111,6 @@ export default function App(): React.JSX.Element {
       void container.backgroundSync.runDue(account);
     }, SYNC_INTERVALS.messages);
 
-    // Nativen iOS-Hintergrund-Sync einplanen (greift, wenn die App im Hintergrund/beendet ist).
     void container.scheduleBackgroundSync?.();
 
     const pushLoop = async (): Promise<void> => {
@@ -90,7 +120,6 @@ export default function App(): React.JSX.Element {
           const result = await container.push.ping(account, [inbox], PUSH_TIMEOUT_MS);
           if (!cancelled) await container.backgroundSync.applyPing(account, result);
         } catch {
-          // Verbindung weg/Timeout → kurz warten, dann erneut versuchen (Long-Poll-Resilienz).
           await new Promise((r) => setTimeout(r, 5000));
         }
       }
@@ -103,6 +132,12 @@ export default function App(): React.JSX.Element {
     };
   }, [container, account]);
 
+  const accountName = useMemo(() => deriveName(accountEmail), [accountEmail]);
+  const folderName = useMemo(
+    () => folders.find((f) => f.id === currentFolder)?.displayName ?? 'Posteingang',
+    [folders, currentFolder],
+  );
+
   const openMessage = (messageId: MessageId): void => {
     setTab('mail');
     setMailRoute({ name: 'message', messageId });
@@ -110,24 +145,23 @@ export default function App(): React.JSX.Element {
 
   if (error !== null) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <Text style={styles.error}>{error}</Text>
+      <SafeAreaView style={s.centered}>
+        <Text style={s.error}>{error}</Text>
       </SafeAreaView>
     );
   }
 
   if (container === null) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <ActivityIndicator color={color.brandPrimary} />
+      <SafeAreaView style={s.centered}>
+        <ActivityIndicator color={t.c.brandPrimary} />
       </SafeAreaView>
     );
   }
 
   if (account === null) {
-    // Live-Modus, noch nicht angemeldet.
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={s.root}>
         <LoginScreen
           container={container}
           onLoggedIn={(accountId, email) => {
@@ -142,14 +176,15 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
-      <View style={styles.body}>
+    <SafeAreaView style={s.root}>
+      <View style={s.body}>
         {tab === 'mail' ? (
           mailRoute.name === 'message' ? (
             <MessageScreen
               container={container}
               account={account}
               messageId={mailRoute.messageId}
+              backLabel={folderName}
               onBack={() => {
                 setMailRoute({ name: 'list' });
               }}
@@ -174,7 +209,13 @@ export default function App(): React.JSX.Element {
             <MailboxScreen
               container={container}
               account={account}
+              folderId={currentFolder}
+              folderTitle={folderName}
               onOpenMessage={openMessage}
+              onOpenDrawer={() => {
+                void container.folders.listFolders(account).then(setFolders);
+                setDrawerOpen(true);
+              }}
               onCompose={() => {
                 setMailRoute({ name: 'compose' });
               }}
@@ -185,43 +226,67 @@ export default function App(): React.JSX.Element {
         ) : tab === 'contacts' ? (
           <ContactsScreen container={container} account={account} />
         ) : (
-          <SearchScreen container={container} account={account} onOpenMessage={openMessage} />
+          <SettingsScreen accountName={accountName} accountEmail={accountEmail} />
         )}
       </View>
 
-      <View style={styles.tabBar}>
-        {TABS.map((t) => (
-          <Pressable
-            key={t.key}
-            style={styles.tab}
-            onPress={() => {
-              setTab(t.key);
-            }}
-          >
-            <Text style={[styles.tabText, tab === t.key ? styles.tabActive : null]}>{t.label}</Text>
-          </Pressable>
-        ))}
+      <View style={s.tabBar}>
+        {TABS.map((tabDef) => {
+          const active = tab === tabDef.key;
+          const tint = active ? t.c.brandPrimary : t.c.textSecondary;
+          return (
+            <Pressable
+              key={tabDef.key}
+              style={s.tab}
+              onPress={() => {
+                setTab(tabDef.key);
+              }}
+            >
+              <Icon name={tabDef.icon} size={24} color={tint} />
+              <Text style={[s.tabText, { color: tint }, active ? s.tabActive : null]}>
+                {tabDef.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
+
+      <FolderDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        accountName={accountName}
+        accountEmail={accountEmail}
+        folders={folders}
+        currentFolderId={currentFolder}
+        onSelectFolder={(id) => {
+          setCurrentFolder(id);
+          setMailRoute({ name: 'list' });
+          setDrawerOpen(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  body: { flex: 1 },
-  centered: {
-    alignItems: 'center',
-    backgroundColor: color.bgCanvas,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  error: { color: color.danger, padding: space.lg, textAlign: 'center' },
-  root: { backgroundColor: color.bgCanvas, flex: 1 },
-  tab: { alignItems: 'center', flex: 1, paddingVertical: space.sm },
-  tabActive: { color: color.brandPrimary, fontWeight: '700' },
-  tabBar: {
-    borderTopColor: color.bgElevated,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-  },
-  tabText: { color: color.textSecondary, fontSize: typography.caption.size },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    body: { flex: 1 },
+    centered: {
+      alignItems: 'center',
+      backgroundColor: t.c.bgCanvas,
+      flex: 1,
+      justifyContent: 'center',
+    },
+    error: { color: t.c.danger, padding: space.lg, textAlign: 'center' },
+    root: { backgroundColor: t.c.bgCanvas, flex: 1 },
+    tab: { alignItems: 'center', flex: 1, gap: 2, paddingVertical: space.xs },
+    tabActive: { fontWeight: '700' },
+    tabBar: {
+      backgroundColor: t.c.bgCanvas,
+      borderTopColor: t.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+    },
+    tabText: { fontSize: 10 },
+  });
+}

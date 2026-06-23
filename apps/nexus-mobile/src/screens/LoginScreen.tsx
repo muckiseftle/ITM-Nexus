@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toAccountId, type AccountId } from '@nexus/domain';
 import {
@@ -8,8 +8,9 @@ import {
   type Credentials,
   type ErrorInfo,
 } from '@nexus/core-transport';
-import { color, radius, space, typography } from '@nexus/ui-kit';
+import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
+import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
   readonly container: AppContainer;
@@ -21,6 +22,9 @@ interface Props {
  * landet ausschließlich im SecureStore (Keychain). Bei Erfolg wird die Mailbox geöffnet.
  */
 export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
+
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -41,13 +45,10 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
       });
       return;
     }
-    // Anmeldename: separat eingebbar (z. B. DOMÄNE\Benutzername oder UPN). Leer → E-Mail.
     const loginName = username.trim().length > 0 ? username.trim() : trimmedEmail;
     const login = parseLogin(loginName);
-    // NTLM, sobald eine NetBIOS-Domäne erkennbar ist (DOMÄNE\Benutzer); sonst Basic.
     const scheme = login.form === 'downlevel' ? 'ntlm' : 'basic';
 
-    // Optionaler manueller Server (Experten/Fallback): überspringt Autodiscover.
     const manualEws = normalizeEwsUrl(serverUrl);
     if (serverUrl.trim().length > 0 && manualEws === undefined) {
       setError({
@@ -81,14 +82,14 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>NEXUS</Text>
-      <Text style={styles.subtitle}>Bei Exchange anmelden</Text>
+    <View style={s.container}>
+      <Text style={s.title}>NEXUS</Text>
+      <Text style={s.subtitle}>Bei Exchange anmelden</Text>
 
       <TextInput
-        style={styles.input}
+        style={s.input}
         placeholder="E-Mail-Adresse (für Autodiscover)"
-        placeholderTextColor={color.textSecondary}
+        placeholderTextColor={t.c.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
@@ -96,18 +97,18 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
         onChangeText={setEmail}
       />
       <TextInput
-        style={styles.input}
+        style={s.input}
         placeholder="Benutzername (optional, z. B. DOMÄNE\Benutzer)"
-        placeholderTextColor={color.textSecondary}
+        placeholderTextColor={t.c.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
         value={username}
         onChangeText={setUsername}
       />
       <TextInput
-        style={styles.input}
+        style={s.input}
         placeholder="Passwort"
-        placeholderTextColor={color.textSecondary}
+        placeholderTextColor={t.c.textSecondary}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -119,23 +120,23 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
         }}
         hitSlop={6}
       >
-        <Text style={styles.advancedToggle}>
+        <Text style={s.advancedToggle}>
           {showAdvanced ? '▾ Erweitert' : '▸ Erweitert (Server manuell)'}
         </Text>
       </Pressable>
       {showAdvanced ? (
         <>
           <TextInput
-            style={styles.input}
+            style={s.input}
             placeholder="EWS-/Server-Adresse (optional, z. B. mail.firma.de)"
-            placeholderTextColor={color.textSecondary}
+            placeholderTextColor={t.c.textSecondary}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
             value={serverUrl}
             onChangeText={setServerUrl}
           />
-          <Text style={styles.advancedHint}>
+          <Text style={s.advancedHint}>
             Nur ausfüllen, wenn Autodiscover im Firmennetz nicht funktioniert. Leer lassen für
             automatische Servererkennung.
           </Text>
@@ -143,36 +144,32 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
       ) : null}
 
       {error !== null ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorTitle}>{error.title}</Text>
-          <Text style={styles.errorDetail}>{error.detail}</Text>
-          {error.hint !== undefined ? <Text style={styles.errorHint}>{error.hint}</Text> : null}
+        <View style={s.errorBox}>
+          <Text style={s.errorTitle}>{error.title}</Text>
+          <Text style={s.errorDetail}>{error.detail}</Text>
+          {error.hint !== undefined ? <Text style={s.errorHint}>{error.hint}</Text> : null}
           <Pressable
             onPress={() => {
               setShowTechnical((v) => !v);
             }}
           >
-            <Text style={styles.errorToggle}>
+            <Text style={s.errorToggle}>
               {showTechnical ? 'Details ausblenden' : 'Technische Details'}
             </Text>
           </Pressable>
-          {showTechnical ? <Text style={styles.errorTechnical}>{error.technical}</Text> : null}
+          {showTechnical ? <Text style={s.errorTechnical}>{error.technical}</Text> : null}
         </View>
       ) : null}
 
       <Pressable
-        style={[styles.button, busy ? styles.buttonDisabled : null]}
+        style={[s.button, busy ? s.buttonDisabled : null]}
         disabled={busy}
         onPress={() => void submit()}
       >
-        {busy ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.buttonText}>Anmelden</Text>
-        )}
+        {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.buttonText}>Anmelden</Text>}
       </Pressable>
 
-      <Text style={styles.hint}>
+      <Text style={s.hint}>
         Autodiscover ermittelt deinen Server automatisch. Falls die Anmeldung scheitert,
         Benutzername als DOMÄNE\Benutzer oder benutzer@domäne eingeben.
       </Text>
@@ -180,67 +177,43 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
   );
 }
 
-const styles = StyleSheet.create({
-  advancedHint: {
-    color: color.textSecondary,
-    fontSize: typography.caption.size,
-    marginBottom: space.sm,
-  },
-  advancedToggle: {
-    color: color.brandPrimary,
-    fontSize: typography.caption.size,
-    marginBottom: space.sm,
-  },
-  button: {
-    alignItems: 'center',
-    backgroundColor: color.brandPrimary,
-    borderRadius: radius.md,
-    marginTop: space.sm,
-    paddingVertical: space.md,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontSize: typography.body.size, fontWeight: '600' },
-  container: {
-    backgroundColor: color.bgCanvas,
-    flex: 1,
-    justifyContent: 'center',
-    padding: space.lg,
-  },
-  errorBox: {
-    backgroundColor: '#FEF2F2',
-    borderColor: color.danger,
-    borderLeftWidth: 3,
-    borderRadius: radius.sm,
-    marginBottom: space.sm,
-    padding: space.md,
-  },
-  errorDetail: { color: color.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
-  errorHint: { color: color.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
-  errorTechnical: {
-    color: color.textSecondary,
-    fontSize: typography.caption.size,
-    marginTop: space.xs,
-  },
-  errorTitle: { color: color.danger, fontSize: typography.body.size, fontWeight: '700' },
-  errorToggle: {
-    color: color.brandPrimary,
-    fontSize: typography.caption.size,
-    marginTop: space.xs,
-  },
-  hint: {
-    color: color.textSecondary,
-    fontSize: typography.caption.size,
-    marginTop: space.md,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: color.bgElevated,
-    borderRadius: radius.md,
-    color: color.textPrimary,
-    fontSize: typography.body.size,
-    marginBottom: space.sm,
-    padding: space.md,
-  },
-  subtitle: { color: color.textSecondary, fontSize: typography.body.size, marginBottom: space.lg },
-  title: { color: color.brandPrimary, fontSize: 34, fontWeight: '700' },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    advancedHint: { color: t.c.textSecondary, fontSize: typography.caption.size, marginBottom: space.sm },
+    advancedToggle: { color: t.c.brandPrimary, fontSize: typography.caption.size, marginBottom: space.sm },
+    button: {
+      alignItems: 'center',
+      backgroundColor: t.c.brandPrimary,
+      borderRadius: radius.md,
+      marginTop: space.sm,
+      paddingVertical: space.md,
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: t.onBrand, fontSize: typography.body.size, fontWeight: '600' },
+    container: { backgroundColor: t.c.bgCanvas, flex: 1, justifyContent: 'center', padding: space.lg },
+    errorBox: {
+      backgroundColor: t.c.danger + '14',
+      borderColor: t.c.danger,
+      borderLeftWidth: 3,
+      borderRadius: radius.sm,
+      marginBottom: space.sm,
+      padding: space.md,
+    },
+    errorDetail: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
+    errorHint: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
+    errorTechnical: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
+    errorTitle: { color: t.c.danger, fontSize: typography.body.size, fontWeight: '700' },
+    errorToggle: { color: t.c.brandPrimary, fontSize: typography.caption.size, marginTop: space.xs },
+    hint: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.md, textAlign: 'center' },
+    input: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.md,
+      color: t.c.textPrimary,
+      fontSize: typography.body.size,
+      marginBottom: space.sm,
+      padding: space.md,
+    },
+    subtitle: { color: t.c.textSecondary, fontSize: typography.body.size, marginBottom: space.lg },
+    title: { color: t.c.brandPrimary, fontSize: 34, fontWeight: '700' },
+  });
+}

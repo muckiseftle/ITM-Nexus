@@ -33,6 +33,7 @@ export async function createDemoContainer(): Promise<AppContainer> {
     rules: c.rules,
     calendar: c.calendar,
     contacts: c.contacts,
+    folders: c.folders,
     backgroundSync: new BackgroundSyncService(
       c.sync,
       c.folders,
