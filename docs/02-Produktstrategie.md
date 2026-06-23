@@ -1,18 +1,24 @@
 # Phase 2 — Produktstrategie
 
-> Aufbauend auf den Marktlücken aus [Phase 1](./01-Marktanalyse.md): Wer ist die
+> Aufbauend auf den Anforderungen aus [Phase 1](./01-Marktanalyse.md): Wer ist die
 > Zielgruppe, welche Personas, welche USPs, und wohin entwickelt sich NEXUS langfristig?
 
 ---
 
 ## 1. Strategische Positionierung (Nordstern)
 
-> **NEXUS ist der unabhängige, datensouveräne Exchange-Client für Organisationen, die die
-> Funktionstiefe von Outlook brauchen, aber die Cloud-Abhängigkeit und Telemetrie von
-> Microsoft ablehnen — auf allen vier Plattformen, mit Apple-Niveau-UX.**
+> **NEXUS ist der unabhängige, datensouveräne Exchange-On-Premises-Client für
+> Organisationen, die volle Funktionstiefe für geschäftskritische Kommunikation
+> benötigen, ohne Cloud-Zwang und ohne Telemetrie — auf allen vier Plattformen, mit
+> erstklassiger, durchgängiger UX.**
 
-**One-Liner (Vertrieb):** „Outlook-Funktionalität. Ohne Microsoft-Cloud. Ohne Tracking.
-Auf jedem Gerät."
+**One-Liner (Vertrieb):** „Volle Exchange-Funktionalität. Ohne Cloud-Zwang. Ohne
+Tracking. Auf jedem Gerät."
+
+NEXUS definiert sich über die eigene Vision: **Privacy First, Security First,
+Performance First.** Daten verbleiben in der eigenen Infrastruktur, der Client
+kommuniziert direkt mit dem On-Premises-Server, und die Anwendung erhebt keine
+Telemetrie.
 
 ---
 
@@ -20,14 +26,14 @@ Auf jedem Gerät."
 
 | Segment | Beschreibung | Warum NEXUS |
 |---------|--------------|-------------|
-| **Regulierte Branchen** | Behörden, Gesundheitswesen, Recht, Finanzen, Verteidigung | Datensouveränität, On-Prem-Pflicht, kein Cloud-Proxy, Compliance |
-| **Datenschutzbewusster Mittelstand (DACH)** | Unternehmen mit eigener Exchange-Infrastruktur | DSGVO, „kein US-Cloud", volle Kontrolle |
+| **Regulierte Branchen** | Behörden, Gesundheitswesen, Recht, Finanzen, Verteidigung | Datensouveränität, On-Premises-Pflicht, keine Cloud-Vermittlung, Compliance |
+| **Datenschutzbewusster Mittelstand (DACH)** | Unternehmen mit eigener Exchange-Infrastruktur | DSGVO, Datenhaltung im eigenen Haus, volle Kontrolle |
 | **IT-Abteilungen / MSPs** | Verwalten Mail für viele Nutzer | MDM, Policies, Remote-Wipe, einheitliche Verwaltung |
 | **Power-User / Knowledge-Worker** | Hohe Mailvolumina, Delegation, Shared Mailboxes | Geschwindigkeit, Offline, Suche, Enterprise-Features |
 | **Sicherheitskritische Einzelnutzer** | Anwälte, Journalisten, Vorstände | S/MIME, lokale Verschlüsselung, kein Tracking |
 
 **Primärsegment für Markteintritt:** Datenschutzbewusster DACH-Mittelstand & regulierte
-Branchen mit bestehender Exchange-On-Prem-Infrastruktur (passt zu ITM Technologies'
+Branchen mit bestehender Exchange-On-Premises-Infrastruktur (passt zu ITM Technologies'
 Heimatmarkt und Vertrieb).
 
 ---
@@ -35,9 +41,9 @@ Heimatmarkt und Vertrieb).
 ## 3. Personas
 
 ### Persona A — „Dr. Petra Hofmann", IT-Sicherheitsverantwortliche (Buyer/Admin)
-- **Kontext:** CISO/IT-Leitung in einem 800-Personen-Klinikverbund, Exchange 2019 On-Prem.
+- **Kontext:** CISO/IT-Leitung in einem 800-Personen-Klinikverbund, Exchange 2019 On-Premises.
 - **Ziele:** Compliance (DSGVO, Patientendaten), Remote-Wipe, keine Daten in fremden Clouds.
-- **Frust mit Status quo:** Outlook-Mobile-Cloud-Vermittlung, intransparente Telemetrie,
+- **Frust mit Status quo:** Cloud-Vermittlung mobiler Clients, intransparente Telemetrie,
   Audit-Aufwand.
 - **NEXUS-Wert:** MDM/AppConfig, Policies, Certificate Pinning, lokale Verschlüsselung,
   nachweisbare Datensparsamkeit.
@@ -46,14 +52,14 @@ Heimatmarkt und Vertrieb).
 - **Kontext:** 200+ Mails/Tag, mehrere Shared Mailboxes, Delegation für 2 Assistenzen,
   viel unterwegs (schlechtes Netz).
 - **Ziele:** schnell durch die Inbox, offline im Zug arbeiten, sofort finden.
-- **Frust:** Outlook langsam bei großen Postfächern, Offline unzuverlässig, Suche träge.
+- **Frust:** mobile Clients langsam bei großen Postfächern, Offline unzuverlässig, Suche träge.
 - **NEXUS-Wert:** Offline-First, sofortige lokale Suche, schnelle UI, Delegation/Shared
   Mailboxes nativ.
 
 ### Persona C — „Sandra Keil", Assistenz der Geschäftsführung (Delegate)
 - **Kontext:** verwaltet Kalender und Postfach von zwei Vorständen.
 - **Ziele:** stellvertretend Termine/Mails verwalten, klare Trennung der Identitäten.
-- **Frust:** Delegation auf Mobile schlecht gelöst, Senden „im Auftrag" umständlich.
+- **Frust:** Delegation auf Mobile häufig schwach umgesetzt, Senden „im Auftrag" umständlich.
 - **NEXUS-Wert:** erstklassige Delegations-UX, klare Mailbox-Umschaltung, „Senden im Auftrag".
 
 ### Persona D — „Jonas Weber", IT-Administrator / MSP (Operator)
@@ -84,25 +90,25 @@ Heimatmarkt und Vertrieb).
 
 ## 5. Unique Selling Points (USPs)
 
-| # | USP | Beleg/Mechanik | Abgrenzung |
-|---|-----|----------------|------------|
-| 1 | **Keine Cloud-Vermittlung** | Gerät spricht direkt mit Exchange (EWS/EAS) | vs. Outlook-Cloud-Proxy |
-| 2 | **Null Telemetrie/Tracking** | Privacy-by-Design, auditierbar | vs. Outlook, Spark, Edison |
-| 3 | **Enterprise-Tiefe** | Delegation, Shared Mailboxes, Public Folders via EWS | vs. Nine, Apple Mail |
-| 4 | **Offline „wie nativ"** | Offline-First-DB + Outbox | vs. den meisten Webmail-artigen Clients |
-| 5 | **Sofortsuche** | lokaler FTS5-Index | „schneller als Outlook" |
-| 6 | **Vier Plattformen, eine Erfahrung** | iOS·iPadOS·macOS·Android | vs. Apple Mail, Nine |
+| # | USP | Beleg/Mechanik | Anspruch |
+|---|-----|----------------|----------|
+| 1 | **Keine Cloud-Vermittlung** | Gerät spricht direkt mit Exchange (EWS/EAS) | Daten verlassen die eigene Infrastruktur nicht |
+| 2 | **Null Telemetrie/Tracking** | Privacy-by-Design, auditierbar | keine Datenerhebung, nachweisbar |
+| 3 | **Enterprise-Tiefe** | Delegation, Shared Mailboxes, Public Folders via EWS | vollständige Funktionstiefe für Organisationen |
+| 4 | **Offline „wie nativ"** | Offline-First-DB + Outbox | voller Funktionsumfang ohne Netz |
+| 5 | **Sofortsuche** | lokaler FTS5-Index | Ergebnisse in <200 ms, vollständig lokal |
+| 6 | **Vier Plattformen, eine Erfahrung** | iOS·iPadOS·macOS·Android | durchgängige UX über alle Geräte |
 | 7 | **Security-Härtung** | SQLCipher, Pinning, S/MIME, MDM, Remote-Wipe | Enterprise-grade |
-| 8 | **Datensouveränität** | alles On-Prem, DSGVO-konform | DACH-/Regulatorik-Hebel |
+| 8 | **Datensouveränität** | alles On-Premises, DSGVO-konform | DACH-/Regulatorik-Hebel |
 
 ---
 
-## 6. Wettbewerbsvorteile (Moat)
+## 6. Differenzierung & technischer Anspruch (Moat)
 
-- **Native-Core-Engineering-Tiefe** (EWS/EAS-Hybrid, Krypto) ist schwer zu kopieren und
-  bildet eine technische Eintrittsbarriere.
+- **Native-Core-Engineering-Tiefe** (EWS/EAS-Hybrid, Krypto) ist anspruchsvoll umzusetzen
+  und bildet eine technische Eintrittsbarriere.
 - **Vertrauens-/Compliance-Marke** im DACH-/Regulatorik-Segment (ITM Technologies).
-- **Plattformbreite + UX-Qualität** gleichzeitig — die meisten Wettbewerber haben nur eines.
+- **Plattformbreite und UX-Qualität gleichzeitig** — beides auf hohem Niveau in einem Produkt.
 - **Klare, glaubwürdige Privacy-Story** ohne Geschäftsmodell-Interessenkonflikt
   (Lizenz-/Abo-Modell statt Datenverwertung).
 
@@ -110,17 +116,17 @@ Heimatmarkt und Vertrieb).
 
 ## 7. Geschäftsmodell (Skizze, zur Validierung)
 
-- **Per-Seat-Lizenz / Abo** (B2B), gestaffelt: *Standard* vs. *Enterprise Edition*
+- **Per-Seat-Lizenz / Abo** (B2B), gestaffelt: *Standard* und *Enterprise Edition*
   (MDM, erweiterte Policies, Public Folders, Compliance-Features).
 - **Keine** Datenmonetarisierung — explizit Teil des Markenversprechens.
-- Optionale **On-Prem-/Self-Hosted-Management-Komponente** für Großkunden (später).
+- Optionale **On-Premises-/Self-Hosted-Management-Komponente** für Großkunden (später).
 
 ---
 
 ## 8. Langfristige Produktvision
 
-1. **Jahr 1:** Bester datensouveräner Exchange-On-Prem-Client (Mail-Fokus, MVP→V1).
-2. **Jahr 2:** Vollständiger Outlook-Ersatz (Kalender, Kontakte, Aufgaben, Delegation,
+1. **Jahr 1:** Erstklassiger datensouveräner Exchange-On-Premises-Client (Mail-Fokus, MVP→V1).
+2. **Jahr 2:** Vollständige Funktionstiefe (Kalender, Kontakte, Aufgaben, Delegation,
    Public Folders, S/MIME) auf allen vier Plattformen; Enterprise Edition.
 3. **Jahr 3+:** Plattform-Erweiterung — optionaler Graph-Connector (M365-Hybrid), lokale
    (on-device) Intelligenz für Triage/Suche **ohne** Cloud, Workflow-/Team-Features.

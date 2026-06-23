@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Der Task läuft **ohne JS-Kontext** (Cold Start möglich) und synchronisiert den Posteingang
 /// rein nativ: `NexusTransport.syncInboxNative()` stellt die Session aus dem Keychain wieder her
-/// und schreibt neue Nachrichten in die SQLCipher-DB. Apple verlangt, dass `register()` **vor**
+/// und schreibt neue Nachrichten in die SQLCipher-DB. iOS verlangt, dass `register()` **vor**
 /// dem Ende von `application(_:didFinishLaunchingWithOptions:)` aufgerufen wird — das übernimmt
 /// das AppDelegate-Wiring (siehe .github/scripts/build-mobile.sh). Voraussetzung: Info.plist mit
 /// `UIBackgroundModes` (fetch/processing) und `BGTaskSchedulerPermittedIdentifiers`.

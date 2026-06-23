@@ -43,7 +43,7 @@ const hm = (ms: number): string =>
 const longDay = (ms: number): string =>
   new Date(ms).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
-/** Kalender im Apple-Stil: vier Ansichten, farbige Termine (Farbe je Organisator). */
+/** Kalender mit vier Ansichten und farbigen Terminen (Farbe je Organisator). */
 export function CalendarScreen({ container, account }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);

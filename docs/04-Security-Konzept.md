@@ -1,6 +1,6 @@
 # Phase 4 — Security-Konzept
 
-> Vollständiges Sicherheitskonzept für NEXUS. Anspruch: **sicherer als Outlook**.
+> Vollständiges Sicherheitskonzept für NEXUS. Anspruch: **kompromisslose Sicherheit**.
 > Grundsatz: **Security First, Privacy First** — Datensparsamkeit ist eine
 > Sicherheitsmaßnahme, kein Marketing.
 

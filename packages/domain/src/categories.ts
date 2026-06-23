@@ -1,6 +1,6 @@
 import type { MailMessage } from './models';
 
-/** Farbpalette für Kategorien (analog zu den Outlook-Farbkategorien). */
+/** Farbpalette für Kategorien. */
 export type CategoryColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'gray';
 
 /** Definition einer Kategorie im Katalog (Name + Farbe). */

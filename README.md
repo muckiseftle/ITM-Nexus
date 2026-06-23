@@ -3,11 +3,11 @@
 **Der unabhängige, datensouveräne Exchange-Client.**
 Von **ITM Technologies**.
 
-> Outlook-Funktionalität. Ohne Microsoft-Cloud. Ohne Tracking. Auf jedem Gerät.
+> Voller Exchange-Funktionsumfang. Ohne Cloud-Zwang. Ohne Tracking. Auf jedem Gerät.
 
-NEXUS ist die modernste, schnellste, sicherste und unabhängigste Kommunikationsplattform
-für **Microsoft Exchange On-Premises** und Enterprise-Kunden.
-**NEXUS kopiert Outlook nicht — NEXUS ersetzt Outlook.**
+NEXUS ist eine moderne, schnelle, sichere und unabhängige Kommunikationsplattform
+für **Microsoft Exchange On-Premises** und Enterprise-Kunden — ein eigenständiges Produkt,
+das direkt mit dem Server spricht, ohne Cloud-Vermittlung und ohne Telemetrie.
 
 ---
 
@@ -15,8 +15,8 @@ für **Microsoft Exchange On-Premises** und Enterprise-Kunden.
 
 > **Privacy First · Security First · Performance First**
 
-NEXUS muss schneller, einfacher, moderner und sicherer als Outlook sein — ohne
-Cloud-Abhängigkeit, ohne Tracking, ohne Analytics, ohne Werbung, ohne unnötige Telemetrie.
+NEXUS ist schnell, einfach, modern und sicher — ohne Cloud-Abhängigkeit, ohne Tracking,
+ohne Analytics, ohne Werbung, ohne unnötige Telemetrie.
 
 ## Eckdaten
 
@@ -34,13 +34,13 @@ Cloud-Abhängigkeit, ohne Tracking, ohne Analytics, ohne Werbung, ohne unnötige
 Das vollständige Strategie- und Architektur-Fundament liegt in **[`/docs`](./docs/README.md)**:
 
 1. [Architektur-Entscheidungen (ADR)](./docs/00-Architektur-Entscheidungen-ADR.md)
-2. [Marktanalyse](./docs/01-Marktanalyse.md)
+2. [Zielbild & Anforderungen](./docs/01-Marktanalyse.md)
 3. [Produktstrategie](./docs/02-Produktstrategie.md)
 4. [Architektur](./docs/03-Architektur.md)
 5. [Security-Konzept](./docs/04-Security-Konzept.md)
 6. [UX & Design](./docs/05-UX-und-Design.md)
 7. [Feature-Roadmap](./docs/06-Feature-Roadmap.md)
-8. [Outlook-Ersatz-Feature-Mapping](./docs/07-Outlook-Ersatz-Feature-Mapping.md)
+8. [Feature-Katalog](./docs/07-Feature-Katalog.md)
 9. [Entwicklungsplan](./docs/08-Entwicklungsplan.md)
 10. [Risikoanalyse](./docs/09-Risikoanalyse.md)
 11. [Implementierung](./docs/10-Implementierung.md)

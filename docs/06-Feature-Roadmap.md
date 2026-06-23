@@ -3,7 +3,7 @@
 > Entwicklung in klaren Stufen: **MVP → Version 1 → Version 2 → Enterprise Edition**.
 > Priorisierung nach **MoSCoW** (Must / Should / Could / Won't-yet). Grundlage:
 > [Marktanalyse](./01-Marktanalyse.md), [Strategie](./02-Produktstrategie.md),
-> [Feature-Mapping](./07-Outlook-Ersatz-Feature-Mapping.md).
+> [Feature-Mapping](./07-Feature-Katalog.md).
 
 ---
 
@@ -19,7 +19,7 @@ flowchart LR
 | Stufe | Ziel | Primärer Nutzenbeleg |
 |-------|------|----------------------|
 | **MVP** | Beweisen: schneller, datensouveräner Exchange-Mail-Client | „Es funktioniert offline & ohne Cloud" |
-| **V1** | Outlook-Parität in Mail + Kalender/Kontakte/Suche/S-MIME | „Täglich nutzbarer Outlook-Ersatz (Single-User)" |
+| **V1** | Voller Funktionsumfang in Mail + Kalender/Kontakte/Suche/S-MIME | „Täglich nutzbar (Single-User)" |
 | **V2** | Enterprise-Funktionstiefe | „Power-User & Delegation/Shared" |
 | **Enterprise** | Verwaltbarkeit & Compliance | „IT kann es flottenweit betreiben" |
 
@@ -50,13 +50,13 @@ flowchart LR
 Push/Akku-Tuning. → Mitigation siehe [Risikoanalyse](./09-Risikoanalyse.md).
 
 **Definition of Done (MVP):** Ein Power-User kann seinen Exchange-On-Prem-Account anbinden
-und einen Arbeitstag lang Mail produktiv (inkl. offline) nutzen — spürbar schneller als Outlook.
+und einen Arbeitstag lang Mail produktiv (inkl. offline) nutzen — spürbar schnell.
 
 ---
 
-## 3. Version 1 — Täglicher Outlook-Ersatz (Single-User)
+## 3. Version 1 — Täglich alltagstauglich (Single-User)
 
-**Ziel:** Vollständig alltagstauglich; deckt die Kern-Outlook-Funktionen für Einzelnutzer ab.
+**Ziel:** Vollständig alltagstauglich; deckt die Kernfunktionen für Einzelnutzer ab.
 
 | Prio | Feature |
 |------|---------|
@@ -71,14 +71,14 @@ und einen Arbeitstag lang Mail produktiv (inkl. offline) nutzen — spürbar sch
 | Should | Out-of-Office (Automatische Antworten) |
 | Could | Konversations-Gruppierung „smart", Wischaktionen konfigurierbar |
 
-**DoD (V1):** Ein Einzelnutzer kann Outlook auf seinen Geräten **vollständig ersetzen**
-(Mail + Kalender + Kontakte + S/MIME), plattformübergreifend.
+**DoD (V1):** Ein Einzelnutzer kann NEXUS auf seinen Geräten als **alleinigen Mail-Client**
+nutzen (Mail + Kalender + Kontakte + S/MIME), plattformübergreifend.
 
 ---
 
 ## 4. Version 2 — Enterprise-Funktionstiefe
 
-**Ziel:** Power-User- und Team-Szenarien — der Differenzierer gegenüber Nine/Apple Mail.
+**Ziel:** anspruchsvolle Power-User- und Team-Szenarien.
 
 | Prio | Feature |
 |------|---------|
@@ -93,7 +93,7 @@ und einen Arbeitstag lang Mail produktiv (inkl. offline) nutzen — spürbar sch
 | Could | Mehr-Kalender-Overlay, geteilte Kalender |
 
 **DoD (V2):** Delegation und Shared Mailboxes funktionieren erstklassig; NEXUS deckt die
-Power-User-Workflows ab, an denen mobile Wettbewerber scheitern.
+Power-User-Workflows ab, die mobil oft nur unzureichend abgedeckt sind.
 
 ---
 

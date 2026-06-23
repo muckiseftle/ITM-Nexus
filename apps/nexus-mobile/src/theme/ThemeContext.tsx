@@ -17,7 +17,7 @@ export interface AppTheme {
   readonly rowActive: string;
   /** Textfarbe auf Markenfläche (immer weiß). */
   readonly onBrand: string;
-  /** Farbpalette für farbige Kalender-Einträge (Apple-Stil). */
+  /** Farbpalette für farbige Kalender-Einträge. */
   readonly calPalette: readonly string[];
 }
 

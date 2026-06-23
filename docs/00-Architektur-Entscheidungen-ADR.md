@@ -21,8 +21,8 @@
 **Status:** ✅ Akzeptiert (Auftraggeber-Entscheidung: React Native CLI; 4 Plattformen)
 
 ### Kontext
-NEXUS muss auf **iOS, iPadOS, macOS und Android** laufen und gleichzeitig „schneller und
-sicherer als Outlook" sein. Native Entwicklung pro Plattform liefert maximale
+NEXUS muss auf **iOS, iPadOS, macOS und Android** laufen und gleichzeitig „schnell und
+kompromisslos sicher" sein. Native Entwicklung pro Plattform liefert maximale
 Performance/Sicherheit, aber 2–4× Entwicklungsaufwand. React Native liefert eine
 gemeinsame Codebasis, ist aber für Krypto, Background-Sync, MDM und Protokoll-Parsing
 schwächer und bringt JS-Bridge-Overhead mit.
@@ -98,7 +98,7 @@ das Protokoll und kapselt das vor den oberen Schichten.
 - Risiko EWS-Deprecation: betrifft v. a. M365-Cloud; On-Prem-Roadmap von Microsoft beobachten.
 
 ### Alternativen
-- *Nur EAS:* zu eingeschränkt für „Outlook-Ersatz" (keine Public Folders/Delegation-Tiefe).
+- *Nur EAS:* zu eingeschränkt für den vollen Funktionsumfang (keine öffentlichen Ordner/Delegation-Tiefe).
 - *Nur EWS:* funktional ausreichend, aber Push/Battery schlechter als EAS Direct Push.
 - *Graph-only:* für reines On-Prem nicht tragfähig.
 
@@ -109,7 +109,7 @@ das Protokoll und kapselt das vor den oberen Schichten.
 **Status:** ✅ Akzeptiert
 
 ### Kontext
-NEXUS muss vollständig **offline-fähig** sein und sich „schneller als Outlook" anfühlen.
+NEXUS muss vollständig **offline-fähig** sein und sich durchweg „schnell" anfühlen.
 Das erfordert eine lokale, relationale, performante und verschlüsselte Datenbasis sowie
 ein robustes Synchronisations- und Konfliktmodell.
 
@@ -144,7 +144,7 @@ ein robustes Synchronisations- und Konfliktmodell.
 **Status:** ✅ Akzeptiert
 
 ### Kontext
-Suche ist ein zentrales Outlook-Feature und ein USP-Hebel („schneller als Outlook").
+Suche ist eine zentrale Funktion und ein USP-Hebel (spürbar schnelle Suche).
 Sie muss offline funktionieren und darf keine Daten an externe Dienste senden.
 
 ### Entscheidung

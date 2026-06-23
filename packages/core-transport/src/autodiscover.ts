@@ -4,7 +4,7 @@
  * Netzabruf/XML-Parse passiert im nativen Connector — er konsumiert diesen Plan, damit die
  * Reihenfolge an *einer* getesteten Stelle definiert ist (Single Source of Truth).
  *
- * Reihenfolge nach Microsofts Autodiscover-Ablauf (POX) für Outlook/Exchange:
+ * Reihenfolge nach dem Autodiscover-Ablauf (POX) für Exchange:
  *  1. POST https://<domain>/autodiscover/autodiscover.xml
  *  2. POST https://autodiscover.<domain>/autodiscover/autodiscover.xml
  *  3. GET  http://autodiscover.<domain>/autodiscover/autodiscover.xml  (erwartet 301/302 → https)

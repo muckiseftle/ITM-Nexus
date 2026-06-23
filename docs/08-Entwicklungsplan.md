@@ -2,7 +2,7 @@
 
 > Von der Roadmap zur Umsetzung: **Epics → Features → Tasks**, Milestones und
 > Sprint-Planung. Grundlage: [Roadmap](./06-Feature-Roadmap.md) und
-> [Feature-Mapping](./07-Outlook-Ersatz-Feature-Mapping.md). Hinweis: Code wird in
+> [Feature-Mapping](./07-Feature-Katalog.md). Hinweis: Code wird in
 > **Phase 10** geschrieben — dieses Dokument plant den Weg dorthin.
 
 ---
@@ -12,7 +12,7 @@
 ```mermaid
 flowchart LR
     M0["M0\nFundament & Setup"] --> M1["M1\nMVP Mail"]
-    M1 --> M2["M2\nV1 Outlook-Ersatz\n(Einzelnutzer)"]
+    M1 --> M2["M2\nV1 Alltagstauglich\n(Einzelnutzer)"]
     M2 --> M3["M3\nV2 Enterprise-Tiefe"]
     M3 --> M4["M4\nEnterprise Edition"]
 ```
@@ -21,7 +21,7 @@ flowchart LR
 |-----------|--------|----------------|
 | **M0** | Monorepo, Tooling, CI, Native-Bridge-Gerüst, Transport-Abstraktion | App startet, Native-Modul-Roundtrip funktioniert, CI grün |
 | **M1** | MVP-Mail (siehe Roadmap) | Power-User nutzt Mail offline + online produktiv |
-| **M2** | Kalender, Kontakte, S/MIME, Suche | Outlook-Ersatz für Einzelnutzer |
+| **M2** | Kalender, Kontakte, S/MIME, Suche | Alltagstauglich für Einzelnutzer |
 | **M3** | Delegation, Shared Mailboxes, Tasks, Public Folders | Power-User/Team-Workflows |
 | **M4** | MDM, Policies, Remote-Wipe, Compliance | flottenweiter, verwalteter Betrieb |
 

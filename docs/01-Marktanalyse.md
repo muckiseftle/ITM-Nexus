@@ -1,138 +1,111 @@
-# Phase 1 — Marktanalyse
+# Zielbild & Anforderungen
 
-> Ziel: Stärken, Schwächen, Chancen und Risiken der relevanten Wettbewerber verstehen
-> und daraus **Marktlücken** für NEXUS ableiten. Fokus-Linse: **Exchange On-Premises**,
-> **Enterprise**, **Privacy/Security/Performance**.
-
----
-
-## 1. Überblick & Bewertungsdimensionen
-
-Wir bewerten jeden Wettbewerber entlang der für NEXUS strategisch relevanten Dimensionen:
-
-- **Exchange-On-Prem:** Qualität der nativen On-Prem-Anbindung (EWS/EAS/Autodiscover).
-- **Offline:** Vollständigkeit und Verlässlichkeit der Offline-Nutzung.
-- **Security:** Verschlüsselung at-rest, Pinning, S/MIME, Härtung.
-- **Privacy:** kein Tracking/Analytics; keine Inhalte über Dritt-Clouds.
-- **Performance:** wahrgenommene Geschwindigkeit, Sync-Effizienz, Suche.
-- **Enterprise/MDM:** Verwaltbarkeit, Policies, Remote-Wipe, Konfigurierbarkeit.
+> Ziel: Das angestrebte Produktbild von NEXUS klar definieren und die zentralen
+> Anforderungen ableiten. Fokus-Linse: **Exchange On-Premises**, **Enterprise**,
+> **Privacy/Security/Performance**.
 
 ---
 
-## 2. Vergleichsmatrix
+## 1. Bewertungsdimensionen
 
-Legende: ✅ stark · 🟧 teilweise/eingeschränkt · ❌ schwach/fehlt
+NEXUS wird entlang der folgenden, strategisch relevanten Dimensionen entwickelt und
+gemessen. Sie bilden den verbindlichen Qualitätsanspruch des Produkts:
 
-| Produkt | Exchange On-Prem | Offline | Security | Privacy | Performance | Enterprise/MDM |
-|---------|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Outlook (M365 Mobile)** | 🟧¹ | 🟧 | ✅ | ❌² | 🟧 | ✅ |
-| **Apple Mail** | 🟧³ | 🟧 | 🟧 | ✅ | ✅ | 🟧 |
-| **Spark** | 🟧 | 🟧 | 🟧 | ❌⁴ | ✅ | 🟧 |
-| **Canary Mail** | 🟧 | 🟧 | ✅ | ✅ | ✅ | 🟧 |
-| **Edison Mail** | 🟧 | 🟧 | 🟧 | ❌⁵ | ✅ | ❌ |
-| **Airmail** | 🟧 | 🟧 | 🟧 | 🟧 | 🟧 | ❌ |
-| **Nine** | ✅ (EAS) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Aqua Mail** | 🟧 (EAS) | ✅ | 🟧 | 🟧 | ✅ | 🟧 |
-
-> ¹ Outlook-Mobile leitet On-Prem-Konten historisch über einen **Microsoft-Cloud-Proxy**
-> (Native-Connection später nachgerüstet) — datenschutzkritisch.
-> ² Telemetrie/Analytics tief integriert. ³ EAS-basiert, EWS-Feature-Tiefe fehlt.
-> ⁴ Cloud-Backend für „smart" Features. ⁵ Geschäftsmodell historisch datenbasiert.
+- **Exchange-On-Prem:** native, vollwertige On-Prem-Anbindung über EWS/EAS/Autodiscover —
+  ohne Vermittlung durch Dritt-Clouds.
+- **Offline:** vollständige und verlässliche Offline-Nutzung von Mail, Kalender und Kontakten.
+- **Security:** Verschlüsselung at-rest, Certificate-Pinning, S/MIME, durchgehende Härtung.
+- **Privacy:** kein Tracking/Analytics; keine Inhalte oder Metadaten über fremde Clouds.
+- **Performance:** hohe wahrgenommene Geschwindigkeit, effizienter Sync, sofortige Suche.
+- **Enterprise/MDM:** Verwaltbarkeit, Policies, Remote-Wipe, breite Konfigurierbarkeit.
 
 ---
 
-## 3. SWOT je Wettbewerber
+## 2. Anforderungsprofil von NEXUS
 
-### 3.1 Microsoft Outlook (Mobile)
-- **Stärken:** Marktführer, tiefe Exchange/M365-Integration, Kalender/Mail/Kontakte aus
-  einer Hand, Enterprise-Verbreitung, Intune-MDM.
-- **Schwächen:** On-Prem-Konten historisch über Cloud-Proxy; **Telemetrie/Tracking**;
-  träge auf großen Postfächern; UI überladen; Offline begrenzt; nicht „unabhängig".
-- **Chancen (für NEXUS):** Datenschutzbewusste On-Prem-Kunden, die Microsofts
-  Cloud-Vermittlung ablehnen, sind unterversorgt.
-- **Risiken (für NEXUS):** Microsofts Ökosystem-Lock-in, Bündelung, Vertriebsmacht.
+Die folgende Übersicht beschreibt das Zielniveau, das NEXUS in jeder Dimension erreicht.
+Legende: ✅ Kernanspruch · 🟧 differenziert je Plattform/Phase
 
-### 3.2 Apple Mail
-- **Stärken:** sehr schnell, systemintegriert, datensparsam, kostenlos, gute UX.
-- **Schwächen:** nur **EAS**, keine EWS-Tiefe (Public Folders, Delegation, Shared
-  Mailboxes schwach); kaum Enterprise-Verwaltung; nur Apple-Plattformen.
-- **Chancen:** Enterprise-Funktionslücke (Delegation, Shared Mailboxes) offen.
-- **Risiken:** „gut genug" für viele Basisnutzer; Apple kontrolliert die Plattform.
-
-### 3.3 Spark (Readdle)
-- **Stärken:** moderne UX, Smart Inbox, Team-Features, schnell.
-- **Schwächen:** **Cloud-Backend** verarbeitet Mail-Metadaten (Privacy-Risiko für
-  Enterprise/On-Prem); EWS-Tiefe begrenzt.
-- **Chancen:** Nutzer, die die UX lieben, aber die Cloud ablehnen.
-- **Risiken:** starke Produkt-/Designorganisation, schnelle Iteration.
-
-### 3.4 Canary Mail
-- **Stärken:** **Security/Privacy-Positionierung**, PGP/S/MIME, lokale KI-Ambitionen,
-  gute UX.
-- **Schwächen:** Exchange-On-Prem-Tiefe (EWS-Enterprise-Features) begrenzt; Enterprise-
-  Management/MDM schwach; kleineres Team.
-- **Chancen:** zeigt Zahlungsbereitschaft für Privacy — validiert NEXUS-Positionierung.
-- **Risiken:** direkter Positionierungs-Wettbewerber im Privacy-Segment.
-
-### 3.5 Edison Mail
-- **Stärken:** schnelle UX, gute Suche, Reise-/Paket-Tracking-Features.
-- **Schwächen:** Geschäftsmodell historisch **datenbasiert** (Mailbox-Insights-Verkauf);
-  kein Enterprise/On-Prem-Fokus.
-- **Chancen:** abschreckendes Negativbeispiel — stärkt NEXUS-Privacy-Narrativ.
-- **Risiken:** gering im Enterprise-Segment.
-
-### 3.6 Airmail
-- **Stärken:** sehr anpassbar, viele Integrationen, Apple-Plattformen.
-- **Schwächen:** Stabilitäts-/Qualitätsklagen, fragmentierte UX, schwacher Enterprise-/
-  On-Prem-Fokus.
-- **Chancen:** Nutzer, die Verlässlichkeit vermissen.
-- **Risiken:** gering.
-
-### 3.7 Nine (9Folders) — **der relevanteste Benchmark**
-- **Stärken:** **EAS-fokussiert**, exzellente Offline-Fähigkeit, **datensparsam (kein
-  Cloud-Backend)**, Direct Push, solide Security, gutes Enterprise-/Android-Standing.
-- **Schwächen:** UX/Design altbacken; **EWS-Funktionsbreite fehlt** (Public Folders,
-  reichhaltige Delegation); kein macOS; Marketing/Markenführung schwach.
-- **Chancen:** Beweist Tragfähigkeit des „kein-Cloud-Backend, On-Prem"-Modells —
-  **genau die Lücke, die NEXUS mit besserer UX + EWS-Tiefe + 4 Plattformen schließt.**
-- **Risiken:** etablierter Platzhirsch im Privacy/On-Prem-Nischensegment.
-
-### 3.8 Aqua Mail
-- **Stärken:** Android-stark, anpassbar, EAS-Support, große Provider-Kompatibilität.
-- **Schwächen:** UX uneinheitlich, Enterprise-Tiefe/EWS begrenzt, Apple-Plattformen schwach.
-- **Chancen:** Android-Nutzer mit Enterprise-Bedarf.
-- **Risiken:** gering im Enterprise/On-Prem-Segment.
+| Dimension | Zielniveau | Anspruch |
+|-----------|:---:|---|
+| **Exchange On-Prem** | ✅ | Direkte native Anbindung (EWS-Tiefe + EAS), Autodiscover, ohne Cloud-Proxy. |
+| **Offline** | ✅ | Lesen, Suchen, Verfassen und Verwalten vollständig offline; verlässliche Re-Sync-Logik. |
+| **Security** | ✅ | Verschlüsselung at-rest (SQLCipher), Certificate-Pinning, S/MIME, Plattform-Härtung. |
+| **Privacy** | ✅ | Kein Telemetrie-/Tracking-Backend; Inhalte und Metadaten verlassen das Gerät nur Richtung Exchange. |
+| **Performance** | ✅ | Schnelle UI, effizienter DirectPush-Sync, sofortige lokale Volltextsuche. |
+| **Enterprise/MDM** | ✅ | Policies, Remote-Wipe, konfigurierbare Richtlinien, einheitliche Verwaltung. |
 
 ---
 
-## 4. Identifizierte Marktlücken
+## 3. NEXUS-Stärken & Prinzipien
 
-Aus der Analyse ergeben sich vier klare, kombinierbare Lücken — NEXUS adressiert **alle vier**:
+NEXUS folgt einem klaren Satz von Prinzipien, die das Produkt in jeder Dimension prägen.
 
-1. **„Privacy-First **und** Enterprise-tief"**
-   Kein Produkt verbindet *konsequente* Datensparsamkeit (kein Cloud-Backend, keine
-   Telemetrie — wie Nine) mit *voller EWS-Enterprise-Funktionstiefe* (Delegation,
-   Shared Mailboxes, Public Folders — wie Outlook). NEXUS schließt genau diese Mitte.
+### 3.1 Datensparsamkeit als Fundament
+- NEXUS betreibt **kein Cloud-Backend** für Inhalte oder Metadaten. Daten fließen
+  ausschließlich zwischen Gerät und dem hauseigenen Exchange-Server.
+- Es gibt **keine Telemetrie und kein Tracking**. Privacy ist kein Modus, sondern Grundzustand.
 
-2. **„Moderne UX auf On-Prem"**
-   Die privatsphäre-/On-Prem-tauglichen Produkte (Nine, Aqua) wirken veraltet; die schön
-   gestalteten (Spark, Canary) machen Privacy-/Enterprise-Kompromisse. NEXUS bringt
-   Apple-Niveau-UX in das On-Prem-Enterprise-Segment.
+### 3.2 Tiefe Exchange-On-Prem-Integration
+- Native Anbindung über **EWS** und **EAS/ActiveSync** mit **Autodiscover**, ohne
+  Vermittlung durch einen Dritt-Proxy.
+- Volle Enterprise-Funktionstiefe als Ziel: **Delegation**, **Shared Mailboxes**,
+  **Public Folders** — Funktionen, die in datensparsamen Lösungen häufig fehlen.
 
-3. **„Wirklich plattformübergreifend für Enterprise"**
-   Outlook deckt zwar viel ab; eine *unabhängige*, datensparsame Lösung über
-   **iOS · iPadOS · macOS · Android** mit einheitlicher UX und Verwaltung fehlt.
+### 3.3 Verlässliche Offline-Nutzung
+- Mail, Kalender und Kontakte sind offline vollständig nutzbar.
+- Eine robuste Sync- und Konfliktlogik sorgt für saubere Synchronisation, sobald wieder
+  Verbindung besteht. **DirectPush** hält Postfächer aktuell.
 
-4. **„Offline so gut wie nativ, Suche schneller als Outlook"**
-   Verlässliche Offline-Nutzung + sofortige lokale Volltextsuche ist selten gut gelöst —
-   ein konkreter, demonstrierbarer Performance-USP.
+### 3.4 Security by Design
+- Verschlüsselung at-rest (**SQLCipher**), **Certificate-Pinning**, **S/MIME**.
+- Schlüssel werden in der plattformeigenen sicheren Ablage gehalten (**Keychain** auf
+  iOS/iPadOS/macOS, **Keystore** auf Android).
+- Unterstützung gängiger Authentifizierungsverfahren: **NTLM/Kerberos/Basic**.
+
+### 3.5 Moderne, schnelle UX
+- Hochwertige, konsistente Bedienoberfläche mit hoher wahrgenommener Geschwindigkeit.
+- **Sofortige lokale Volltextsuche** über große Postfächer als demonstrierbarer
+  Performance-Vorteil.
+
+### 3.6 Wirklich plattformübergreifend
+- Einheitliche Funktion und Verwaltung über **iOS · iPadOS · macOS · Android**.
+- Eine konsistente Erfahrung auf allen vier Plattformen, mit derselben Sicherheits- und
+  Privacy-Garantie.
+
+### 3.7 Enterprise-Verwaltbarkeit
+- Konfigurierbare **Policies**, **Remote-Wipe** und MDM-Anbindung.
+- Geeignet für den verwalteten Einsatz in Organisationen mit On-Prem-Infrastruktur.
 
 ---
 
-## 5. Schlussfolgerung für die Positionierung
+## 4. Adressierte Bedarfsfelder
 
-> **NEXUS = die Enterprise-Funktionstiefe von Outlook, die Datensparsamkeit von Nine, die
-> UX von Apple/Canary — über alle vier Plattformen, ohne Cloud-Abhängigkeit.**
+NEXUS adressiert vier zentrale Bedarfsfelder, die zusammen das Zielbild bilden:
+
+1. **Privacy-First und Enterprise-tief zugleich**
+   NEXUS verbindet *konsequente* Datensparsamkeit (kein Cloud-Backend, keine Telemetrie)
+   mit *voller EWS-Enterprise-Funktionstiefe* (Delegation, Shared Mailboxes, Public
+   Folders). Diese Kombination ist der Kern des Produkts.
+
+2. **Moderne UX auf On-Prem**
+   Eine hochwertige, zeitgemäße Bedienoberfläche im On-Prem-Enterprise-Segment — ohne
+   Kompromisse bei Privacy oder Enterprise-Funktionalität.
+
+3. **Wirklich plattformübergreifend für Enterprise**
+   Eine unabhängige, datensparsame Lösung über **iOS · iPadOS · macOS · Android** mit
+   einheitlicher UX und Verwaltung.
+
+4. **Offline so gut wie nativ, mit schneller Suche**
+   Verlässliche Offline-Nutzung kombiniert mit sofortiger lokaler Volltextsuche — ein
+   konkreter, demonstrierbarer Performance-Vorteil.
+
+---
+
+## 5. Positionierung
+
+> **NEXUS = volle Enterprise-Funktionstiefe, konsequente Datensparsamkeit und hochwertige
+> UX — über alle vier Plattformen, ohne Cloud-Abhängigkeit.**
 
 Diese Positionierung fließt direkt in die [Produktstrategie](./02-Produktstrategie.md) und
-das [Feature-Mapping](./07-Outlook-Ersatz-Feature-Mapping.md) ein.
+das [Feature-Mapping](./07-Feature-Katalog.md) ein.
