@@ -1,101 +1,409 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type AccountId, type CalendarEvent } from '@nexus/domain';
-import { color, space, typography } from '@nexus/ui-kit';
+import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { GLYPH, IconButton } from '../components/Icon';
+import { paletteColor, useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
   readonly container: AppContainer;
   readonly account: AccountId;
 }
 
+type CalView = 'list' | 'day' | 'week' | 'month';
+
 const DAY = 86_400_000;
+const VIEWS: readonly { readonly key: CalView; readonly label: string }[] = [
+  { key: 'list', label: 'Liste' },
+  { key: 'day', label: 'Tag' },
+  { key: 'week', label: 'Woche' },
+  { key: 'month', label: 'Monat' },
+];
 
-function formatDay(ms: number): string {
-  return new Date(ms).toLocaleDateString('de-DE', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-  });
+const dStart = (ms: number): number => {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+const mondayOf = (ms: number): number => {
+  const d0 = dStart(ms);
+  const wd = (new Date(d0).getDay() + 6) % 7;
+  return d0 - wd * DAY;
+};
+function isoWeek(ms: number): number {
+  const d = new Date(dStart(ms));
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round((d.getTime() - week1.getTime()) / DAY / 7);
 }
+const hm = (ms: number): string =>
+  new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const longDay = (ms: number): string =>
+  new Date(ms).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
-function formatTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-}
-
-/** Agenda der nächsten 30 Tage aus dem getesteten {@link CalendarService}. */
+/** Kalender im Apple-Stil: vier Ansichten, farbige Termine (Farbe je Organisator). */
 export function CalendarScreen({ container, account }: Props): React.JSX.Element {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
+  const today = useMemo(() => dStart(Date.now()), []);
+
+  const [view, setView] = useState<CalView>('list');
+  const [selected, setSelected] = useState<number>(today);
   const [events, setEvents] = useState<readonly CalendarEvent[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
-    const now = Date.now();
-    const list = await container.calendar.agenda(account, now - DAY, now + 30 * DAY);
+    const from = dStart(selected) - 31 * DAY;
+    const to = dStart(selected) + 62 * DAY;
+    const list = await container.calendar.agenda(account, from, to);
     setEvents(list);
-  }, [container, account]);
-
-  const sync = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await container.calendar.sync(account);
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [container, account, load]);
+  }, [container, account, selected]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  return (
-    <FlatList
-      data={events}
-      keyExtractor={(e) => e.id}
-      contentContainerStyle={events.length === 0 ? styles.emptyWrap : undefined}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void sync()} />}
-      ListEmptyComponent={<Text style={styles.empty}>Keine Termine im Zeitraum.</Text>}
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <View style={styles.when}>
-            <Text style={styles.day}>{formatDay(item.startAt)}</Text>
-            <Text style={styles.time}>
-              {item.isAllDay ? 'Ganztägig' : formatTime(item.startAt)}
-            </Text>
+  const evColor = useCallback(
+    (e: CalendarEvent): string => paletteColor(t.calPalette, e.organizer.address),
+    [t.calPalette],
+  );
+
+  const filtered = useMemo(() => {
+    const n = query.trim().toLowerCase();
+    if (n.length === 0) return events;
+    return events.filter(
+      (e) => e.subject.toLowerCase().includes(n) || (e.location ?? '').toLowerCase().includes(n),
+    );
+  }, [events, query]);
+
+  const evOn = useCallback(
+    (d0: number) => filtered.filter((e) => dStart(e.startAt) === d0).sort((a, b) => a.startAt - b.startAt),
+    [filtered],
+  );
+
+  const eventChip = (e: CalendarEvent): React.JSX.Element => {
+    const cc = evColor(e);
+    const when = e.isAllDay ? 'Ganztägig' : `${hm(e.startAt)}–${hm(e.endAt)}`;
+    return (
+      <View key={e.id} style={[s.evc, { backgroundColor: cc + '22' }]}>
+        <View style={[s.edot, { backgroundColor: cc }]} />
+        <View style={s.evBody}>
+          <Text numberOfLines={1} style={s.evTitle}>
+            {e.subject}
+          </Text>
+          <Text numberOfLines={1} style={s.evMeta}>
+            {when}
+            {e.location !== undefined ? ` · ${e.location}` : ''}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  const dayHeader = (d0: number): React.JSX.Element => (
+    <Text style={[s.dayH, d0 === today ? s.dayHToday : null]}>
+      {d0 === today ? 'Heute · ' : ''}
+      {longDay(d0)}
+    </Text>
+  );
+
+  const selectedList = (): React.JSX.Element => {
+    const evs = evOn(selected);
+    return (
+      <>
+        {dayHeader(selected)}
+        {evs.length > 0 ? (
+          evs.map(eventChip)
+        ) : (
+          <Text style={s.empty}>Keine Termine an diesem Tag.</Text>
+        )}
+      </>
+    );
+  };
+
+  const renderList = (): React.JSX.Element => {
+    const days = [...new Set(filtered.map((e) => dStart(e.startAt)))].sort((a, b) => a - b);
+    if (days.length === 0) return <Text style={s.empty}>Keine Termine gefunden.</Text>;
+    return (
+      <>
+        {days.map((d0) => (
+          <View key={d0}>
+            {dayHeader(d0)}
+            {evOn(d0).map(eventChip)}
           </View>
-          <View style={styles.body}>
-            <Text numberOfLines={1} style={styles.subject}>
-              {item.subject}
-            </Text>
-            {item.location !== undefined ? (
-              <Text numberOfLines={1} style={styles.location}>
-                {item.location}
-              </Text>
-            ) : null}
-            <Text numberOfLines={1} style={styles.organizer}>
-              {item.organizer.displayName ?? item.organizer.address}
-            </Text>
+        ))}
+      </>
+    );
+  };
+
+  const renderDay = (): React.JSX.Element => {
+    const startH = 7;
+    const endH = 21;
+    const hh = 52;
+    const evs = evOn(selected);
+    const hours: React.JSX.Element[] = [];
+    for (let h = startH; h <= endH; h++) {
+      hours.push(
+        <View key={h} style={[s.hourRow, { height: hh }]}>
+          <Text style={s.hourLbl}>{String(h).padStart(2, '0')}:00</Text>
+        </View>,
+      );
+    }
+    const allDay = evs.filter((e) => e.isAllDay);
+    return (
+      <>
+        <View style={s.dayNav}>
+          <IconButton glyph={GLYPH.chevL} color={t.c.textPrimary} onPress={() => setSelected((d) => d - DAY)} />
+          <Text style={s.dayNavTitle}>{longDay(selected)}</Text>
+          <IconButton glyph={GLYPH.chevR} color={t.c.textPrimary} onPress={() => setSelected((d) => d + DAY)} />
+        </View>
+        {allDay.map((e) => (
+          <View key={e.id} style={[s.allDay, { backgroundColor: evColor(e) }]}>
+            <Text style={s.allDayText}>{e.subject}</Text>
+          </View>
+        ))}
+        <View style={[s.timeline, { height: (endH - startH + 1) * hh }]}>
+          {hours}
+          <View style={s.blocks}>
+            {evs
+              .filter((e) => !e.isAllDay)
+              .map((e) => {
+                const sd = new Date(e.startAt);
+                const top = (sd.getHours() + sd.getMinutes() / 60 - startH) * hh;
+                const height = Math.max(26, ((e.endAt - e.startAt) / 3_600_000) * hh - 4);
+                const cc = evColor(e);
+                return (
+                  <View
+                    key={e.id}
+                    style={[s.block, { top, height, backgroundColor: cc + '1F', borderLeftColor: cc }]}
+                  >
+                    <Text numberOfLines={1} style={[s.blockTitle, { color: cc }]}>
+                      {e.subject}
+                    </Text>
+                    <Text numberOfLines={1} style={s.blockMeta}>
+                      {hm(e.startAt)}–{hm(e.endAt)}
+                      {e.location !== undefined ? ` · ${e.location}` : ''}
+                    </Text>
+                  </View>
+                );
+              })}
           </View>
         </View>
-      )}
-    />
+      </>
+    );
+  };
+
+  const renderWeek = (): React.JSX.Element => {
+    const mon = mondayOf(selected);
+    const cells: React.JSX.Element[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d0 = mon + i * DAY;
+      const isToday = d0 === today;
+      const isSel = d0 === selected;
+      cells.push(
+        <Pressable key={d0} style={s.wd} onPress={() => setSelected(d0)}>
+          <Text style={s.wdn}>{new Date(d0).toLocaleDateString('de-DE', { weekday: 'short' })}</Text>
+          <View style={[s.wdd, isToday ? s.wddToday : null, isSel && !isToday ? s.wddSel : null]}>
+            <Text style={[s.wddText, isToday ? s.wddTextToday : null]}>{new Date(d0).getDate()}</Text>
+          </View>
+          <View style={s.dots}>
+            {evOn(d0)
+              .slice(0, 4)
+              .map((e) => (
+                <View key={e.id} style={[s.d, { backgroundColor: evColor(e) }]} />
+              ))}
+          </View>
+        </Pressable>,
+      );
+    }
+    return (
+      <>
+        <View style={s.weekStrip}>{cells}</View>
+        {selectedList()}
+      </>
+    );
+  };
+
+  const renderMonth = (): React.JSX.Element => {
+    const d = new Date(selected);
+    const first = new Date(d.getFullYear(), d.getMonth(), 1);
+    const start = mondayOf(first.getTime());
+    const monthName = first.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    const weekdayHead = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
+    const weeks: React.JSX.Element[] = [];
+    for (let w = 0; w < 6; w++) {
+      const ws = start + w * 7 * DAY;
+      const cells: React.JSX.Element[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d0 = ws + i * DAY;
+        const dt = new Date(d0);
+        const inMonth = dt.getMonth() === d.getMonth();
+        const isToday = d0 === today;
+        const isSel = d0 === selected;
+        const evs = evOn(d0);
+        cells.push(
+          <Pressable key={d0} style={s.mcell} onPress={() => setSelected(d0)}>
+            <View style={[s.mnum, isToday ? s.mnumToday : null, isSel && !isToday ? s.mnumSel : null]}>
+              <Text style={[s.mnumText, isToday ? s.mnumTextToday : null, !inMonth ? s.mnumDim : null]}>
+                {dt.getDate()}
+              </Text>
+            </View>
+            {evs.slice(0, 2).map((e) => (
+              <View key={e.id} style={[s.chip, { backgroundColor: evColor(e) + '26' }]}>
+                <View style={[s.cdot, { backgroundColor: evColor(e) }]} />
+                <Text numberOfLines={1} style={s.chipText}>
+                  {e.subject}
+                </Text>
+              </View>
+            ))}
+            {evs.length > 2 ? <Text style={s.cmore}>+{evs.length - 2}</Text> : null}
+          </Pressable>,
+        );
+      }
+      weeks.push(
+        <View key={ws} style={s.mweek}>
+          <Text style={s.wnum}>{isoWeek(ws)}</Text>
+          <View style={s.mrow}>{cells}</View>
+        </View>,
+      );
+    }
+    return (
+      <>
+        <View style={s.dayNav}>
+          <IconButton
+            glyph={GLYPH.chevL}
+            color={t.c.textPrimary}
+            onPress={() => {
+              const n = new Date(selected);
+              n.setMonth(n.getMonth() - 1);
+              setSelected(dStart(n.getTime()));
+            }}
+          />
+          <Text style={s.dayNavTitle}>{monthName}</Text>
+          <IconButton
+            glyph={GLYPH.chevR}
+            color={t.c.textPrimary}
+            onPress={() => {
+              const n = new Date(selected);
+              n.setMonth(n.getMonth() + 1);
+              setSelected(dStart(n.getTime()));
+            }}
+          />
+        </View>
+        <View style={s.mhead}>
+          <Text style={s.wnum} />
+          <View style={s.mrow}>
+            {weekdayHead.map((x, i) => (
+              <Text key={i} style={[s.mh, i >= 5 ? s.mhWe : null]}>
+                {x}
+              </Text>
+            ))}
+          </View>
+        </View>
+        <View style={s.mcal}>{weeks}</View>
+        {selectedList()}
+      </>
+    );
+  };
+
+  const body =
+    view === 'day'
+      ? renderDay()
+      : view === 'week'
+        ? renderWeek()
+        : view === 'month'
+          ? renderMonth()
+          : renderList();
+
+  return (
+    <View style={s.screen}>
+      <ScreenHeader
+        title="Kalender"
+        right={
+          <Pressable hitSlop={6} onPress={() => setSelected(today)}>
+            <Text style={s.todayBtn}>Heute</Text>
+          </Pressable>
+        }
+        search={{ value: query, onChange: setQuery, placeholder: 'Termine durchsuchen' }}
+      >
+        <View style={s.seg}>
+          {VIEWS.map((v) => {
+            const active = v.key === view;
+            return (
+              <Pressable
+                key={v.key}
+                style={[s.segBtn, active ? s.segBtnActive : null]}
+                onPress={() => setView(v.key)}
+              >
+                <Text style={[s.segText, active ? s.segTextActive : null]}>{v.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScreenHeader>
+      <ScrollView contentContainerStyle={s.content}>{body}</ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  body: { flex: 1 },
-  day: { color: color.textPrimary, fontSize: typography.caption.size, fontWeight: '600' },
-  empty: { color: color.textSecondary, fontSize: typography.body.size, textAlign: 'center' },
-  emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
-  location: { color: color.textSecondary, fontSize: typography.caption.size },
-  organizer: { color: color.textSecondary, fontSize: typography.caption.size },
-  row: {
-    borderBottomColor: color.bgElevated,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    padding: space.md,
-  },
-  subject: { color: color.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
-  time: { color: color.brandPrimary, fontSize: typography.caption.size },
-  when: { marginRight: space.md, width: 92 },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    allDay: { borderRadius: 6, marginHorizontal: space.md, marginBottom: 4, paddingHorizontal: space.sm, paddingVertical: 5 },
+    allDayText: { color: t.onBrand, fontSize: typography.caption.size, fontWeight: '600' },
+    block: { borderLeftWidth: 3, borderRadius: 6, left: 0, overflow: 'hidden', paddingHorizontal: space.xs, paddingVertical: 4, position: 'absolute', right: 4 },
+    blockMeta: { color: t.c.textSecondary, fontSize: 11 },
+    blockTitle: { fontSize: typography.caption.size, fontWeight: '700' },
+    blocks: { bottom: 0, left: 52, position: 'absolute', right: 0, top: 0 },
+    cdot: { borderRadius: 3, height: 6, width: 6 },
+    chip: { alignItems: 'center', borderRadius: 5, flexDirection: 'row', gap: 3, marginBottom: 2, marginHorizontal: 1, paddingHorizontal: 3, paddingVertical: 1 },
+    chipText: { color: t.c.textPrimary, fontSize: 9.5 },
+    cmore: { color: t.c.textSecondary, fontSize: 9, paddingLeft: 5 },
+    content: { paddingBottom: space.xl },
+    d: { borderRadius: 3, height: 5, width: 5 },
+    dayH: { color: t.c.textSecondary, fontSize: typography.caption.size, fontWeight: '700', letterSpacing: 0.3, paddingBottom: space.xxs, paddingHorizontal: space.md, paddingTop: space.md, textTransform: 'uppercase' },
+    dayHToday: { color: t.c.brandPrimary },
+    dayNav: { alignItems: 'center', flexDirection: 'row', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs },
+    dayNavTitle: { color: t.c.textPrimary, flex: 1, fontWeight: '700', textAlign: 'center' },
+    dots: { flexDirection: 'row', gap: 3, justifyContent: 'center', marginTop: 3, minHeight: 6 },
+    edot: { borderRadius: 5, height: 10, width: 10 },
+    empty: { color: t.c.textSecondary, fontSize: typography.body.size, padding: space.lg, textAlign: 'center' },
+    evBody: { flex: 1, minWidth: 0 },
+    evMeta: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    evTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    evc: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', gap: 10, marginHorizontal: space.md, marginVertical: 4, paddingHorizontal: space.sm, paddingVertical: 10 },
+    hourLbl: { backgroundColor: t.c.bgCanvas, color: t.c.textSecondary, fontSize: 11, left: 0, paddingRight: 6, position: 'absolute', top: -8 },
+    hourRow: { borderTopColor: t.border, borderTopWidth: StyleSheet.hairlineWidth, position: 'relative' },
+    mcal: { paddingBottom: space.sm, paddingHorizontal: space.md },
+    mcell: { borderRadius: 10, flex: 1, minHeight: 76, overflow: 'hidden', paddingHorizontal: 1, paddingTop: 3 },
+    mh: { color: t.c.textSecondary, flex: 1, fontSize: 11, textAlign: 'center' },
+    mhWe: { opacity: 0.55 },
+    mhead: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: space.md, paddingVertical: 2 },
+    mnum: { alignSelf: 'center', alignItems: 'center', borderRadius: 13, height: 26, justifyContent: 'center', marginBottom: 3, width: 26 },
+    mnumDim: { opacity: 0.38 },
+    mnumSel: { backgroundColor: t.c.bgElevated },
+    mnumText: { color: t.c.textPrimary, fontSize: typography.caption.size },
+    mnumTextToday: { color: t.onBrand, fontWeight: '700' },
+    mnumToday: { backgroundColor: t.c.brandPrimary },
+    mrow: { flex: 1, flexDirection: 'row', gap: 2 },
+    mweek: { alignItems: 'flex-start', flexDirection: 'row' },
+    screen: { backgroundColor: t.c.bgCanvas, flex: 1 },
+    seg: { backgroundColor: t.c.bgElevated, borderRadius: radius.sm, flexDirection: 'row', gap: 4, marginBottom: space.xs, marginHorizontal: space.md, padding: 3 },
+    segBtn: { borderRadius: 6, flex: 1, paddingVertical: 7 },
+    segBtnActive: { backgroundColor: t.mode === 'dark' ? '#2A313B' : '#FFFFFF' },
+    segText: { color: t.c.textSecondary, fontSize: typography.caption.size, fontWeight: '600', textAlign: 'center' },
+    segTextActive: { color: t.c.textPrimary },
+    timeline: { marginBottom: space.lg, marginHorizontal: space.md, position: 'relative' },
+    todayBtn: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600', paddingHorizontal: space.xs },
+    wd: { flex: 1, paddingBottom: 8, paddingTop: 6 },
+    wdd: { alignItems: 'center', alignSelf: 'center', borderRadius: 16, height: 32, justifyContent: 'center', marginTop: 2, width: 32 },
+    wddSel: { borderColor: t.c.brandPrimary, borderWidth: 2 },
+    wddText: { color: t.c.textPrimary, fontWeight: '600' },
+    wddTextToday: { color: t.onBrand },
+    wddToday: { backgroundColor: t.c.brandPrimary },
+    wdn: { color: t.c.textSecondary, fontSize: 11, textAlign: 'center' },
+    weekStrip: { borderBottomColor: t.border, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row' },
+    wnum: { color: t.c.textSecondary, fontSize: 10, paddingTop: 8, textAlign: 'center', width: 18 },
+  });
+}

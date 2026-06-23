@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   BodyType,
@@ -10,9 +10,10 @@ import {
   type MailMessage,
   type MessageId,
 } from '@nexus/domain';
-import { color, radius, space, typography } from '@nexus/ui-kit';
+import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { archive, remove, setRead, toggleFlag } from '../actions/messageActions';
+import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 /** Sehr einfache HTML→Text-Reduktion (ohne WebView-Abhängigkeit; echtes HTML-Rendering folgt). */
 function htmlToText(html: string): string {
@@ -44,6 +45,7 @@ interface Props {
   readonly container: AppContainer;
   readonly account: AccountId;
   readonly messageId: MessageId;
+  readonly backLabel: string;
   readonly onBack: () => void;
   readonly onReply: (message: MailMessage) => void;
 }
@@ -52,9 +54,12 @@ export function MessageScreen({
   container,
   account,
   messageId,
+  backLabel,
   onBack,
   onReply,
 }: Props): React.JSX.Element {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
   const [message, setMessage] = useState<MailMessage | undefined>(undefined);
 
   useEffect(() => {
@@ -62,7 +67,6 @@ export function MessageScreen({
     void container.mailStore.getMessage(account, messageId).then((m) => {
       if (!active) return;
       setMessage(m);
-      // Beim Öffnen automatisch als gelesen markieren (optimistisch + Outbox).
       if (m !== undefined && isUnread(m)) {
         void setRead(container, account, m).then((updated) => {
           if (active) setMessage(updated);
@@ -101,60 +105,55 @@ export function MessageScreen({
   const onDownload = async (a: Attachment): Promise<void> => {
     try {
       const content = await container.transport.getAttachment(account, a.id);
-      Alert.alert(
-        content.name,
-        `${content.contentType} · ${formatSize(content.sizeBytes)} geladen.`,
-      );
+      Alert.alert(content.name, `${content.contentType} · ${formatSize(content.sizeBytes)} geladen.`);
     } catch {
       Alert.alert('Anhang', 'Konnte nicht geladen werden.');
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Pressable style={styles.back} onPress={onBack} hitSlop={8}>
-        <Text style={styles.backText}>‹ Posteingang</Text>
+    <View style={s.container}>
+      <Pressable style={s.back} onPress={onBack} hitSlop={8}>
+        <Text style={s.backText}>‹ {backLabel}</Text>
       </Pressable>
       {message === undefined ? (
-        <Text style={styles.meta}>Nachricht nicht gefunden.</Text>
+        <Text style={s.meta}>Nachricht nicht gefunden.</Text>
       ) : (
         <>
-          <ScrollView contentContainerStyle={styles.content}>
-            <Text style={styles.subject}>{message.subject}</Text>
-            <Text style={styles.meta}>{message.from.displayName ?? message.from.address}</Text>
+          <ScrollView contentContainerStyle={s.content}>
+            <Text style={s.subject}>{message.subject}</Text>
+            <Text style={s.meta}>{message.from.displayName ?? message.from.address}</Text>
             {message.categories.length > 0 ? (
-              <Text style={styles.categories}>{message.categories.join(' · ')}</Text>
+              <Text style={s.categories}>{message.categories.join(' · ')}</Text>
             ) : null}
-            <Text style={styles.body}>{bodyText(message)}</Text>
+            <Text style={s.body}>{bodyText(message)}</Text>
 
             {message.attachments.length > 0 ? (
-              <View style={styles.attachWrap}>
-                <Text style={styles.attachHead}>Anhänge ({message.attachments.length})</Text>
+              <View style={s.attachWrap}>
+                <Text style={s.attachHead}>Anhänge ({message.attachments.length})</Text>
                 {message.attachments.map((a) => (
-                  <Pressable key={a.id} style={styles.attachRow} onPress={() => void onDownload(a)}>
-                    <Text style={styles.attachIcon}>📎</Text>
-                    <Text style={styles.attachName} numberOfLines={1}>
+                  <Pressable key={a.id} style={s.attachRow} onPress={() => void onDownload(a)}>
+                    <Text style={s.attachIcon}>📎</Text>
+                    <Text style={s.attachName} numberOfLines={1}>
                       {a.name}
                     </Text>
-                    <Text style={styles.attachMeta}>{formatSize(a.sizeBytes)}</Text>
+                    <Text style={s.attachMeta}>{formatSize(a.sizeBytes)}</Text>
                   </Pressable>
                 ))}
               </View>
             ) : null}
           </ScrollView>
 
-          <View style={styles.actions}>
-            <Action label="Antworten" onPress={() => onReply(message)} primary />
+          <View style={s.actions}>
+            <Action t={t} label="Antworten" onPress={() => onReply(message)} primary />
+            <Action t={t} label={isUnread(message) ? 'Gelesen' : 'Ungelesen'} onPress={() => void onToggleRead()} />
             <Action
-              label={isUnread(message) ? 'Gelesen' : 'Ungelesen'}
-              onPress={() => void onToggleRead()}
-            />
-            <Action
+              t={t}
               label={hasFlag(message, MessageFlag.Flagged) ? 'Entmarkieren' : 'Markieren'}
               onPress={() => void onToggleFlag()}
             />
-            <Action label="Archiv" onPress={() => void onArchive()} />
-            <Action label="Löschen" onPress={() => void onDelete()} danger />
+            <Action t={t} label="Archiv" onPress={() => void onArchive()} />
+            <Action t={t} label="Löschen" onPress={() => void onDelete()} danger />
           </View>
         </>
       )}
@@ -163,23 +162,26 @@ export function MessageScreen({
 }
 
 function Action({
+  t,
   label,
   onPress,
   primary,
   danger,
 }: {
+  readonly t: AppTheme;
   readonly label: string;
   readonly onPress: () => void;
   readonly primary?: boolean;
   readonly danger?: boolean;
 }): React.JSX.Element {
+  const s = useMemo(() => makeStyles(t), [t]);
   return (
-    <Pressable style={styles.action} onPress={onPress} hitSlop={6}>
+    <Pressable style={s.action} onPress={onPress} hitSlop={6}>
       <Text
         style={[
-          styles.actionText,
-          primary === true ? styles.actionPrimary : null,
-          danger === true ? styles.actionDanger : null,
+          s.actionText,
+          primary === true ? s.actionPrimary : null,
+          danger === true ? s.actionDanger : null,
         ]}
       >
         {label}
@@ -188,58 +190,56 @@ function Action({
   );
 }
 
-const styles = StyleSheet.create({
-  action: {
-    backgroundColor: color.bgElevated,
-    borderRadius: radius.sm,
-    flexGrow: 1,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.sm,
-  },
-  actionDanger: { color: color.danger },
-  actionPrimary: { color: color.brandPrimary, fontWeight: '700' },
-  actionText: {
-    color: color.textPrimary,
-    fontSize: typography.caption.size,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  actions: {
-    borderTopColor: color.bgElevated,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.xs,
-    padding: space.md,
-  },
-  attachHead: {
-    color: color.textSecondary,
-    fontSize: typography.caption.size,
-    fontWeight: '700',
-    marginBottom: space.xs,
-  },
-  attachIcon: { fontSize: typography.body.size, marginRight: space.sm },
-  attachMeta: {
-    color: color.textSecondary,
-    fontSize: typography.caption.size,
-    marginLeft: space.sm,
-  },
-  attachName: { color: color.textPrimary, flex: 1, fontSize: typography.body.size },
-  attachRow: {
-    alignItems: 'center',
-    backgroundColor: color.bgElevated,
-    borderRadius: radius.sm,
-    flexDirection: 'row',
-    marginBottom: space.xs,
-    padding: space.sm,
-  },
-  attachWrap: { marginTop: space.lg },
-  back: { paddingHorizontal: space.md, paddingVertical: space.sm },
-  backText: { color: color.brandPrimary, fontSize: typography.body.size },
-  body: { color: color.textPrimary, fontSize: typography.body.size, marginTop: space.md },
-  categories: { color: color.accent, fontSize: typography.caption.size, marginTop: space.xs },
-  container: { backgroundColor: color.bgCanvas, flex: 1 },
-  content: { padding: space.md },
-  meta: { color: color.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
-  subject: { color: color.textPrimary, fontSize: typography.headline.size, fontWeight: '700' },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    action: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.sm,
+      flexGrow: 1,
+      paddingHorizontal: space.sm,
+      paddingVertical: space.sm,
+    },
+    actionDanger: { color: t.c.danger },
+    actionPrimary: { color: t.c.brandPrimary, fontWeight: '700' },
+    actionText: {
+      color: t.c.textPrimary,
+      fontSize: typography.caption.size,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    actions: {
+      borderTopColor: t.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: space.xs,
+      padding: space.md,
+    },
+    attachHead: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      fontWeight: '700',
+      marginBottom: space.xs,
+    },
+    attachIcon: { fontSize: typography.body.size, marginRight: space.sm },
+    attachMeta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginLeft: space.sm },
+    attachName: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
+    attachRow: {
+      alignItems: 'center',
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.sm,
+      flexDirection: 'row',
+      marginBottom: space.xs,
+      padding: space.sm,
+    },
+    attachWrap: { marginTop: space.lg },
+    back: { paddingHorizontal: space.md, paddingVertical: space.sm },
+    backText: { color: t.c.brandPrimary, fontSize: typography.body.size },
+    body: { color: t.c.textPrimary, fontSize: typography.body.size, lineHeight: 22, marginTop: space.md },
+    categories: { color: t.c.accent, fontSize: typography.caption.size, marginTop: space.xs },
+    container: { backgroundColor: t.c.bgCanvas, flex: 1 },
+    content: { padding: space.md },
+    meta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
+    subject: { color: t.c.textPrimary, fontSize: typography.headline.size, fontWeight: '700' },
+  });
+}
