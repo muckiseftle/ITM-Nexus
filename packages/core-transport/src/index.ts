@@ -8,3 +8,5 @@ export * from './search-merge';
 export * from './autodiscover-select';
 export * from './autodiscover';
 export * from './login';
+export * from './pinning';
+export * from './background-sync';

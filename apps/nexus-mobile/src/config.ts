@@ -11,3 +11,34 @@ export const APP_MODE: 'demo' | 'live' = 'demo';
 /** Demo-Konto-ID, die die Screens für lokale Abfragen nutzen (passt zu demo-seed). */
 export const DEMO_ACCOUNT_ID = 'demo';
 export const DEMO_INBOX_ID = 'inbox';
+
+/**
+ * Certificate-Pinning-Policy (Security-First, fail-closed — siehe core-transport/pinning.ts).
+ * **Leer ⇒ Pinning inaktiv** (System-Trust). Die IT hinterlegt hier pro Server-Host die
+ * SPKI-Pins `base64(SHA-256(SubjectPublicKeyInfo))` (inkl. Backup-Pin), z. B.:
+ *
+ *   { host: 'mail.firma.de', pins: ['<primär>', '<backup>'], includeSubdomains: false }
+ *
+ * Pin ermitteln: `openssl s_client -connect host:443 | openssl x509 -pubkey -noout \
+ *   | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64`
+ */
+export const PINNING: { readonly policies: readonly PinPolicyEntry[] } = {
+  policies: [],
+};
+
+export interface PinPolicyEntry {
+  readonly host: string;
+  readonly pins: readonly string[];
+  readonly includeSubdomains?: boolean;
+}
+
+/** Hintergrund-Sync-Ziele und ihre Mindestintervalle (ms). */
+export const SYNC_INTERVALS = {
+  messages: 60_000,
+  folders: 300_000,
+  calendar: 600_000,
+  contacts: 600_000,
+} as const;
+
+/** Timeout für einen DirectPush-Long-Poll (ms). */
+export const PUSH_TIMEOUT_MS = 300_000;

@@ -1,8 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { toAccountId, type AccountId, type MailMessage, type MessageId } from '@nexus/domain';
+import {
+  toAccountId,
+  toFolderId,
+  type AccountId,
+  type MailMessage,
+  type MessageId,
+} from '@nexus/domain';
 import { color, space, typography } from '@nexus/ui-kit';
-import { APP_MODE, DEMO_ACCOUNT_ID } from './config';
+import {
+  APP_MODE,
+  DEMO_ACCOUNT_ID,
+  DEMO_INBOX_ID,
+  PUSH_TIMEOUT_MS,
+  SYNC_INTERVALS,
+} from './config';
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
 import { LoginScreen } from './screens/LoginScreen';
@@ -56,6 +68,37 @@ export default function App(): React.JSX.Element {
         setError(e instanceof Error ? e.message : 'Initialisierung fehlgeschlagen');
       });
   }, []);
+
+  // Hintergrund-Sync (Vordergrund-Intervall) + DirectPush-Long-Poll, sobald ein Konto offen ist.
+  // iOS-BGTaskScheduler für echte Hintergrundausführung folgt on-device; hier deckt das
+  // Intervall die aktive Nutzung ab. Im Demo-Modus sind die Server-Calls No-ops.
+  useEffect(() => {
+    if (container === null || account === null) return;
+    let cancelled = false;
+
+    const interval = setInterval(() => {
+      void container.backgroundSync.runDue(account);
+    }, SYNC_INTERVALS.messages);
+
+    const pushLoop = async (): Promise<void> => {
+      const inbox = toFolderId(DEMO_INBOX_ID);
+      while (!cancelled && container.push !== undefined) {
+        try {
+          const result = await container.push.ping(account, [inbox], PUSH_TIMEOUT_MS);
+          if (!cancelled) await container.backgroundSync.applyPing(account, result);
+        } catch {
+          // Verbindung weg/Timeout → kurz warten, dann erneut versuchen (Long-Poll-Resilienz).
+          await new Promise((r) => setTimeout(r, 5000));
+        }
+      }
+    };
+    void pushLoop();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [container, account]);
 
   const openMessage = (messageId: MessageId): void => {
     setTab('mail');

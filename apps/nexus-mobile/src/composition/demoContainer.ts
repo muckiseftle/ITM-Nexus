@@ -1,5 +1,9 @@
-import { createInMemoryContainer, seedDemoData } from '@nexus/services';
+import { BackgroundSyncService, createInMemoryContainer, seedDemoData } from '@nexus/services';
+import type { Clock } from '@nexus/core-transport';
 import type { AppContainer } from './container';
+import { defaultSyncTargets } from './container';
+
+const demoClock: Clock = { now: () => Date.now() };
 
 /**
  * Demo-Container: verdrahtet die In-Memory-Adapter mit allen Services und seedet
@@ -24,5 +28,14 @@ export async function createDemoContainer(): Promise<AppContainer> {
     rules: c.rules,
     calendar: c.calendar,
     contacts: c.contacts,
+    backgroundSync: new BackgroundSyncService(
+      c.sync,
+      c.folders,
+      c.calendar,
+      c.contacts,
+      c.outbox,
+      demoClock,
+      defaultSyncTargets(),
+    ),
   };
 }

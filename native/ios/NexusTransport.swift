@@ -13,6 +13,17 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   private var username: String?
   private var password: String?
 
+  /// Certificate-Pinning-Policy (siehe core-transport/pinning.ts). Leer ⇒ Pinning inaktiv.
+  struct PinPolicy {
+    let host: String
+    let includeSubdomains: Bool
+    let pins: [String]
+  }
+  private var pinPolicies: [PinPolicy] = []
+
+  /// Pro Ordner gemerkte Signatur für DirectPush-Änderungserkennung (Ping/Long-Poll).
+  private var folderSignatures: [String: String] = [:]
+
   private lazy var session: URLSession = {
     let config = URLSessionConfiguration.ephemeral
     config.tlsMinimumSupportedProtocolVersion = .TLSv12
@@ -28,11 +39,24 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   ) {
     switch challenge.protectionSpace.authenticationMethod {
     case NSURLAuthenticationMethodServerTrust:
-      if let trust = challenge.protectionSpace.serverTrust {
-        // TODO(iterativ): SPKI-Pinning (Fail-Closed). Aktuell System-Trust.
-        completionHandler(.useCredential, URLCredential(trust: trust))
-      } else {
+      guard let trust = challenge.protectionSpace.serverTrust else {
         completionHandler(.cancelAuthenticationChallenge, nil)
+        return
+      }
+      let host = challenge.protectionSpace.host
+      // Certificate-Pinning, fail-closed (Entscheidungsregeln: core-transport/pinning.ts):
+      // - Kein Policy-Treffer für den Host ⇒ System-Trust (Pinning für diesen Host inaktiv).
+      // - Policy vorhanden ⇒ mindestens ein präsentierter SPKI-Pin muss passen, sonst Abbruch.
+      if let policy = pinPolicy(for: host) {
+        let presented = NexusPinning.spkiPins(for: trust)
+        let matches = !presented.isEmpty && presented.contains { policy.pins.contains($0) }
+        if matches {
+          completionHandler(.useCredential, URLCredential(trust: trust))
+        } else {
+          completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+      } else {
+        completionHandler(.useCredential, URLCredential(trust: trust))
       }
     case NSURLAuthenticationMethodNTLM,
       NSURLAuthenticationMethodHTTPBasic,
@@ -168,6 +192,67 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let text = String(decoding: data, as: UTF8.self)
     guard let range = text.range(of: "<EwsUrl>"), let end = text.range(of: "</EwsUrl>") else { return nil }
     return String(text[range.upperBound..<end.lowerBound])
+  }
+
+  // MARK: Certificate Pinning
+
+  /// Setzt die Pinning-Policy aus JSON (`{ policies: [{ host, pins, includeSubdomains }] }`).
+  func configurePinning(_ json: String) {
+    guard let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+      let policies = obj["policies"] as? [[String: Any]]
+    else {
+      pinPolicies = []
+      return
+    }
+    pinPolicies = policies.compactMap { p in
+      guard let host = p["host"] as? String, let pins = p["pins"] as? [String], !pins.isEmpty
+      else { return nil }
+      return PinPolicy(
+        host: host.lowercased(), includeSubdomains: (p["includeSubdomains"] as? Bool) ?? false,
+        pins: pins)
+    }
+  }
+
+  /// Findet die spezifischste passende Policy für `host` (exakt vor Subdomain-Wildcard).
+  private func pinPolicy(for host: String) -> PinPolicy? {
+    let h = host.lowercased()
+    if let exact = pinPolicies.first(where: { $0.host == h }) { return exact }
+    return pinPolicies.first { $0.includeSubdomains && h.hasSuffix(".\($0.host)") }
+  }
+
+  // MARK: DirectPush (Ping / Long-Poll)
+
+  /// Bounded Long-Poll: kehrt zurück, sobald sich in einem der Ordner etwas ändert, sonst nach
+  /// `timeoutSec`. Änderungserkennung über eine FindItem-Signatur (Anzahl + neuste Item-ID).
+  /// Der erste Aufruf setzt die Basislinie. (Vollwertiges EAS-Ping/WBXML folgt iterativ.)
+  func ping(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws -> String {
+    let folders =
+      (try? JSONSerialization.jsonObject(with: Data(folderIdsJson.utf8)) as? [String]) ?? []
+    let deadline = Date().addingTimeInterval(timeoutSec)
+    let pollInterval: UInt64 = 15_000_000_000  // 15 s
+
+    while Date() < deadline {
+      var changed: [String] = []
+      for folderId in folders {
+        let signature = try await folderSignature(folderId)
+        if let previous = folderSignatures[folderId], previous != signature {
+          changed.append(folderId)
+        }
+        folderSignatures[folderId] = signature
+      }
+      if !changed.isEmpty {
+        return try Self.json(["status": "changed", "changedFolderIds": changed])
+      }
+      try? await Task.sleep(nanoseconds: pollInterval)
+    }
+    return try Self.json(["status": "timeout", "changedFolderIds": [String]()])
+  }
+
+  /// Signatur des Ordnerinhalts (Anzahl + neuste Item-ID) für die Änderungserkennung.
+  private func folderSignature(_ folderId: String) async throws -> String {
+    let xml = try await post(EwsSoap.findItem(folderId: mapFolder(folderId), query: ""))
+    let ids = EwsSoap.extractItemIds(xml)
+    return "\(ids.count):\(ids.first ?? "")"
   }
 
   // MARK: EWS-Operationen
