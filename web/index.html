@@ -155,6 +155,46 @@
       .formrow { display: flex; gap: var(--xs); margin-top: var(--xs); }
       .formrow .action { flex: 1; }
 
+      /* Kalender (Apple-Stil) */
+      .seg { display: flex; gap: 4px; margin: 0 var(--md) var(--xs); background: var(--bgElevated); border-radius: var(--rsm); padding: 3px; }
+      .seg button { flex: 1; border: none; background: transparent; color: var(--textSecondary); font-size: var(--fCaption); font-weight: 600; padding: 7px 0; border-radius: 6px; transition: all .15s; }
+      .seg button.active { background: #fff; color: var(--textPrimary); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+      .day-h { padding: var(--md) var(--md) var(--xs); font-size: var(--fCaption); font-weight: 700; color: var(--textSecondary); text-transform: uppercase; letter-spacing: .03em; }
+      .day-h.today { color: var(--brandPrimary); }
+      .ev { display: flex; align-items: stretch; gap: var(--sm); padding: 8px var(--md); cursor: pointer; }
+      .ev:active { background: var(--bgElevated); }
+      .evtime { width: 54px; flex: 0 0 auto; text-align: right; color: var(--textSecondary); font-size: var(--fCaption); padding-top: 2px; }
+      .ev .bar { width: 4px; border-radius: 2px; flex: 0 0 auto; }
+      .evbody { flex: 1; min-width: 0; }
+      .evtitle { font-size: var(--fBody); font-weight: 600; color: var(--textPrimary); }
+      .evmeta { font-size: var(--fCaption); color: var(--textSecondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .daynav { display: flex; align-items: center; gap: var(--xs); padding: var(--xs) var(--sm); }
+      .daynav-title { flex: 1; text-align: center; font-weight: 700; color: var(--textPrimary); }
+      .allday-wrap { padding: 0 var(--md) var(--xs); display: flex; flex-direction: column; gap: 4px; }
+      .allday { color: #fff; border-radius: 6px; padding: 5px 10px; font-size: var(--fCaption); font-weight: 600; }
+      .timeline { position: relative; margin: 0 var(--md) var(--lg); }
+      .hourrow { height: 52px; border-top: 1px solid var(--bgElevated); position: relative; }
+      .hourlbl { position: absolute; top: -8px; left: 0; font-size: 11px; color: var(--textSecondary); background: var(--bgCanvas); padding-right: 6px; }
+      .blocks { position: absolute; top: 0; left: 52px; right: 0; bottom: 0; }
+      .block { position: absolute; left: 0; right: 4px; border-radius: 6px; padding: 4px 8px; overflow: hidden; }
+      .block .bt { font-size: var(--fCaption); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .block .bm { font-size: 11px; color: var(--textSecondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .weekstrip { display: flex; border-bottom: 1px solid var(--bgElevated); }
+      .wd { flex: 1; text-align: center; padding: 6px 0 8px; cursor: pointer; }
+      .wd .wdn { font-size: 11px; color: var(--textSecondary); }
+      .wd .wdd { width: 32px; height: 32px; line-height: 32px; margin: 2px auto 0; border-radius: 50%; font-weight: 600; color: var(--textPrimary); }
+      .wd.today .wdd { background: var(--brandPrimary); color: #fff; }
+      .wd.sel .wdd { outline: 2px solid var(--brandPrimary); outline-offset: -2px; }
+      .dots { display: flex; gap: 3px; justify-content: center; margin-top: 3px; min-height: 6px; }
+      .dots .d { width: 5px; height: 5px; border-radius: 50%; }
+      .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); }
+      .mgrid.head .mh { text-align: center; font-size: 11px; color: var(--textSecondary); padding: 6px 0; }
+      .mcell { min-height: 56px; padding: 4px 0; text-align: center; cursor: pointer; border-top: 1px solid var(--bgElevated); }
+      .mcell.dim { opacity: .35; }
+      .mcell.sel { background: #eaf0fe; }
+      .mnum { width: 28px; height: 28px; line-height: 28px; margin: 0 auto; border-radius: 50%; font-size: var(--fCaption); color: var(--textPrimary); }
+      .mnum.today { background: var(--brandPrimary); color: #fff; }
+
       .drawer { position: absolute; inset: 0; z-index: 40; visibility: hidden; }
       .drawer.open { visibility: visible; }
       .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.4); opacity: 0; transition: opacity .25s; }
@@ -280,9 +320,25 @@
         { displayName: 'Markus Brandt', email: 'm.brandt@kunde.example.com', company: 'Kunde GmbH' },
         { displayName: 'Sandra Keil', email: 's.keil@itm-technologies.de', company: 'ITM Technologies' },
       ];
+      // Kalender-Quellen mit Farben (wie bei Apple je Kalender eine Farbe)
+      const calendars = [
+        { id: 'work', name: 'Arbeit', color: '#2563EB' },
+        { id: 'team', name: 'Team', color: '#0EA5E9' },
+        { id: 'private', name: 'Privat', color: '#16A34A' },
+      ];
+      const T = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+      const atTime = (off, h, m) => T + off * 86400000 + h * 3600000 + (m || 0) * 60000;
       const events = [
-        { subject: 'Abstimmung Angebot Q3', startAt: now + 2 * HOUR, location: 'Teams', organizer: 'Sandra Keil' },
-        { subject: 'Team-Wochenstart', startAt: now + 26 * HOUR, location: 'Raum 2.14', organizer: 'A. Chef' },
+        { title: 'Abstimmung Angebot Q3', cal: 'work', start: atTime(0, 10, 0), end: atTime(0, 11, 0), loc: 'Teams' },
+        { title: 'Mittagessen Team', cal: 'team', start: atTime(0, 12, 30), end: atTime(0, 13, 15), loc: 'Kantine' },
+        { title: 'Sport', cal: 'private', start: atTime(0, 18, 0), end: atTime(0, 19, 0), loc: '' },
+        { title: 'Team-Wochenstart', cal: 'team', start: atTime(1, 9, 0), end: atTime(1, 9, 30), loc: 'Raum 2.14' },
+        { title: 'Kundentermin Brandt', cal: 'work', start: atTime(2, 14, 0), end: atTime(2, 15, 0), loc: 'vor Ort' },
+        { title: '1:1 mit Chef', cal: 'work', start: atTime(3, 11, 0), end: atTime(3, 11, 30), loc: 'Büro' },
+        { title: 'Zahnarzt', cal: 'private', start: atTime(4, 8, 30), end: atTime(4, 9, 15), loc: '' },
+        { title: 'Release Planning', cal: 'work', start: atTime(5, 15, 0), end: atTime(5, 16, 30), loc: 'Teams' },
+        { title: 'Geburtstag Sandra', cal: 'private', start: atTime(7, 0, 0), end: atTime(7, 23, 59), allDay: true },
+        { title: 'Quartalsreview', cal: 'work', start: atTime(9, 9, 0), end: atTime(9, 12, 0), loc: 'Konferenzraum' },
       ];
 
       const I = {
@@ -293,6 +349,10 @@
         folders: '<path d="M4 6h16M4 12h16M4 18h16"/>',
         compose: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
         chevDown: '<path d="m6 9 6 6 6-6"/>',
+        chevL: '<path d="m15 6-6 6 6 6"/>',
+        chevR: '<path d="m9 6 6 6-6 6"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        today: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><circle cx="12" cy="15" r="2.4" fill="currentColor" stroke="none"/>',
       };
       const FI = {
         inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/>',
@@ -315,6 +375,7 @@
       let mailRoute = { name: 'list' };
       let pendingAnim = 'fade';
       let drawerOpen = false, drawerView = 'folders';
+      let calView = 'list', calSel = T;
       const q = { mail: '', calendar: '', contacts: '' };
 
       const settings = { push: true, background: true, wifiOnly: false, appLock: true };
@@ -423,13 +484,98 @@
             <div class="from">Von: ${esc(from)}${mbx().kind === 'delegated' ? ' (im Auftrag)' : ''}</div>
           </div>`;
       }
+      // ---- Kalender (Apple-Stil, farbig, mehrere Ansichten) ----
+      const DAY = 86400000;
+      const calOf = (id) => calendars.find((c) => c.id === id) || calendars[0];
+      const dStart = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+      const mondayOf = (ms) => { const d0 = dStart(ms); const wd = (new Date(d0).getDay() + 6) % 7; return d0 - wd * DAY; };
+      const hm = (ms) => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const longDay = (ms) => new Date(ms).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
+      function evFiltered() {
+        const n = q.calendar.trim().toLowerCase();
+        return events.filter((e) => !n || e.title.toLowerCase().includes(n) || (e.loc || '').toLowerCase().includes(n));
+      }
+      const evOn = (d0) => evFiltered().filter((e) => dStart(e.start) === d0).sort((a, b) => a.start - b.start);
+      const dots = (d0) => evOn(d0).slice(0, 4).map((e) => `<span class="d" style="background:${calOf(e.cal).color}"></span>`).join('');
+
+      function evRow(e) {
+        const c = calOf(e.cal);
+        return `<div class="ev" onclick="toast('${esc(e.title)}')">
+          <div class="evtime">${e.allDay ? 'ganztg.' : hm(e.start)}</div>
+          <div class="bar" style="background:${c.color}"></div>
+          <div class="evbody"><div class="evtitle">${esc(e.title)}</div>
+            <div class="evmeta">${e.allDay ? 'Ganztägig' : hm(e.start) + '–' + hm(e.end)}${e.loc ? ' · ' + esc(e.loc) : ''} · ${esc(c.name)}</div></div></div>`;
+      }
+      function dayHeader(d0) {
+        return `<div class="day-h ${d0 === T ? 'today' : ''}">${d0 === T ? 'Heute · ' : ''}${esc(longDay(d0))}</div>`;
+      }
+
+      function calList() {
+        const days = [...new Set(evFiltered().map((e) => dStart(e.start)))].sort((a, b) => a - b);
+        if (!days.length) return '<div class="empty">Keine Termine gefunden.</div>';
+        return `<div class="stagger">` + days.map((d0) => dayHeader(d0) + evOn(d0).map(evRow).join('')).join('') + `</div>`;
+      }
+      function calDay() {
+        const startH = 7, endH = 21, hh = 52;
+        const evs = evOn(calSel);
+        let hours = '';
+        for (let h = startH; h <= endH; h++) hours += `<div class="hourrow"><span class="hourlbl">${String(h).padStart(2, '0')}:00</span></div>`;
+        const blocks = evs.filter((e) => !e.allDay).map((e) => {
+          const s = new Date(e.start);
+          const top = (s.getHours() + s.getMinutes() / 60 - startH) * hh;
+          const height = Math.max(26, ((e.end - e.start) / 3600000) * hh - 4);
+          const c = calOf(e.cal);
+          return `<div class="block" style="top:${top}px;height:${height}px;background:${c.color}1f;border-left:3px solid ${c.color}" onclick="toast('${esc(e.title)}')">
+            <div class="bt" style="color:${c.color}">${esc(e.title)}</div><div class="bm">${hm(e.start)}–${hm(e.end)}${e.loc ? ' · ' + esc(e.loc) : ''}</div></div>`;
+        }).join('');
+        const allday = evs.filter((e) => e.allDay).map((e) => `<div class="allday" style="background:${calOf(e.cal).color}">${esc(e.title)}</div>`).join('');
+        return `<div class="daynav"><button class="iconbtn" onclick="selectDay(calSel-${DAY})">${svg(I.chevL)}</button>
+            <div class="daynav-title">${esc(longDay(calSel))}</div>
+            <button class="iconbtn" onclick="selectDay(calSel+${DAY})">${svg(I.chevR)}</button></div>
+          ${allday ? `<div class="allday-wrap">${allday}</div>` : ''}
+          <div class="timeline" style="height:${(endH - startH + 1) * hh}px">${hours}<div class="blocks">${blocks}</div></div>`;
+      }
+      function calWeek() {
+        const mon = mondayOf(calSel);
+        let cells = '';
+        for (let i = 0; i < 7; i++) {
+          const d0 = mon + i * DAY;
+          cells += `<div class="wd ${d0 === T ? 'today' : ''} ${d0 === calSel ? 'sel' : ''}" onclick="selectDay(${d0})">
+            <div class="wdn">${esc(new Date(d0).toLocaleDateString('de-DE', { weekday: 'short' }))}</div>
+            <div class="wdd">${new Date(d0).getDate()}</div><div class="dots">${dots(d0)}</div></div>`;
+        }
+        return `<div class="weekstrip">${cells}</div>${dayHeader(calSel)}${evOn(calSel).map(evRow).join('') || '<div class="empty">Keine Termine an diesem Tag.</div>'}`;
+      }
+      function calMonth() {
+        const d = new Date(calSel), y = d.getFullYear(), m = d.getMonth();
+        const first = new Date(y, m, 1);
+        const start = mondayOf(first.getTime());
+        const monthName = first.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+        const head = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((x) => `<div class="mh">${x}</div>`).join('');
+        let cells = '';
+        for (let i = 0; i < 42; i++) {
+          const d0 = start + i * DAY;
+          const inMonth = new Date(d0).getMonth() === m;
+          cells += `<div class="mcell ${inMonth ? '' : 'dim'} ${d0 === calSel ? 'sel' : ''}" onclick="selectDay(${d0})">
+            <div class="mnum ${d0 === T ? 'today' : ''}">${new Date(d0).getDate()}</div><div class="dots">${dots(d0)}</div></div>`;
+        }
+        return `<div class="daynav"><button class="iconbtn" onclick="shiftMonth(-1)">${svg(I.chevL)}</button>
+            <div class="daynav-title">${esc(monthName)}</div>
+            <button class="iconbtn" onclick="shiftMonth(1)">${svg(I.chevR)}</button></div>
+          <div class="mgrid head">${head}</div><div class="mgrid">${cells}</div>
+          ${dayHeader(calSel)}${evOn(calSel).map(evRow).join('') || '<div class="empty">Keine Termine an diesem Tag.</div>'}`;
+      }
       function renderCalendar() {
-        const needle = q.calendar.trim().toLowerCase();
-        const list = events.filter((e) => !needle || e.subject.toLowerCase().includes(needle) || (e.location || '').toLowerCase().includes(needle)).sort((a, b) => a.startAt - b.startAt);
-        const rows = list.map((e) => `
-          <div class="cal-row"><div class="when"><div class="day">${fmtDay(e.startAt)}</div><div class="time">${fmtTime(e.startAt)}</div></div>
-            <div style="flex:1;min-width:0"><div class="name">${esc(e.subject)}</div>${e.location ? `<div class="sub">${esc(e.location)}</div>` : ''}<div class="sub">${esc(e.organizer)}</div></div></div>`).join('');
-        return header('Kalender', { searchKey: 'calendar', placeholder: 'Termine durchsuchen' }) + `<div class="stagger">${list.length ? rows : '<div class="empty">Keine Termine gefunden.</div>'}</div>`;
+        const VIEWS = { list: 'Liste', day: 'Tag', week: 'Woche', month: 'Monat' };
+        const seg = Object.keys(VIEWS).map((v) => `<button class="${calView === v ? 'active' : ''}" onclick="setCalView('${v}')">${VIEWS[v]}</button>`).join('');
+        const head = `<div class="header">
+          <div class="appbar"><div class="title">Kalender</div>
+            <button class="iconbtn" onclick="calToday()">${svg(I.today)}</button>
+            <button class="iconbtn brand" onclick="toast('Neuer Termin (Demo)')">${svg(I.plus)}</button></div>
+          <div class="seg">${seg}</div>
+          <div class="appsearch"><input placeholder="Termine durchsuchen" value="${esc(q.calendar)}" oninput="q.calendar=this.value;rerender()" /></div></div>`;
+        const body = calView === 'day' ? calDay() : calView === 'week' ? calWeek() : calView === 'month' ? calMonth() : calList();
+        return head + body;
       }
       function renderContacts() {
         const needle = q.contacts.trim().toLowerCase();
@@ -596,6 +742,10 @@
       function del(id) { byId(id).folderId = 'deleted'; toast('In Gelöschte verschoben'); goList(); }
       function sendMail() { const to = (document.getElementById('c-to') || {}).value || ''; if (!to.trim()) { toast('Empfänger fehlt'); return; } toast('In Outbox — wird gesendet'); goList(); }
       function flip(key) { settings[key] = !settings[key]; render(true); }
+      function setCalView(v) { calView = v; pendingAnim = 'fade'; render(); }
+      function calToday() { calSel = T; render(); }
+      function selectDay(d0) { calSel = d0; render(true); }
+      function shiftMonth(delta) { const d = new Date(calSel); d.setMonth(d.getMonth() + delta); calSel = dStart(d.getTime()); render(true); }
 
       function openDrawer() { drawerView = 'folders'; drawerOpen = true; renderDrawer(); drawerEl.classList.add('open'); }
       function closeDrawer() { drawerOpen = false; drawerEl.classList.remove('open'); }
