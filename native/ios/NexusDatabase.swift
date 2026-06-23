@@ -68,6 +68,29 @@ final class NexusDatabase {
     isOpen = true
   }
 
+  /// Fügt/aktualisiert eine Nachricht aus einem Transport-Delta (nativer Hintergrund-Sync).
+  /// Spiegelt das Upsert der JS-`SqlMailStore` (gleiches Schema/Konfliktverhalten).
+  func upsertMessage(_ msg: [String: Any]) throws {
+    let id = msg["id"] as? String ?? ""
+    guard !id.isEmpty else { return }
+    let account = msg["accountId"] as? String ?? ""
+    let folder = msg["folderId"] as? String ?? "inbox"
+    let received = (msg["receivedAt"] as? NSNumber)?.int64Value ?? 0
+    let subject = msg["subject"] as? String ?? ""
+    let preview = msg["preview"] as? String ?? ""
+    let payload = String(
+      decoding: (try? JSONSerialization.data(withJSONObject: msg)) ?? Data(), as: UTF8.self)
+    try exec(
+      """
+      INSERT INTO messages (id, account_id, folder_id, received_at, subject, preview, payload)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        folder_id = excluded.folder_id, received_at = excluded.received_at,
+        subject = excluded.subject, preview = excluded.preview, payload = excluded.payload
+      """,
+      params: [id, account, folder, received, subject, preview, payload])
+  }
+
   /// Schreibendes Statement; liefert die Anzahl betroffener Zeilen.
   @discardableResult
   func exec(_ sql: String, params: [Any?]) throws -> Int {

@@ -13,6 +13,17 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   private var username: String?
   private var password: String?
 
+  /// Certificate-Pinning-Policy (siehe core-transport/pinning.ts). Leer ⇒ Pinning inaktiv.
+  struct PinPolicy {
+    let host: String
+    let includeSubdomains: Bool
+    let pins: [String]
+  }
+  private var pinPolicies: [PinPolicy] = []
+
+  /// Pro Ordner gemerkte Signatur für DirectPush-Änderungserkennung (Ping/Long-Poll).
+  private var folderSignatures: [String: String] = [:]
+
   private lazy var session: URLSession = {
     let config = URLSessionConfiguration.ephemeral
     config.tlsMinimumSupportedProtocolVersion = .TLSv12
@@ -28,11 +39,24 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   ) {
     switch challenge.protectionSpace.authenticationMethod {
     case NSURLAuthenticationMethodServerTrust:
-      if let trust = challenge.protectionSpace.serverTrust {
-        // TODO(iterativ): SPKI-Pinning (Fail-Closed). Aktuell System-Trust.
-        completionHandler(.useCredential, URLCredential(trust: trust))
-      } else {
+      guard let trust = challenge.protectionSpace.serverTrust else {
         completionHandler(.cancelAuthenticationChallenge, nil)
+        return
+      }
+      let host = challenge.protectionSpace.host
+      // Certificate-Pinning, fail-closed (Entscheidungsregeln: core-transport/pinning.ts):
+      // - Kein Policy-Treffer für den Host ⇒ System-Trust (Pinning für diesen Host inaktiv).
+      // - Policy vorhanden ⇒ mindestens ein präsentierter SPKI-Pin muss passen, sonst Abbruch.
+      if let policy = pinPolicy(for: host) {
+        let presented = NexusPinning.spkiPins(for: trust)
+        let matches = !presented.isEmpty && presented.contains { policy.pins.contains($0) }
+        if matches {
+          completionHandler(.useCredential, URLCredential(trust: trust))
+        } else {
+          completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+      } else {
+        completionHandler(.useCredential, URLCredential(trust: trust))
       }
     case NSURLAuthenticationMethodNTLM,
       NSURLAuthenticationMethodHTTPBasic,
@@ -57,36 +81,91 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   // MARK: Autodiscover
 
   func discover(email: String, credentialsJson: String) async throws -> String {
-    guard let domain = email.split(separator: "@").last.map(String.init) else {
+    guard let domain = email.split(separator: "@").last.map(String.init)?.lowercased() else {
       throw NexusError.transport("Ungültige E-Mail-Adresse")
     }
     let creds = try JSONSerialization.jsonObject(with: Data(credentialsJson.utf8)) as? [String: Any]
+
+    // Login-Namen ggf. um die NetBIOS-Domäne ergänzen (NTLM erwartet DOMÄNE\Benutzer).
     if let user = creds?["username"] as? String, let secret = creds?["secret"] as? String {
-      username = user
+      let netbios = creds?["domain"] as? String
+      let effectiveUser =
+        (netbios != nil && !user.contains("\\") && !user.contains("@"))
+        ? "\(netbios!)\\\(user)" : user
+      username = effectiveUser
       password = secret
-      basicAuthHeader = Self.basicAuth(user: user, password: secret)
+      basicAuthHeader = Self.basicAuth(user: effectiveUser, password: secret)
+    }
+    let scheme = (creds?["scheme"] as? String) ?? "basic"
+
+    // 1) Manueller Modus: Autodiscover überspringen, feste EWS-URL verwenden.
+    if let manual = creds?["manual"] as? [String: Any],
+      let manualEws = manual["ewsUrl"] as? String, let url = URL(string: manualEws) {
+      ewsUrl = url
+      return try Self.json([
+        "emailAddress": email, "auth": scheme, "ewsUrl": manualEws,
+        "capabilities": Self.defaultCapabilities,
+      ])
     }
 
-    let candidates = [
-      "https://\(domain)/autodiscover/autodiscover.xml",
-      "https://autodiscover.\(domain)/autodiscover/autodiscover.xml",
+    // 2) Autodiscover-POX in MS-konformer Reihenfolge (siehe core-transport/autodiscover.ts):
+    //    https-root → autodiscover-subdomain → http-redirect (GET).
+    let probes: [(url: String, method: String)] = [
+      ("https://\(domain)/autodiscover/autodiscover.xml", "POST"),
+      ("https://autodiscover.\(domain)/autodiscover/autodiscover.xml", "POST"),
+      ("http://autodiscover.\(domain)/autodiscover/autodiscover.xml", "GET"),
     ]
-    for urlString in candidates {
-      guard let url = URL(string: urlString) else { continue }
-      guard let ews = try await fetchAutodiscoverEwsUrl(url, email: email) else { continue }
+    for probe in probes {
+      guard let url = URL(string: probe.url) else { continue }
+      guard let ews = try await fetchAutodiscoverEwsUrl(url, email: email, method: probe.method)
+      else { continue }
       ewsUrl = URL(string: ews)
-      let result: [String: Any] = [
-        "emailAddress": email,
-        "auth": "basic",
-        "ewsUrl": ews,
+      return try Self.json([
+        "emailAddress": email, "auth": scheme, "ewsUrl": ews,
         "capabilities": Self.defaultCapabilities,
-      ]
-      return try Self.json(result)
+      ])
     }
+
+    // 3) EWS-Direkt-Fallbacks, falls Autodiscover nichts liefert (Standardpfade).
+    let fallbacks = [
+      "https://\(domain)/EWS/Exchange.asmx",
+      "https://autodiscover.\(domain)/EWS/Exchange.asmx",
+      "https://mail.\(domain)/EWS/Exchange.asmx",
+    ]
+    for fb in fallbacks {
+      guard let url = URL(string: fb) else { continue }
+      if try await probeEwsEndpoint(url) {
+        ewsUrl = url
+        return try Self.json([
+          "emailAddress": email, "auth": scheme, "ewsUrl": fb,
+          "capabilities": Self.defaultCapabilities,
+        ])
+      }
+    }
+
     throw NexusError.transport("Autodiscover fehlgeschlagen für \(domain)")
   }
 
-  private func fetchAutodiscoverEwsUrl(_ url: URL, email: String) async throws -> String? {
+  /// Prüft, ob unter `url` ein EWS-Endpunkt existiert. 200 (WSDL) oder 401/403
+  /// (Authentifizierung erforderlich = Server vorhanden) gelten als Treffer.
+  private func probeEwsEndpoint(_ url: URL) async throws -> Bool {
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    req.timeoutInterval = 10
+    do {
+      let (_, response) = try await session.data(for: req)
+      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      return status == 200 || status == 401 || status == 403
+    } catch {
+      return false
+    }
+  }
+
+  /// Holt die EwsUrl aus einer Autodiscover-Antwort. `method`: POX-POST (https) bzw. GET
+  /// (http-redirect — URLSession folgt 301/302 automatisch zum https-Endpunkt).
+  private func fetchAutodiscoverEwsUrl(
+    _ url: URL, email: String, method: String = "POST"
+  ) async throws -> String? {
     let pox = """
     <Autodiscover xmlns="http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006">
       <Request>
@@ -96,10 +175,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     </Autodiscover>
     """
     var req = URLRequest(url: url)
-    req.httpMethod = "POST"
-    req.setValue("text/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    req.httpMethod = method
+    req.timeoutInterval = 15
+    if method == "POST" {
+      req.setValue("text/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
+      req.httpBody = Data(pox.utf8)
+    }
     if let auth = basicAuthHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
-    req.httpBody = Data(pox.utf8)
     let (data, response) = try await session.data(for: req)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     if status == 401 || status == 403 {
@@ -110,6 +192,67 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let text = String(decoding: data, as: UTF8.self)
     guard let range = text.range(of: "<EwsUrl>"), let end = text.range(of: "</EwsUrl>") else { return nil }
     return String(text[range.upperBound..<end.lowerBound])
+  }
+
+  // MARK: Certificate Pinning
+
+  /// Setzt die Pinning-Policy aus JSON (`{ policies: [{ host, pins, includeSubdomains }] }`).
+  func configurePinning(_ json: String) {
+    guard let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+      let policies = obj["policies"] as? [[String: Any]]
+    else {
+      pinPolicies = []
+      return
+    }
+    pinPolicies = policies.compactMap { p in
+      guard let host = p["host"] as? String, let pins = p["pins"] as? [String], !pins.isEmpty
+      else { return nil }
+      return PinPolicy(
+        host: host.lowercased(), includeSubdomains: (p["includeSubdomains"] as? Bool) ?? false,
+        pins: pins)
+    }
+  }
+
+  /// Findet die spezifischste passende Policy für `host` (exakt vor Subdomain-Wildcard).
+  private func pinPolicy(for host: String) -> PinPolicy? {
+    let h = host.lowercased()
+    if let exact = pinPolicies.first(where: { $0.host == h }) { return exact }
+    return pinPolicies.first { $0.includeSubdomains && h.hasSuffix(".\($0.host)") }
+  }
+
+  // MARK: DirectPush (Ping / Long-Poll)
+
+  /// Bounded Long-Poll: kehrt zurück, sobald sich in einem der Ordner etwas ändert, sonst nach
+  /// `timeoutSec`. Änderungserkennung über eine FindItem-Signatur (Anzahl + neuste Item-ID).
+  /// Der erste Aufruf setzt die Basislinie. (Vollwertiges EAS-Ping/WBXML folgt iterativ.)
+  func ping(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws -> String {
+    let folders =
+      (try? JSONSerialization.jsonObject(with: Data(folderIdsJson.utf8)) as? [String]) ?? []
+    let deadline = Date().addingTimeInterval(timeoutSec)
+    let pollInterval: UInt64 = 15_000_000_000  // 15 s
+
+    while Date() < deadline {
+      var changed: [String] = []
+      for folderId in folders {
+        let signature = try await folderSignature(folderId)
+        if let previous = folderSignatures[folderId], previous != signature {
+          changed.append(folderId)
+        }
+        folderSignatures[folderId] = signature
+      }
+      if !changed.isEmpty {
+        return try Self.json(["status": "changed", "changedFolderIds": changed])
+      }
+      try? await Task.sleep(nanoseconds: pollInterval)
+    }
+    return try Self.json(["status": "timeout", "changedFolderIds": [String]()])
+  }
+
+  /// Signatur des Ordnerinhalts (Anzahl + neuste Item-ID) für die Änderungserkennung.
+  private func folderSignature(_ folderId: String) async throws -> String {
+    let xml = try await post(EwsSoap.findItem(folderId: mapFolder(folderId), query: ""))
+    let ids = EwsSoap.extractItemIds(xml)
+    return "\(ids.count):\(ids.first ?? "")"
   }
 
   // MARK: EWS-Operationen
@@ -239,6 +382,44 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       ["messageId": id, "rank": Double(1000 - i), "source": "server"]
     }
     return try Self.json(hits)
+  }
+
+  // MARK: Hintergrund-Sync (nativer Cold-Start ohne JS-Kontext)
+
+  /// Stellt EWS-URL + Credentials aus dem Keychain wieder her (Hintergrund-Task startet ohne
+  /// laufenden JS-Kontext, der die Session sonst im Speicher hält). Liefert die accountId.
+  @discardableResult
+  func restoreSession() throws -> String? {
+    guard let account = try NexusSecureStore.get("nexus:current-account") else { return nil }
+    guard let metaStr = try NexusSecureStore.get("nexus:account:\(account)"),
+      let meta = try JSONSerialization.jsonObject(with: Data(metaStr.utf8)) as? [String: Any],
+      let ews = meta["ewsUrl"] as? String, let url = URL(string: ews),
+      let secret = try NexusSecureStore.get("nexus:secret:\(account)")
+    else { return nil }
+    let user = meta["username"] as? String ?? account
+    let domain = meta["domain"] as? String
+    let effectiveUser =
+      (domain != nil && !user.contains("\\") && !user.contains("@")) ? "\(domain!)\\\(user)" : user
+    ewsUrl = url
+    username = effectiveUser
+    password = secret
+    basicAuthHeader = Self.basicAuth(user: effectiveUser, password: secret)
+    return account
+  }
+
+  /// Synchronisiert den Posteingang nativ in die verschlüsselte DB. Liefert die Anzahl
+  /// gespeicherter Nachrichten. Für den Hintergrund-Task (siehe NexusBackgroundSync).
+  @discardableResult
+  func syncInboxNative() async throws -> Int {
+    guard let account = try restoreSession() else { return 0 }
+    let json = try await syncMessages(accountId: account, folderId: "inbox", syncKey: nil)
+    guard let delta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+      let created = delta["created"] as? [[String: Any]]
+    else { return 0 }
+    for msg in created {
+      try NexusDatabase.shared.upsertMessage(msg)
+    }
+    return created.count
   }
 
   // MARK: HTTP/Helpers

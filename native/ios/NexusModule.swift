@@ -135,4 +135,24 @@ final class NexusModule: NSObject {
       catch { reject("transport_getmessage", "\(error)", error) }
     }
   }
+
+  @objc(transportConfigurePinning:resolver:rejecter:)
+  func transportConfigurePinning(_ pinsJson: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    NexusTransport.shared.configurePinning(pinsJson)
+    resolve(nil)
+  }
+
+  @objc(transportPing:folderIdsJson:timeoutSec:resolver:rejecter:)
+  func transportPing(_ accountId: String, folderIdsJson: String, timeoutSec: NSNumber, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.ping(accountId: accountId, folderIdsJson: folderIdsJson, timeoutSec: timeoutSec.doubleValue)) }
+      catch { reject("transport_ping", "\(error)", error) }
+    }
+  }
+
+  @objc(transportScheduleBackgroundSync:rejecter:)
+  func transportScheduleBackgroundSync(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    NexusBackgroundSync.schedule()
+    resolve(nil)
+  }
 }

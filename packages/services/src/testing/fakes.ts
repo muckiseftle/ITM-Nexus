@@ -54,12 +54,24 @@ export class FakeMailTransport implements MailTransport {
   readonly capabilities: TransportCapabilities;
   readonly appliedOps: OutboxOperation[] = [];
   applyCallCount = 0;
+  /** Zuletzt an `discover` übergebene Credentials (für Passthrough-Assertions). */
+  lastDiscoverCredentials?: Credentials;
 
   constructor(private readonly config: FakeTransportConfig = {}) {
     this.capabilities = config.capabilities ?? DEFAULT_CAPABILITIES;
   }
 
-  discover(email: string, _credentials: Credentials): Promise<AutodiscoverResult> {
+  discover(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
+    this.lastDiscoverCredentials = credentials;
+    // Manueller Modus: keinen Endpunkt aus „Autodiscover" liefern — die Service-Schicht
+    // soll die feste Konfiguration verwenden (spiegelt den nativen Kurzschluss wider).
+    if (credentials.manual !== undefined) {
+      return Promise.resolve({
+        emailAddress: email,
+        capabilities: this.capabilities,
+        auth: credentials.scheme,
+      });
+    }
     const result: AutodiscoverResult = this.config.discoverResult ?? {
       emailAddress: email,
       capabilities: this.capabilities,

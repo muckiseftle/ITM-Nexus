@@ -16,6 +16,9 @@ import type {
   MailTransport,
   OutboxOperation,
   OutboxState,
+  PingResult,
+  PinningConfig,
+  PushTransport,
   SearchHit,
   SecureStore,
   SyncDelta,
@@ -23,6 +26,11 @@ import type {
 } from '@nexus/core-transport';
 import { emptyOutbox } from '@nexus/core-transport';
 import { NexusNative } from './NexusNative';
+
+/** Übergibt die Pinning-Policy ans native Modul (TLS-Challenge wertet sie fail-closed aus). */
+export async function configurePinning(config: PinningConfig): Promise<void> {
+  await NexusNative.transportConfigurePinning(JSON.stringify(config));
+}
 
 /** SecureStore-Port → Keychain/Keystore (natives Modul). */
 export class NativeSecureStore implements SecureStore {
@@ -134,9 +142,22 @@ export class SqlMailStore implements MailStore {
   }
 }
 
-/** MailTransport-Port → nativer EWS/EAS-Connector. JSON über die Bridge. */
-export class NativeMailTransport implements MailTransport {
+/** MailTransport-Port (+ DirectPush) → nativer EWS/EAS-Connector. JSON über die Bridge. */
+export class NativeMailTransport implements MailTransport, PushTransport {
   constructor(readonly capabilities: TransportCapabilities) {}
+
+  async ping(
+    accountId: AccountId,
+    folderIds: readonly FolderId[],
+    timeoutMs: number,
+  ): Promise<PingResult> {
+    const json = await NexusNative.transportPing(
+      accountId,
+      JSON.stringify(folderIds),
+      Math.round(timeoutMs / 1000),
+    );
+    return JSON.parse(json) as PingResult;
+  }
 
   async discover(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
     const json = await NexusNative.transportDiscover(email, JSON.stringify(credentials));

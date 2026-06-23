@@ -1,10 +1,24 @@
 import type { AuthScheme } from './autodiscover-select';
 
+/**
+ * Feste Serverkonfiguration für den manuellen Modus (Experten-/Fallback-Pfad). Überspringt
+ * Autodiscover und nutzt die angegebene EWS-URL direkt. Sinnvoll, wenn Autodiscover im
+ * Firmennetz nicht freigegeben ist oder abweichende Hostnamen verwendet werden.
+ */
+export interface ManualServerConfig {
+  readonly ewsUrl: string;
+  readonly easUrl?: string;
+}
+
 /** Anmeldedaten. `secret` (Passwort/Token) wird niemals geloggt oder in JS persistiert. */
 export interface Credentials {
   readonly username: string;
   readonly secret: string;
   readonly scheme: AuthScheme;
+  /** Optionale NetBIOS-Domäne (NTLM), falls nicht bereits im Benutzernamen enthalten. */
+  readonly domain?: string;
+  /** Wenn gesetzt: Autodiscover überspringen und diese Serverkonfiguration verwenden. */
+  readonly manual?: ManualServerConfig;
 }
 
 /** Vom Server/Autodiscover gemeldete Fähigkeiten — steuert die Protokollwahl im Hybrid. */

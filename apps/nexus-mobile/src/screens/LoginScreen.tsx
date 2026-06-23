@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toAccountId, type AccountId } from '@nexus/domain';
-import { classifyError, type ErrorInfo } from '@nexus/core-transport';
+import {
+  classifyError,
+  normalizeEwsUrl,
+  parseLogin,
+  type Credentials,
+  type ErrorInfo,
+} from '@nexus/core-transport';
 import { color, radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 
@@ -18,6 +24,8 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
@@ -35,15 +43,35 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
     }
     // Anmeldename: separat eingebbar (z. B. DOMÄNE\Benutzername oder UPN). Leer → E-Mail.
     const loginName = username.trim().length > 0 ? username.trim() : trimmedEmail;
+    const login = parseLogin(loginName);
+    // NTLM, sobald eine NetBIOS-Domäne erkennbar ist (DOMÄNE\Benutzer); sonst Basic.
+    const scheme = login.form === 'downlevel' ? 'ntlm' : 'basic';
+
+    // Optionaler manueller Server (Experten/Fallback): überspringt Autodiscover.
+    const manualEws = normalizeEwsUrl(serverUrl);
+    if (serverUrl.trim().length > 0 && manualEws === undefined) {
+      setError({
+        kind: 'unknown',
+        title: 'Server-Adresse ungültig',
+        detail: 'Bitte eine gültige EWS-/Server-URL eingeben (z. B. mail.firma.de).',
+        technical: serverUrl,
+      });
+      return;
+    }
+
+    const credentials: Credentials = {
+      username: loginName,
+      secret: password,
+      scheme,
+      ...(login.form === 'downlevel' && login.domain !== undefined ? { domain: login.domain } : {}),
+      ...(manualEws !== undefined ? { manual: { ewsUrl: manualEws } } : {}),
+    };
+
     setBusy(true);
     setError(null);
     setShowTechnical(false);
     try {
-      await container.setup.setUp(trimmedEmail, {
-        username: loginName,
-        secret: password,
-        scheme: 'basic',
-      });
+      await container.setup.setUp(trimmedEmail, credentials);
       onLoggedIn(toAccountId(trimmedEmail.toLowerCase()), trimmedEmail);
     } catch (e: unknown) {
       setError(classifyError(e));
@@ -85,6 +113,35 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
         onChangeText={setPassword}
       />
 
+      <Pressable
+        onPress={() => {
+          setShowAdvanced((v) => !v);
+        }}
+        hitSlop={6}
+      >
+        <Text style={styles.advancedToggle}>
+          {showAdvanced ? '▾ Erweitert' : '▸ Erweitert (Server manuell)'}
+        </Text>
+      </Pressable>
+      {showAdvanced ? (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder="EWS-/Server-Adresse (optional, z. B. mail.firma.de)"
+            placeholderTextColor={color.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={serverUrl}
+            onChangeText={setServerUrl}
+          />
+          <Text style={styles.advancedHint}>
+            Nur ausfüllen, wenn Autodiscover im Firmennetz nicht funktioniert. Leer lassen für
+            automatische Servererkennung.
+          </Text>
+        </>
+      ) : null}
+
       {error !== null ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorTitle}>{error.title}</Text>
@@ -124,6 +181,16 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
 }
 
 const styles = StyleSheet.create({
+  advancedHint: {
+    color: color.textSecondary,
+    fontSize: typography.caption.size,
+    marginBottom: space.sm,
+  },
+  advancedToggle: {
+    color: color.brandPrimary,
+    fontSize: typography.caption.size,
+    marginBottom: space.sm,
+  },
   button: {
     alignItems: 'center',
     backgroundColor: color.brandPrimary,
