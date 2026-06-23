@@ -70,17 +70,23 @@ if [ "$PLATFORM" = "ios-live" ]; then
   sed -i '' "s/APP_MODE: 'demo' | 'live' = 'demo'/APP_MODE: 'demo' | 'live' = 'live'/" src/config.ts || \
     sed -i "s/APP_MODE: 'demo' | 'live' = 'demo'/APP_MODE: 'demo' | 'live' = 'live'/" src/config.ts
   # Den lokalen Pod in den App-Target-Block der Podfile eintragen.
+  # SQLCipher (C-Pod ohne Module-Map) braucht :modular_headers => true, damit der
+  # Swift-Pod NexusNative es per `import SQLCipher` einbinden kann (sonst bricht
+  # `pod install` mit „cannot yet be integrated as static libraries" ab).
   ROOT="$ROOT" ruby -e '
     path = File.join(ENV["ROOT"], "native", "ios")
     pf = "ios/Podfile"
     out = []
     File.readlines(pf).each do |l|
       out << l
-      out << "  pod \x27NexusNative\x27, :path => \x27#{path}\x27\n" if l =~ /target .NEXUS. do/
+      if l =~ /target .NEXUS. do/
+        out << "  pod \x27SQLCipher\x27, :modular_headers => true\n"
+        out << "  pod \x27NexusNative\x27, :path => \x27#{path}\x27\n"
+      end
     end
     File.write(pf, out.join)
   '
-  cat ios/Podfile | grep -n NexusNative || true
+  cat ios/Podfile | grep -n "NexusNative\|SQLCipher" || true
   echo "::endgroup::"
 
   echo "::group::iOS-Live-Build (Gerät, UNSIGNIERT, mit nativem Modul)"
