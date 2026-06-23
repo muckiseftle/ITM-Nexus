@@ -6,7 +6,12 @@
  */
 
 export type AuthScheme = 'basic' | 'ntlm' | 'oauth';
-export type DiscoverySource = 'https-root' | 'autodiscover-subdomain' | 'srv' | 'manual';
+export type DiscoverySource =
+  | 'https-root'
+  | 'autodiscover-subdomain'
+  | 'http-redirect'
+  | 'srv'
+  | 'manual';
 
 export interface EndpointCandidate {
   readonly source: DiscoverySource;

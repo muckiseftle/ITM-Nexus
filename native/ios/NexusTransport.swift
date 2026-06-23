@@ -57,36 +57,91 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   // MARK: Autodiscover
 
   func discover(email: String, credentialsJson: String) async throws -> String {
-    guard let domain = email.split(separator: "@").last.map(String.init) else {
+    guard let domain = email.split(separator: "@").last.map(String.init)?.lowercased() else {
       throw NexusError.transport("Ungültige E-Mail-Adresse")
     }
     let creds = try JSONSerialization.jsonObject(with: Data(credentialsJson.utf8)) as? [String: Any]
+
+    // Login-Namen ggf. um die NetBIOS-Domäne ergänzen (NTLM erwartet DOMÄNE\Benutzer).
     if let user = creds?["username"] as? String, let secret = creds?["secret"] as? String {
-      username = user
+      let netbios = creds?["domain"] as? String
+      let effectiveUser =
+        (netbios != nil && !user.contains("\\") && !user.contains("@"))
+        ? "\(netbios!)\\\(user)" : user
+      username = effectiveUser
       password = secret
-      basicAuthHeader = Self.basicAuth(user: user, password: secret)
+      basicAuthHeader = Self.basicAuth(user: effectiveUser, password: secret)
+    }
+    let scheme = (creds?["scheme"] as? String) ?? "basic"
+
+    // 1) Manueller Modus: Autodiscover überspringen, feste EWS-URL verwenden.
+    if let manual = creds?["manual"] as? [String: Any],
+      let manualEws = manual["ewsUrl"] as? String, let url = URL(string: manualEws) {
+      ewsUrl = url
+      return try Self.json([
+        "emailAddress": email, "auth": scheme, "ewsUrl": manualEws,
+        "capabilities": Self.defaultCapabilities,
+      ])
     }
 
-    let candidates = [
-      "https://\(domain)/autodiscover/autodiscover.xml",
-      "https://autodiscover.\(domain)/autodiscover/autodiscover.xml",
+    // 2) Autodiscover-POX in MS-konformer Reihenfolge (siehe core-transport/autodiscover.ts):
+    //    https-root → autodiscover-subdomain → http-redirect (GET).
+    let probes: [(url: String, method: String)] = [
+      ("https://\(domain)/autodiscover/autodiscover.xml", "POST"),
+      ("https://autodiscover.\(domain)/autodiscover/autodiscover.xml", "POST"),
+      ("http://autodiscover.\(domain)/autodiscover/autodiscover.xml", "GET"),
     ]
-    for urlString in candidates {
-      guard let url = URL(string: urlString) else { continue }
-      guard let ews = try await fetchAutodiscoverEwsUrl(url, email: email) else { continue }
+    for probe in probes {
+      guard let url = URL(string: probe.url) else { continue }
+      guard let ews = try await fetchAutodiscoverEwsUrl(url, email: email, method: probe.method)
+      else { continue }
       ewsUrl = URL(string: ews)
-      let result: [String: Any] = [
-        "emailAddress": email,
-        "auth": "basic",
-        "ewsUrl": ews,
+      return try Self.json([
+        "emailAddress": email, "auth": scheme, "ewsUrl": ews,
         "capabilities": Self.defaultCapabilities,
-      ]
-      return try Self.json(result)
+      ])
     }
+
+    // 3) EWS-Direkt-Fallbacks, falls Autodiscover nichts liefert (Standardpfade).
+    let fallbacks = [
+      "https://\(domain)/EWS/Exchange.asmx",
+      "https://autodiscover.\(domain)/EWS/Exchange.asmx",
+      "https://mail.\(domain)/EWS/Exchange.asmx",
+    ]
+    for fb in fallbacks {
+      guard let url = URL(string: fb) else { continue }
+      if try await probeEwsEndpoint(url) {
+        ewsUrl = url
+        return try Self.json([
+          "emailAddress": email, "auth": scheme, "ewsUrl": fb,
+          "capabilities": Self.defaultCapabilities,
+        ])
+      }
+    }
+
     throw NexusError.transport("Autodiscover fehlgeschlagen für \(domain)")
   }
 
-  private func fetchAutodiscoverEwsUrl(_ url: URL, email: String) async throws -> String? {
+  /// Prüft, ob unter `url` ein EWS-Endpunkt existiert. 200 (WSDL) oder 401/403
+  /// (Authentifizierung erforderlich = Server vorhanden) gelten als Treffer.
+  private func probeEwsEndpoint(_ url: URL) async throws -> Bool {
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    req.timeoutInterval = 10
+    do {
+      let (_, response) = try await session.data(for: req)
+      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      return status == 200 || status == 401 || status == 403
+    } catch {
+      return false
+    }
+  }
+
+  /// Holt die EwsUrl aus einer Autodiscover-Antwort. `method`: POX-POST (https) bzw. GET
+  /// (http-redirect — URLSession folgt 301/302 automatisch zum https-Endpunkt).
+  private func fetchAutodiscoverEwsUrl(
+    _ url: URL, email: String, method: String = "POST"
+  ) async throws -> String? {
     let pox = """
     <Autodiscover xmlns="http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006">
       <Request>
@@ -96,10 +151,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     </Autodiscover>
     """
     var req = URLRequest(url: url)
-    req.httpMethod = "POST"
-    req.setValue("text/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
+    req.httpMethod = method
+    req.timeoutInterval = 15
+    if method == "POST" {
+      req.setValue("text/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
+      req.httpBody = Data(pox.utf8)
+    }
     if let auth = basicAuthHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
-    req.httpBody = Data(pox.utf8)
     let (data, response) = try await session.data(for: req)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     if status == 401 || status == 403 {

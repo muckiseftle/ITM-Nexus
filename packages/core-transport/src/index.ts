@@ -6,3 +6,5 @@ export * from './outbox';
 export * from './backoff';
 export * from './search-merge';
 export * from './autodiscover-select';
+export * from './autodiscover';
+export * from './login';

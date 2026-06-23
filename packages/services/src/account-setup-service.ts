@@ -22,19 +22,30 @@ export class AccountSetupService {
   async setUp(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
     const result = await this.transport.discover(email, credentials);
 
+    // Im manuellen Modus die feste EWS-Konfiguration bevorzugen, falls der Transport
+    // (z. B. der In-Memory-Fall) keinen Endpunkt aus der Antwort liefert.
+    const ewsUrl = result.ewsUrl ?? credentials.manual?.ewsUrl;
+    const easUrl = result.easUrl ?? credentials.manual?.easUrl;
+
     await this.secureStore.set(secretKey(email), credentials.secret);
     await this.secureStore.set(
       metaKey(email),
       JSON.stringify({
         username: credentials.username,
         scheme: credentials.scheme,
+        ...(credentials.domain !== undefined ? { domain: credentials.domain } : {}),
         auth: result.auth,
-        ewsUrl: result.ewsUrl,
-        easUrl: result.easUrl,
+        ewsUrl,
+        easUrl,
+        manual: credentials.manual !== undefined,
       }),
     );
 
-    return result;
+    return {
+      ...result,
+      ...(ewsUrl !== undefined ? { ewsUrl } : {}),
+      ...(easUrl !== undefined ? { easUrl } : {}),
+    };
   }
 
   /** Sicheres Vergessen eines Kontos (Teil der Datenlöschungs-Strategie). */

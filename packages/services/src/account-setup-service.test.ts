@@ -26,6 +26,33 @@ describe('AccountSetupService', () => {
     expect(meta).toContain('"username":"m.brandt"');
   });
 
+  it('nutzt die manuelle Serverkonfiguration und persistiert die EWS-URL', async () => {
+    const secure = new InMemorySecureStore();
+    const transport = new FakeMailTransport();
+    const service = new AccountSetupService(transport, secure);
+
+    const manualCreds: Credentials = {
+      username: 'CONTOSO\\m.brandt',
+      secret: 'geheim',
+      scheme: 'ntlm',
+      domain: 'CONTOSO',
+      manual: { ewsUrl: 'https://mail.contoso.com/EWS/Exchange.asmx' },
+    };
+
+    const result = await service.setUp('m.brandt@contoso.com', manualCreds);
+
+    // Manuelle EWS-URL gewinnt, auch wenn „Autodiscover" keinen Endpunkt liefert.
+    expect(result.ewsUrl).toBe('https://mail.contoso.com/EWS/Exchange.asmx');
+    expect(transport.lastDiscoverCredentials?.manual?.ewsUrl).toBe(
+      'https://mail.contoso.com/EWS/Exchange.asmx',
+    );
+
+    const meta = await secure.get('nexus:account:m.brandt@contoso.com');
+    expect(meta).toContain('"domain":"CONTOSO"');
+    expect(meta).toContain('"manual":true');
+    expect(meta).toContain('https://mail.contoso.com/EWS/Exchange.asmx');
+  });
+
   it('forget entfernt Secret und Metadaten', async () => {
     const secure = new InMemorySecureStore();
     const service = new AccountSetupService(new FakeMailTransport(), secure);
