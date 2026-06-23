@@ -2,6 +2,7 @@ export * from './ids';
 export * from './enums';
 export * from './models';
 export * from './mail-address';
+export * from './compose';
 export * from './message-ops';
 export * from './threading';
 export * from './folder-tree';

@@ -384,9 +384,18 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let sender = (msg?["sender"] as? [String: Any])?["address"] as? String
     let subject = msg?["subject"] as? String ?? ""
     let body = (msg?["body"] as? [String: Any])?["content"] as? String ?? ""
-    let to = (msg?["recipients"] as? [[String: Any]] ?? [])
-      .compactMap { ($0["address"] as? [String: Any])?["address"] as? String }
-    _ = try await post(EwsSoap.createItem(from: from, sender: sender, to: to, subject: subject, body: body))
+    let recipients = msg?["recipients"] as? [[String: Any]] ?? []
+    func addresses(kind: String) -> [String] {
+      recipients
+        .filter { ($0["kind"] as? String) == kind }
+        .compactMap { ($0["address"] as? [String: Any])?["address"] as? String }
+    }
+    let to = addresses(kind: "to")
+    let cc = addresses(kind: "cc")
+    let bcc = addresses(kind: "bcc")
+    _ = try await post(
+      EwsSoap.createItem(from: from, sender: sender, to: to, cc: cc, bcc: bcc, subject: subject, body: body)
+    )
     return try Self.json("sent-\(UUID().uuidString)")
   }
 

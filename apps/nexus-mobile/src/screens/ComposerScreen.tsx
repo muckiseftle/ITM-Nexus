@@ -11,62 +11,100 @@ import {
 import {
   BodyType,
   createMailAddress,
+  isValidEmail,
+  parseRecipients,
   type AccountId,
-  type MailMessage,
   type Mailbox,
+  type MessageId,
+  type Recipient,
 } from '@nexus/domain';
 import { classifyError, type ErrorInfo } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
+/** Vorbelegung des Composers (z. B. aus Antworten/Weiterleiten abgeleitet). */
+export interface ComposerInitial {
+  readonly to?: string;
+  readonly cc?: string;
+  readonly subject?: string;
+  readonly body?: string;
+  readonly inReplyTo?: MessageId;
+  /** Titel in der Kopfzeile (z. B. „Antworten", „Weiterleiten"). */
+  readonly title?: string;
+}
+
 interface Props {
   readonly container: AppContainer;
   readonly account: AccountId;
   readonly accountEmail: string;
-  /** Wenn gesetzt: Antwort auf diese Nachricht (To/Subject/inReplyTo vorbelegt). */
-  readonly replyTo?: MailMessage;
+  readonly initial?: ComposerInitial;
   readonly onClose: () => void;
   readonly onSent: () => void;
 }
 
 let composeCounter = 0;
 
+/** Validiert die geparsten Empfänger; liefert ungültige Roh-Adressen zurück. */
+function invalidAddresses(recipients: readonly Recipient[]): string[] {
+  return recipients
+    .filter((r) => !isValidEmail(r.address.address))
+    .map((r) => r.address.address);
+}
+
+function normalize(recipients: readonly Recipient[]): Recipient[] {
+  return recipients.map((r) => ({
+    kind: r.kind,
+    address: createMailAddress(r.address.address, r.address.displayName),
+  }));
+}
+
 /**
- * Verfassen/Antworten. Baut einen {@link Draft} und übergibt ihn an die getestete
- * {@link ComposeService}, die die Sende-Identität auflöst und die Nachricht in die Outbox
- * stellt. Anschließend wird die Outbox geleert (im Demo-Modus ein No-op-Versand).
+ * Verfassen/Antworten/Weiterleiten mit An/Cc/Bcc. Baut die Empfängerliste (mit
+ * Empfänger-Art) und übergibt sie an die getestete {@link ComposeService}, die die
+ * Sende-Identität auflöst und die Nachricht in die Outbox stellt. Danach wird die Outbox
+ * geleert (im Demo-Modus ein No-op-Versand).
  */
 export function ComposerScreen({
   container,
   account,
   accountEmail,
-  replyTo,
+  initial,
   onClose,
   onSent,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
 
-  const [to, setTo] = useState(replyTo ? replyTo.from.address : '');
-  const [subject, setSubject] = useState(
-    replyTo ? (replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) : '',
-  );
-  const [bodyText, setBodyText] = useState('');
+  const [to, setTo] = useState(initial?.to ?? '');
+  const [cc, setCc] = useState(initial?.cc ?? '');
+  const [bcc, setBcc] = useState('');
+  const [subject, setSubject] = useState(initial?.subject ?? '');
+  const [bodyText, setBodyText] = useState(initial?.body ?? '');
+  const [ccVisible, setCcVisible] = useState((initial?.cc ?? '').length > 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
 
+  const fail = (title: string, detail: string, technical: string): void => {
+    setError({ kind: 'unknown', title, detail, technical });
+  };
+
   const submit = async (): Promise<void> => {
-    const recipient = to.trim();
-    if (recipient.length === 0) {
-      setError({
-        kind: 'unknown',
-        title: 'Empfänger fehlt',
-        detail: 'Bitte mindestens eine Empfänger-Adresse angeben.',
-        technical: 'leerer Empfänger',
-      });
+    const recipients: Recipient[] = [
+      ...parseRecipients(to, 'to'),
+      ...parseRecipients(cc, 'cc'),
+      ...parseRecipients(bcc, 'bcc'),
+    ];
+    if (recipients.length === 0) {
+      fail('Empfänger fehlt', 'Bitte mindestens eine Empfänger-Adresse angeben.', 'leerer Empfänger');
       return;
     }
+    const invalid = invalidAddresses(recipients);
+    if (invalid.length > 0) {
+      fail('Ungültige Adresse', `Bitte prüfen: ${invalid.join(', ')}`, `ungültig: ${invalid.join(',')}`);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -83,8 +121,8 @@ export function ComposerScreen({
       await container.compose.send(account, operationId, mailbox, primaryAddress, {
         subject: subject.trim(),
         body: { type: BodyType.Text, content: bodyText },
-        recipients: [{ kind: 'to', address: createMailAddress(recipient) }],
-        ...(replyTo ? { inReplyTo: replyTo.id } : {}),
+        recipients: normalize(recipients),
+        ...(initial?.inReplyTo !== undefined ? { inReplyTo: initial.inReplyTo } : {}),
       });
       await container.outbox.drain(account);
       onSent();
@@ -101,7 +139,7 @@ export function ComposerScreen({
         <Pressable onPress={onClose} hitSlop={8}>
           <Text style={s.barAction}>Abbrechen</Text>
         </Pressable>
-        <Text style={s.barTitle}>{replyTo ? 'Antworten' : 'Neue E-Mail'}</Text>
+        <Text style={s.barTitle}>{initial?.title ?? 'Neue E-Mail'}</Text>
         <Pressable onPress={() => void submit()} disabled={busy} hitSlop={8}>
           {busy ? (
             <ActivityIndicator color={t.c.brandPrimary} />
@@ -112,7 +150,14 @@ export function ComposerScreen({
       </View>
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        <Text style={s.label}>An</Text>
+        <View style={s.labelRow}>
+          <Text style={s.label}>An</Text>
+          {!ccVisible ? (
+            <Pressable onPress={() => setCcVisible(true)} hitSlop={8}>
+              <Text style={s.ccToggle}>Cc/Bcc</Text>
+            </Pressable>
+          ) : null}
+        </View>
         <TextInput
           style={s.input}
           placeholder="empfaenger@firma.de"
@@ -123,6 +168,34 @@ export function ComposerScreen({
           value={to}
           onChangeText={setTo}
         />
+
+        {ccVisible ? (
+          <>
+            <Text style={s.label}>Cc</Text>
+            <TextInput
+              style={s.input}
+              placeholder="kopie@firma.de"
+              placeholderTextColor={t.c.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={cc}
+              onChangeText={setCc}
+            />
+            <Text style={s.label}>Bcc</Text>
+            <TextInput
+              style={s.input}
+              placeholder="blindkopie@firma.de"
+              placeholderTextColor={t.c.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={bcc}
+              onChangeText={setBcc}
+            />
+          </>
+        ) : null}
+
         <Text style={s.label}>Betreff</Text>
         <TextInput
           style={s.input}
@@ -170,6 +243,7 @@ function makeStyles(t: AppTheme) {
     barSend: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '700' },
     barTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
     body: { minHeight: 200 },
+    ccToggle: { color: t.c.brandPrimary, fontSize: typography.caption.size, fontWeight: '600' },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
     content: { padding: space.md },
     errorBox: {
@@ -192,5 +266,10 @@ function makeStyles(t: AppTheme) {
       padding: space.md,
     },
     label: { color: t.c.textSecondary, fontSize: typography.caption.size, marginBottom: space.xxs },
+    labelRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
   });
 }

@@ -1,39 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
-  BodyType,
   hasFlag,
   isUnread,
+  messageBodyToText,
   MessageFlag,
   type AccountId,
   type Attachment,
   type MailMessage,
   type MessageId,
+  type ReplyMode,
 } from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { archive, remove, setRead, toggleFlag } from '../actions/messageActions';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
-
-/** Sehr einfache HTML→Text-Reduktion (ohne WebView-Abhängigkeit; echtes HTML-Rendering folgt). */
-function htmlToText(html: string): string {
-  return html
-    .replace(/<\s*br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function bodyText(m: MailMessage): string {
-  const content = m.body?.content ?? m.preview;
-  return m.body?.type === BodyType.Html ? htmlToText(content) : content;
-}
 
 function formatSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -47,7 +28,7 @@ interface Props {
   readonly messageId: MessageId;
   readonly backLabel: string;
   readonly onBack: () => void;
-  readonly onReply: (message: MailMessage) => void;
+  readonly onCompose: (mode: ReplyMode, message: MailMessage) => void;
 }
 
 export function MessageScreen({
@@ -56,7 +37,7 @@ export function MessageScreen({
   messageId,
   backLabel,
   onBack,
-  onReply,
+  onCompose,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -126,7 +107,7 @@ export function MessageScreen({
             {message.categories.length > 0 ? (
               <Text style={s.categories}>{message.categories.join(' · ')}</Text>
             ) : null}
-            <Text style={s.body}>{bodyText(message)}</Text>
+            <Text style={s.body}>{messageBodyToText(message)}</Text>
 
             {message.attachments.length > 0 ? (
               <View style={s.attachWrap}>
@@ -145,7 +126,9 @@ export function MessageScreen({
           </ScrollView>
 
           <View style={s.actions}>
-            <Action t={t} label="Antworten" onPress={() => onReply(message)} primary />
+            <Action t={t} label="Antworten" onPress={() => onCompose('reply', message)} primary />
+            <Action t={t} label="Allen antw." onPress={() => onCompose('replyAll', message)} />
+            <Action t={t} label="Weiterleiten" onPress={() => onCompose('forward', message)} />
             <Action t={t} label={isUnread(message) ? 'Gelesen' : 'Ungelesen'} onPress={() => void onToggleRead()} />
             <Action
               t={t}

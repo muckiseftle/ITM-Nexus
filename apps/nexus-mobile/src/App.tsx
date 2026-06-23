@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import {
+  buildComposePrefill,
+  createMailAddress,
+  formatAddressList,
   toAccountId,
   toFolderId,
   type AccountId,
@@ -8,6 +11,7 @@ import {
   type MailFolder,
   type MailMessage,
   type MessageId,
+  type ReplyMode,
 } from '@nexus/domain';
 import { space } from '@nexus/ui-kit';
 import {
@@ -25,7 +29,7 @@ import { FolderDrawer } from './components/FolderDrawer';
 import { LoginScreen } from './screens/LoginScreen';
 import { MailboxScreen } from './screens/MailboxScreen';
 import { MessageScreen } from './screens/MessageScreen';
-import { ComposerScreen } from './screens/ComposerScreen';
+import { ComposerScreen, type ComposerInitial } from './screens/ComposerScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { ContactsScreen } from './screens/ContactsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -35,9 +39,33 @@ type Tab = 'mail' | 'calendar' | 'contacts' | 'settings';
 type MailRoute =
   | { readonly name: 'list' }
   | { readonly name: 'message'; readonly messageId: MessageId }
-  | { readonly name: 'compose'; readonly replyTo?: MailMessage };
+  | { readonly name: 'compose'; readonly initial?: ComposerInitial };
 
 const DEMO_EMAIL = 'demo@nexus.local';
+
+const COMPOSE_TITLES: Readonly<Record<ReplyMode, string>> = {
+  reply: 'Antworten',
+  replyAll: 'Allen antworten',
+  forward: 'Weiterleiten',
+};
+
+/** Baut die Composer-Vorbelegung (An/Cc/Betreff/Zitat) aus einer Nachricht + Antwort-Art. */
+function composerInitialFor(
+  mode: ReplyMode,
+  message: MailMessage,
+  selfEmail: string,
+): ComposerInitial {
+  const self = createMailAddress(selfEmail);
+  const p = buildComposePrefill(message, mode, self);
+  return {
+    to: formatAddressList(p.to),
+    cc: formatAddressList(p.cc),
+    subject: p.subject,
+    body: p.body,
+    title: COMPOSE_TITLES[mode],
+    ...(p.inReplyTo !== undefined ? { inReplyTo: p.inReplyTo } : {}),
+  };
+}
 
 const TABS: readonly { readonly key: Tab; readonly label: string; readonly icon: IconName }[] = [
   { key: 'mail', label: 'Mail', icon: 'mail' },
@@ -188,8 +216,11 @@ function AppInner(): React.JSX.Element {
               onBack={() => {
                 setMailRoute({ name: 'list' });
               }}
-              onReply={(message) => {
-                setMailRoute({ name: 'compose', replyTo: message });
+              onCompose={(mode, message) => {
+                setMailRoute({
+                  name: 'compose',
+                  initial: composerInitialFor(mode, message, accountEmail),
+                });
               }}
             />
           ) : mailRoute.name === 'compose' ? (
@@ -197,7 +228,7 @@ function AppInner(): React.JSX.Element {
               container={container}
               account={account}
               accountEmail={accountEmail}
-              {...(mailRoute.replyTo ? { replyTo: mailRoute.replyTo } : {})}
+              {...(mailRoute.initial ? { initial: mailRoute.initial } : {})}
               onClose={() => {
                 setMailRoute({ name: 'list' });
               }}

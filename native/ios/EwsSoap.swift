@@ -78,8 +78,21 @@ enum EwsSoap {
     """)
   }
 
-  static func createItem(from: String, sender: String?, to: [String], subject: String, body: String) -> String {
-    let recipients = to.map { "<t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox>" }.joined()
+  static func createItem(
+    from: String,
+    sender: String?,
+    to: [String],
+    cc: [String],
+    bcc: [String],
+    subject: String,
+    body: String
+  ) -> String {
+    func mailboxes(_ addresses: [String]) -> String {
+      addresses.map { "<t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox>" }.joined()
+    }
+    // Cc/Bcc nur ausgeben, wenn vorhanden — leere Recipient-Container vermeiden.
+    let ccXml = cc.isEmpty ? "" : "<t:CcRecipients>\(mailboxes(cc))</t:CcRecipients>"
+    let bccXml = bcc.isEmpty ? "" : "<t:BccRecipients>\(mailboxes(bcc))</t:BccRecipients>"
     let senderXml = sender.map { "<t:Sender><t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox></t:Sender>" } ?? ""
     return envelope("""
       <m:CreateItem MessageDisposition="SendAndSaveCopy">
@@ -87,7 +100,9 @@ enum EwsSoap {
           <t:Message>
             <t:Subject>\(xmlEscape(subject))</t:Subject>
             <t:Body BodyType="Text">\(xmlEscape(body))</t:Body>
-            <t:ToRecipients>\(recipients)</t:ToRecipients>
+            <t:ToRecipients>\(mailboxes(to))</t:ToRecipients>
+            \(ccXml)
+            \(bccXml)
             \(senderXml)
             <t:From><t:Mailbox><t:EmailAddress>\(xmlEscape(from))</t:EmailAddress></t:Mailbox></t:From>
           </t:Message>
