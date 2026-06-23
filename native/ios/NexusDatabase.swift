@@ -3,6 +3,15 @@ import SQLCipher
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+// `sqlite3_key` ist in sqlite3.h nur unter `SQLITE_HAS_CODEC` deklariert. Über die
+// vorkompilierte CocoaPods-Module-Map von SQLCipher ist das Symbol für Swift nicht
+// sichtbar („cannot find 'sqlite3_key' in scope"), obwohl der statisch gelinkte
+// SQLCipher-Pod es exportiert. Wir binden das C-Symbol daher direkt an (ADR-005).
+@_silgen_name("sqlite3_key")
+private func nexus_sqlite3_key(
+  _ db: OpaquePointer?, _ pKey: UnsafeRawPointer?, _ nKey: Int32
+) -> Int32
+
 /// Verschlüsselte lokale Datenbank (SQLCipher, AES-256 at-rest) hinter den DB-Primitiven
 /// `dbInit/dbExec/dbQuery`. Der DB-Schlüssel wird im Keychain (Secure-Enclave-gebunden,
 /// siehe `NexusSecureStore`) gehalten — ADR-005. Die JS-`SqlMailStore`-Adapter setzen
@@ -47,7 +56,7 @@ final class NexusDatabase {
     }
     // SQLCipher-Verschlüsselung aktivieren.
     let keyBytes = Array(key.utf8)
-    guard sqlite3_key(db, keyBytes, Int32(keyBytes.count)) == SQLITE_OK else {
+    guard nexus_sqlite3_key(db, keyBytes, Int32(keyBytes.count)) == SQLITE_OK else {
       throw NexusError.database("DB-Schlüssel setzen fehlgeschlagen")
     }
     // Smoke-Test, dass der Schlüssel korrekt ist.
