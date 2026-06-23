@@ -64,6 +64,53 @@ if [ "$PLATFORM" = "android" ]; then
   echo "::endgroup::"
 fi
 
+if [ "$PLATFORM" = "ios-live" ]; then
+  echo "::group::Natives iOS-Modul (NexusNative-Pod) integrieren"
+  # Live-Modus aktivieren (echtes Exchange via native Module).
+  sed -i '' "s/APP_MODE: 'demo' | 'live' = 'demo'/APP_MODE: 'demo' | 'live' = 'live'/" src/config.ts || \
+    sed -i "s/APP_MODE: 'demo' | 'live' = 'demo'/APP_MODE: 'demo' | 'live' = 'live'/" src/config.ts
+  # Den lokalen Pod in den App-Target-Block der Podfile eintragen.
+  # SQLCipher (C-Pod ohne Module-Map) braucht :modular_headers => true, damit der
+  # Swift-Pod NexusNative es per `import SQLCipher` einbinden kann (sonst bricht
+  # `pod install` mit „cannot yet be integrated as static libraries" ab).
+  ROOT="$ROOT" ruby -e '
+    path = File.join(ENV["ROOT"], "native", "ios")
+    pf = "ios/Podfile"
+    out = []
+    File.readlines(pf).each do |l|
+      out << l
+      if l =~ /target .NEXUS. do/
+        out << "  pod \x27SQLCipher\x27, :modular_headers => true\n"
+        out << "  pod \x27NexusNative\x27, :path => \x27#{path}\x27\n"
+      end
+    end
+    File.write(pf, out.join)
+  '
+  cat ios/Podfile | grep -n "NexusNative\|SQLCipher" || true
+  echo "::endgroup::"
+
+  echo "::group::iOS-Live-Build (Gerät, UNSIGNIERT, mit nativem Modul)"
+  ( cd ios && pod install )
+  xcodebuild \
+    -workspace ios/NEXUS.xcworkspace \
+    -scheme NEXUS \
+    -configuration Release \
+    -sdk iphoneos \
+    -derivedDataPath ios-build \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGN_IDENTITY="" \
+    PROVISIONING_PROFILE_SPECIFIER="" \
+    build
+  APP_PATH="$(find ios-build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)"
+  if [ -z "$APP_PATH" ]; then echo "Kein .app-Bundle gefunden"; exit 1; fi
+  rm -rf Payload && mkdir Payload
+  cp -R "$APP_PATH" Payload/
+  zip -qry "$ARTIFACTS/nexus-live-unsigned.ipa" Payload
+  echo "IPA: $ARTIFACTS/nexus-live-unsigned.ipa (LIVE, unsigniert — mit Sideloadly aufs iPhone)"
+  echo "::endgroup::"
+fi
+
 if [ "$PLATFORM" = "ios" ]; then
   echo "::group::iOS-Build (Gerät, UNSIGNIERT → IPA zum Sideloaden)"
   ( cd ios && pod install )
