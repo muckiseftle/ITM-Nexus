@@ -47,7 +47,7 @@
       @keyframes inBack { from{opacity:0;transform:translateX(-26px)} to{opacity:1;transform:none} }
       @keyframes inFade { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
       @keyframes rowIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-      .stagger > .row, .stagger > .c-row, .stagger > .cal-row, .stagger > .card { animation: rowIn .32s ease both; }
+      .stagger > .row, .stagger > .c-row, .stagger > .cal-row, .stagger > .card, .stagger > .evc { animation: rowIn .32s ease both; }
       .stagger > *:nth-child(2){animation-delay:.02s}.stagger > *:nth-child(3){animation-delay:.05s}
       .stagger > *:nth-child(4){animation-delay:.08s}.stagger > *:nth-child(5){animation-delay:.11s}
       .stagger > *:nth-child(6){animation-delay:.14s}.stagger > *:nth-child(7){animation-delay:.17s}
@@ -161,12 +161,11 @@
       .seg button.active { background: #fff; color: var(--textPrimary); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
       .day-h { padding: var(--md) var(--md) var(--xs); font-size: var(--fCaption); font-weight: 700; color: var(--textSecondary); text-transform: uppercase; letter-spacing: .03em; }
       .day-h.today { color: var(--brandPrimary); }
-      .ev { display: flex; align-items: stretch; gap: var(--sm); padding: 8px var(--md); cursor: pointer; }
-      .ev:active { background: var(--bgElevated); }
-      .evtime { width: 54px; flex: 0 0 auto; text-align: right; color: var(--textSecondary); font-size: var(--fCaption); padding-top: 2px; }
-      .ev .bar { width: 4px; border-radius: 2px; flex: 0 0 auto; }
+      .evc { display: flex; align-items: center; gap: 10px; margin: 4px var(--md); padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: transform .12s; }
+      .evc:active { transform: scale(.99); filter: brightness(.97); }
+      .evc .edot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
       .evbody { flex: 1; min-width: 0; }
-      .evtitle { font-size: var(--fBody); font-weight: 600; color: var(--textPrimary); }
+      .evtitle { font-size: var(--fBody); font-weight: 600; color: var(--textPrimary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .evmeta { font-size: var(--fCaption); color: var(--textSecondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .daynav { display: flex; align-items: center; gap: var(--xs); padding: var(--xs) var(--sm); }
       .daynav-title { flex: 1; text-align: center; font-weight: 700; color: var(--textPrimary); }
@@ -535,11 +534,11 @@
 
       function evRow(e) {
         const c = calOf(e.cal);
-        return `<div class="ev" onclick="toast('${esc(e.title)}')">
-          <div class="evtime">${e.allDay ? 'ganztg.' : hm(e.start)}</div>
-          <div class="bar" style="background:${c.color}"></div>
+        const t = e.allDay ? 'Ganztägig' : hm(e.start) + '–' + hm(e.end);
+        return `<div class="evc" style="background:${c.color}1a" onclick="toast('${esc(e.title)}')">
+          <span class="edot" style="background:${c.color}"></span>
           <div class="evbody"><div class="evtitle">${esc(e.title)}</div>
-            <div class="evmeta">${e.allDay ? 'Ganztägig' : hm(e.start) + '–' + hm(e.end)}${e.loc ? ' · ' + esc(e.loc) : ''} · ${esc(c.name)}</div></div></div>`;
+            <div class="evmeta">${t}${e.loc ? ' · ' + esc(e.loc) : ''} · ${esc(c.name)}</div></div></div>`;
       }
       function dayHeader(d0) {
         return `<div class="day-h ${d0 === T ? 'today' : ''}">${d0 === T ? 'Heute · ' : ''}${esc(longDay(d0))}</div>`;
