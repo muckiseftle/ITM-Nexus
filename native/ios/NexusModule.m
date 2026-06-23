@@ -42,5 +42,7 @@ RCT_EXTERN_METHOD(transportConfigurePinning:(NSString *)pinsJson
 RCT_EXTERN_METHOD(transportPing:(NSString *)accountId folderIdsJson:(NSString *)folderIdsJson timeoutSec:(nonnull NSNumber *)timeoutSec
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportScheduleBackgroundSync:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportGetAttachment:(NSString *)accountId attachmentId:(NSString *)attachmentId
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
 @end

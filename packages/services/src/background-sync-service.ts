@@ -1,5 +1,5 @@
 import type { AccountId, FolderId } from '@nexus/domain';
-import type { Clock, PingResult, SyncTarget } from '@nexus/core-transport';
+import type { Clock, PingResult, SyncCursorStore, SyncTarget } from '@nexus/core-transport';
 import { dueSyncTargets, targetKey } from '@nexus/core-transport';
 import type { SyncService } from './sync-service';
 import type { FolderSyncService } from './folder-sync-service';
@@ -31,7 +31,12 @@ export class BackgroundSyncService {
     private readonly outbox: OutboxProcessor,
     private readonly clock: Clock,
     private readonly targets: readonly SyncTarget[],
+    private readonly cursors: SyncCursorStore,
   ) {}
+
+  private cursorKey(accountId: AccountId, key: string): string {
+    return `${accountId}:${key}`;
+  }
 
   /** Führt alle aktuell fälligen Sync-Ziele aus und verarbeitet die Outbox. */
   async runDue(
@@ -58,25 +63,38 @@ export class BackgroundSyncService {
       return [];
     }
     for (const folderId of result.changedFolderIds) {
-      await this.messages.syncMessages(accountId, folderId);
+      const ck = this.cursorKey(accountId, `messages:${folderId}`);
+      const cursor = await this.cursors.getCursor(ck);
+      const res = await this.messages.syncMessages(accountId, folderId, cursor);
+      await this.cursors.setCursor(ck, res.syncKey);
       this.lastRun.set(`messages:${folderId}`, this.clock.now());
     }
     await this.outbox.drain(accountId);
     return result.changedFolderIds;
   }
 
-  private runTarget(accountId: AccountId, target: SyncTarget): Promise<unknown> {
+  /** Führt ein Sync-Ziel inkrementell aus (lädt vorigen Cursor, speichert den neuen). */
+  private async runTarget(accountId: AccountId, target: SyncTarget): Promise<void> {
+    const ck = this.cursorKey(accountId, targetKey(target));
+    const cursor = await this.cursors.getCursor(ck);
+    let syncKey: string | undefined;
     switch (target.kind) {
       case 'messages':
-        return target.folderId !== undefined
-          ? this.messages.syncMessages(accountId, target.folderId)
-          : Promise.resolve();
+        if (target.folderId === undefined) return;
+        syncKey = (await this.messages.syncMessages(accountId, target.folderId, cursor)).syncKey;
+        break;
       case 'folders':
-        return this.folders.sync(accountId);
+        syncKey = (await this.folders.sync(accountId, cursor)).syncKey;
+        break;
       case 'calendar':
-        return this.calendar.sync(accountId);
+        syncKey = (await this.calendar.sync(accountId, cursor)).syncKey;
+        break;
       case 'contacts':
-        return this.contacts.sync(accountId);
+        syncKey = (await this.contacts.sync(accountId, cursor)).syncKey;
+        break;
+    }
+    if (syncKey !== '') {
+      await this.cursors.setCursor(ck, syncKey);
     }
   }
 }

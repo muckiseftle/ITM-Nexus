@@ -15,9 +15,6 @@ import {
   ComposeService,
   ContactsService,
   FolderSyncService,
-  InMemoryCalendarStore,
-  InMemoryContactStore,
-  InMemoryFolderStore,
   OutboxProcessor,
   RuleProcessor,
   SearchService,
@@ -29,7 +26,11 @@ import {
   configurePinning,
   NativeMailTransport,
   NativeSecureStore,
+  SqlCalendarStore,
+  SqlContactStore,
+  SqlFolderStore,
   SqlMailStore,
+  SqlSyncCursorStore,
 } from '../native/adapters';
 import { DEMO_INBOX_ID, PINNING, SYNC_INTERVALS } from '../config';
 
@@ -87,11 +88,11 @@ export async function createContainer(): Promise<AppContainer> {
 
   const secureStore = new NativeSecureStore();
   const mailStore = new SqlMailStore();
-  // Ordner/Kalender/Kontakte liegen noch nicht im nativen Store — vorerst In-Memory (Stopgap),
-  // bis die native DB sie ebenfalls abbildet.
-  const folderStore = new InMemoryFolderStore();
-  const calendarStore = new InMemoryCalendarStore();
-  const contactStore = new InMemoryContactStore();
+  // Ordner/Kalender/Kontakte liegen jetzt ebenfalls in der verschlüsselten SQLCipher-DB.
+  const folderStore = new SqlFolderStore();
+  const calendarStore = new SqlCalendarStore();
+  const contactStore = new SqlContactStore();
+  const cursors = new SqlSyncCursorStore();
   const transport = new NativeMailTransport(DEFAULT_CAPABILITIES);
 
   const outbox = new OutboxProcessor(transport, mailStore, systemClock);
@@ -122,6 +123,7 @@ export async function createContainer(): Promise<AppContainer> {
       outbox,
       systemClock,
       defaultSyncTargets(),
+      cursors,
     ),
     push: transport,
     scheduleBackgroundSync: async () => {

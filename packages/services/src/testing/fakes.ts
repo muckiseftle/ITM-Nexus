@@ -11,6 +11,7 @@ import type {
 } from '@nexus/domain';
 import { FolderType, toContactId, toEventId, toFolderId, toMessageId } from '@nexus/domain';
 import type {
+  AttachmentContent,
   AutodiscoverResult,
   Clock,
   Credentials,
@@ -81,11 +82,15 @@ export class FakeMailTransport implements MailTransport {
     return Promise.resolve(result);
   }
 
+  /** Zuletzt an `syncMessages` übergebener Cursor (für Delta-Sync-Assertions). */
+  lastMessageSyncKey: string | undefined = undefined;
+
   syncMessages(
     _accountId: AccountId,
     _folderId: FolderId,
-    _syncKey?: string,
+    syncKey?: string,
   ): Promise<SyncDelta<MailMessage>> {
+    this.lastMessageSyncKey = syncKey;
     const delta: SyncDelta<MailMessage> = this.config.messageDelta ?? {
       syncKey: 'sk-0',
       created: [],
@@ -132,6 +137,15 @@ export class FakeMailTransport implements MailTransport {
   }
   sendMessage(_accountId: AccountId, _message: OutgoingMessage): Promise<MessageId> {
     return Promise.resolve(toMessageId('sent-1'));
+  }
+  getAttachment(_accountId: AccountId, attachmentId: string): Promise<AttachmentContent> {
+    return Promise.resolve({
+      id: attachmentId,
+      name: 'datei.bin',
+      contentType: 'application/octet-stream',
+      sizeBytes: 3,
+      base64: 'AQID',
+    });
   }
 }
 

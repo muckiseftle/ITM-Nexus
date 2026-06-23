@@ -11,6 +11,7 @@ import type {
 } from '@nexus/domain';
 import { toMessageId } from '@nexus/domain';
 import type {
+  AttachmentContent,
   AutodiscoverResult,
   Credentials,
   MailTransport,
@@ -91,6 +92,17 @@ export class InMemoryMailTransport implements MailTransport {
   sendMessage(_accountId: AccountId, _message: OutgoingMessage): Promise<MessageId> {
     this.sentCounter += 1;
     return Promise.resolve(toMessageId(`demo-sent-${String(this.sentCounter)}`));
+  }
+
+  getAttachment(_accountId: AccountId, attachmentId: string): Promise<AttachmentContent> {
+    // Demo: kleiner Text-„Anhang", damit die UI ohne Server etwas anzeigen kann.
+    return Promise.resolve({
+      id: attachmentId,
+      name: 'demo.txt',
+      contentType: 'text/plain',
+      sizeBytes: 11,
+      base64: 'TkVYVVMgZGVtbw==',
+    });
   }
 
   searchServer(_accountId: AccountId, _query: string): Promise<readonly SearchHit[]> {

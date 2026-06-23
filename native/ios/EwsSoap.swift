@@ -47,10 +47,34 @@ enum EwsSoap {
       <m:GetItem>
         <m:ItemShape>
           <t:BaseShape>Default</t:BaseShape>
-          <t:BodyType>Text</t:BodyType>
+          <t:BodyType>HTML</t:BodyType>
+          <t:AdditionalProperties>
+            <t:FieldURI FieldURI="item:Attachments"/>
+            <t:FieldURI FieldURI="item:HasAttachments"/>
+          </t:AdditionalProperties>
         </m:ItemShape>
         <m:ItemIds>\(refs)</m:ItemIds>
       </m:GetItem>
+    """)
+  }
+
+  /// GetItem nur mit Id-/Text-Shape (für Kalender/Kontakte, ohne HTML/Anhänge).
+  static func getItemsLight(ids: [String]) -> String {
+    let refs = ids.map { "<t:ItemId Id=\"\(xmlEscape($0))\"/>" }.joined()
+    return envelope("""
+      <m:GetItem>
+        <m:ItemShape><t:BaseShape>Default</t:BaseShape><t:BodyType>Text</t:BodyType></m:ItemShape>
+        <m:ItemIds>\(refs)</m:ItemIds>
+      </m:GetItem>
+    """)
+  }
+
+  /// Lädt den Inhalt eines Anhangs (Base64) über EWS GetAttachment.
+  static func getAttachment(id: String) -> String {
+    envelope("""
+      <m:GetAttachment>
+        <m:AttachmentIds><t:AttachmentId Id="\(xmlEscape(id))"/></m:AttachmentIds>
+      </m:GetAttachment>
     """)
   }
 
@@ -214,6 +238,14 @@ enum EwsSoap {
 
   // MARK: Response-Parsing (Kernfelder)
 
+  struct ParsedAttachment {
+    var id = ""
+    var name = ""
+    var contentType = "application/octet-stream"
+    var size = 0
+    var isInline = false
+  }
+
   struct ParsedItem {
     var id = ""
     var subject = ""
@@ -222,6 +254,17 @@ enum EwsSoap {
     var receivedAt: Double = 0
     var isRead = false
     var preview = ""
+    var body = ""
+    var bodyHtml = false
+    var hasAttachments = false
+    var attachments: [ParsedAttachment] = []
+  }
+
+  struct ParsedAttachmentContent {
+    var name = ""
+    var contentType = "application/octet-stream"
+    var base64 = ""
+    var size = 0
   }
 
   /// Extrahiert `ItemId`-Werte aus einer SyncFolderItems/FindItem-Antwort.
@@ -231,6 +274,24 @@ enum EwsSoap {
     xmlParser.delegate = parser
     xmlParser.parse()
     return parser.ids
+  }
+
+  /// Liest den neuen `<m:SyncState>` aus einer SyncFolderItems-Antwort (Delta-Cursor).
+  static func extractSyncState(_ xml: Data) -> String? {
+    let p = SyncStateParser()
+    let xp = XMLParser(data: xml)
+    xp.delegate = p
+    xp.parse()
+    return p.state.isEmpty ? nil : p.state
+  }
+
+  /// Parst eine GetAttachment-Antwort (erster FileAttachment-Inhalt als Base64).
+  static func parseAttachmentContent(_ xml: Data) -> ParsedAttachmentContent {
+    let p = AttachmentContentParser()
+    let xp = XMLParser(data: xml)
+    xp.delegate = p
+    xp.parse()
+    return p.result
   }
 
   /// Parst eine GetItem-Antwort in `ParsedItem`s.
@@ -252,19 +313,30 @@ private final class ItemIdParser: NSObject, XMLParserDelegate {
   }
 }
 
-/// Minimaler GetItem-Parser für die Domänen-Kernfelder.
+/// GetItem-Parser für Kernfelder inkl. HTML-Body und Datei-Anhängen (Metadaten).
 private final class ItemParser: NSObject, XMLParserDelegate {
   var items: [EwsSoap.ParsedItem] = []
   private var current: EwsSoap.ParsedItem?
-  private var path: [String] = []
   private var text = ""
+  private var bodyType = "Text"
+  private var inAttachment = false
+  private var curAtt: EwsSoap.ParsedAttachment?
+
+  private static func stripHtml(_ s: String) -> String {
+    s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+      .replacingOccurrences(of: "&nbsp;", with: " ")
+      .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
 
   func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
               qualifiedName: String?, attributes attrs: [String: String]) {
-    path.append(name)
     text = ""
-    if name == "Message" || name == "Item" { current = EwsSoap.ParsedItem() }
-    if name == "ItemId", let id = attrs["Id"] { current?.id = id }
+    if name == "Message" || name == "Item" || name == "MeetingRequest" { current = EwsSoap.ParsedItem() }
+    if name == "ItemId", !inAttachment, let id = attrs["Id"] { current?.id = id }
+    if name == "Body" { bodyType = attrs["BodyType"] ?? "Text" }
+    if name == "FileAttachment" || name == "ItemAttachment" { inAttachment = true; curAtt = EwsSoap.ParsedAttachment() }
+    if name == "AttachmentId", inAttachment, let id = attrs["Id"] { curAtt?.id = id }
   }
 
   func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
@@ -272,18 +344,59 @@ private final class ItemParser: NSObject, XMLParserDelegate {
   func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?,
               qualifiedName: String?) {
     switch name {
-    case "Subject": current?.subject = text
-    case "Name": current?.fromName = text
-    case "EmailAddress": current?.fromAddress = text
+    case "Subject": if !inAttachment { current?.subject = text }
+    case "Name": if inAttachment { curAtt?.name = text } else if current?.fromName.isEmpty == true { current?.fromName = text }
+    case "EmailAddress": if !inAttachment, current?.fromAddress.isEmpty == true { current?.fromAddress = text }
     case "DateTimeReceived":
-      let fmt = ISO8601DateFormatter()
-      current?.receivedAt = (fmt.date(from: text)?.timeIntervalSince1970 ?? 0) * 1000
+      current?.receivedAt = (ISO8601DateFormatter().date(from: text)?.timeIntervalSince1970 ?? 0) * 1000
     case "IsRead": current?.isRead = (text == "true")
-    case "Body": if current?.preview.isEmpty == true { current?.preview = String(text.prefix(140)) }
-    case "Message", "Item": if let item = current { items.append(item); current = nil }
+    case "HasAttachments": current?.hasAttachments = (text == "true")
+    case "ContentType": if inAttachment { curAtt?.contentType = text }
+    case "Size": if inAttachment { curAtt?.size = Int(text) ?? 0 }
+    case "IsInline": if inAttachment { curAtt?.isInline = (text == "true") }
+    case "Body":
+      current?.body = text
+      current?.bodyHtml = (bodyType == "HTML")
+      current?.preview = String((bodyType == "HTML" ? Self.stripHtml(text) : text).prefix(140))
+    case "FileAttachment", "ItemAttachment":
+      if let a = curAtt { current?.attachments.append(a) }
+      inAttachment = false; curAtt = nil
+    case "Message", "Item", "MeetingRequest":
+      if let item = current { items.append(item); current = nil }
     default: break
     }
-    path.removeLast()
+    text = ""
+  }
+}
+
+/// Liest den `<SyncState>`-Wert (Delta-Cursor) aus einer SyncFolderItems-Antwort.
+private final class SyncStateParser: NSObject, XMLParserDelegate {
+  var state = ""
+  private var capture = false
+  private var text = ""
+  func parser(_ p: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) {
+    if name == "SyncState" { capture = true; text = "" }
+  }
+  func parser(_ p: XMLParser, foundCharacters string: String) { if capture { text += string } }
+  func parser(_ p: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+    if name == "SyncState" { state = text; capture = false }
+  }
+}
+
+/// Liest Name/ContentType/Content(Base64)/Size aus einer GetAttachment-Antwort.
+private final class AttachmentContentParser: NSObject, XMLParserDelegate {
+  var result = EwsSoap.ParsedAttachmentContent()
+  private var text = ""
+  func parser(_ p: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes a: [String: String]) { text = "" }
+  func parser(_ p: XMLParser, foundCharacters string: String) { text += string }
+  func parser(_ p: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+    switch name {
+    case "Name": if result.name.isEmpty { result.name = text }
+    case "ContentType": if result.contentType == "application/octet-stream" { result.contentType = text }
+    case "Size": result.size = Int(text) ?? result.size
+    case "Content": result.base64 = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    default: break
+    }
     text = ""
   }
 }

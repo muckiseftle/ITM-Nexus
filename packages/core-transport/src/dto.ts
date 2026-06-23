@@ -47,3 +47,13 @@ export interface SyncDelta<T> {
   readonly deletedIds: readonly string[];
   readonly hasMore: boolean;
 }
+
+/** Heruntergeladener Anhangsinhalt (Base64) — vom Transport (EWS GetAttachment) geladen. */
+export interface AttachmentContent {
+  readonly id: string;
+  readonly name: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+  /** Inhalt als Base64 (im nativen SecureStore/Cache; nie im Klartext geloggt). */
+  readonly base64: string;
+}

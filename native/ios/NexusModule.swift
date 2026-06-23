@@ -155,4 +155,12 @@ final class NexusModule: NSObject {
     NexusBackgroundSync.schedule()
     resolve(nil)
   }
+
+  @objc(transportGetAttachment:attachmentId:resolver:rejecter:)
+  func transportGetAttachment(_ accountId: String, attachmentId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.getAttachment(accountId: accountId, attachmentId: attachmentId)) }
+      catch { reject("transport_attachment", "\(error)", error) }
+    }
+  }
 }

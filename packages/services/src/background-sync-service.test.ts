@@ -12,6 +12,7 @@ import {
   InMemoryContactStore,
   InMemoryFolderStore,
   InMemoryMailStore,
+  InMemorySyncCursorStore,
 } from './in-memory-store';
 import { FakeMailTransport, ManualClock, makeMessage } from './testing/fakes';
 
@@ -31,11 +32,13 @@ function build(
 ): {
   service: BackgroundSyncService;
   mailStore: InMemoryMailStore;
+  cursors: InMemorySyncCursorStore;
 } {
   const mailStore = new InMemoryMailStore();
   const folderStore = new InMemoryFolderStore();
   const calendarStore = new InMemoryCalendarStore();
   const contactStore = new InMemoryContactStore();
+  const cursors = new InMemorySyncCursorStore();
   const outbox = new OutboxProcessor(transport, mailStore, clock);
   const service = new BackgroundSyncService(
     new SyncService(transport, mailStore),
@@ -45,8 +48,9 @@ function build(
     outbox,
     clock,
     targets,
+    cursors,
   );
-  return { service, mailStore };
+  return { service, mailStore, cursors };
 }
 
 describe('BackgroundSyncService', () => {
@@ -94,5 +98,23 @@ describe('BackgroundSyncService', () => {
     expect(await service.applyPing(account, { status: 'timeout', changedFolderIds: [] })).toEqual(
       [],
     );
+  });
+
+  it('persistiert den Sync-Cursor und reicht ihn beim nächsten Lauf inkrementell ein', async () => {
+    const clock = new ManualClock(1_000_000);
+    const transport = new FakeMailTransport({
+      messageDelta: { syncKey: 'sk-42', created: [], updated: [], deletedIds: [], hasMore: false },
+    });
+    const { service, cursors } = build(transport, clock);
+
+    // Erster Lauf: ohne Cursor → Transport bekommt undefined, neuer Cursor wird gespeichert.
+    await service.runDue(account);
+    expect(transport.lastMessageSyncKey).toBeUndefined();
+    expect(await cursors.getCursor('acc:messages:inbox')).toBe('sk-42');
+
+    // Zweiter Lauf (messages wieder fällig): gespeicherter Cursor wird eingereicht.
+    clock.advance(120_000);
+    await service.runDue(account);
+    expect(transport.lastMessageSyncKey).toBe('sk-42');
   });
 });

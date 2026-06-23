@@ -260,16 +260,26 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
     let syncXml = try await post(EwsSoap.syncFolderItems(folderId: mapFolder(folderId), syncState: syncKey))
     let ids = EwsSoap.extractItemIds(syncXml)
+    let newState = EwsSoap.extractSyncState(syncXml) ?? (syncKey ?? "")
     var created: [[String: Any]] = []
     if !ids.isEmpty {
       let itemsXml = try await post(EwsSoap.getItems(ids: ids))
       created = EwsSoap.parseItems(itemsXml).map { Self.messageJson($0, accountId: accountId, folderId: folderId) }
     }
     let delta: [String: Any] = [
-      "syncKey": syncKey ?? "", "created": created, "updated": [],
+      "syncKey": newState, "created": created, "updated": [],
       "deletedIds": [], "hasMore": false,
     ]
     return try Self.json(delta)
+  }
+
+  func getAttachment(accountId: String, attachmentId: String) async throws -> String {
+    let xml = try await post(EwsSoap.getAttachment(id: attachmentId))
+    let a = EwsSoap.parseAttachmentContent(xml)
+    return try Self.json([
+      "id": attachmentId, "name": a.name, "contentType": a.contentType,
+      "sizeBytes": a.size, "base64": a.base64,
+    ])
   }
 
   func applyOperation(operationJson: String) async throws {
@@ -318,10 +328,12 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func syncCalendar(accountId: String, syncKey: String?) async throws -> String {
-    let ids = EwsSoap.extractItemIds(try await post(EwsSoap.syncFolderItemsIdOnly(distinguished: "calendar", syncState: syncKey)))
+    let xml = try await post(EwsSoap.syncFolderItemsIdOnly(distinguished: "calendar", syncState: syncKey))
+    let ids = EwsSoap.extractItemIds(xml)
+    let newState = EwsSoap.extractSyncState(xml) ?? (syncKey ?? "")
     var created: [[String: Any]] = []
     if !ids.isEmpty {
-      created = EwsSoap.parseEvents(try await post(EwsSoap.getItems(ids: ids))).map { (e) in
+      created = EwsSoap.parseEvents(try await post(EwsSoap.getItemsLight(ids: ids))).map { (e) in
         [
           "id": e.id, "accountId": accountId, "subject": e.subject, "startAt": e.start, "endAt": e.end,
           "isAllDay": false, "location": e.location,
@@ -329,21 +341,23 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         ]
       }
     }
-    return try Self.json(["syncKey": syncKey ?? "", "created": created, "updated": [], "deletedIds": [], "hasMore": false])
+    return try Self.json(["syncKey": newState, "created": created, "updated": [], "deletedIds": [], "hasMore": false])
   }
 
   func syncContacts(accountId: String, syncKey: String?) async throws -> String {
-    let ids = EwsSoap.extractItemIds(try await post(EwsSoap.syncFolderItemsIdOnly(distinguished: "contacts", syncState: syncKey)))
+    let xml = try await post(EwsSoap.syncFolderItemsIdOnly(distinguished: "contacts", syncState: syncKey))
+    let ids = EwsSoap.extractItemIds(xml)
+    let newState = EwsSoap.extractSyncState(xml) ?? (syncKey ?? "")
     var created: [[String: Any]] = []
     if !ids.isEmpty {
-      created = EwsSoap.parseContacts(try await post(EwsSoap.getItems(ids: ids))).map { (c) in
+      created = EwsSoap.parseContacts(try await post(EwsSoap.getItemsLight(ids: ids))).map { (c) in
         [
           "id": c.id, "accountId": accountId, "displayName": c.displayName,
           "emailAddresses": c.email.isEmpty ? [] : [["address": c.email]],
         ]
       }
     }
-    return try Self.json(["syncKey": syncKey ?? "", "created": created, "updated": [], "deletedIds": [], "hasMore": false])
+    return try Self.json(["syncKey": newState, "created": created, "updated": [], "deletedIds": [], "hasMore": false])
   }
 
   func getMessage(accountId: String, messageId: String) async throws -> String {
@@ -458,14 +472,18 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   private static func messageJson(_ item: EwsSoap.ParsedItem, accountId: String, folderId: String) -> [String: Any] {
-    [
+    let attachments = item.attachments.map { (a) -> [String: Any] in
+      ["id": a.id, "name": a.name, "contentType": a.contentType, "sizeBytes": a.size, "isInline": a.isInline]
+    }
+    return [
       "id": item.id, "accountId": accountId, "folderId": folderId,
       "subject": item.subject,
       "from": ["address": item.fromAddress, "displayName": item.fromName],
       "recipients": [], "receivedAt": item.receivedAt, "importance": "normal",
       "flags": item.isRead ? ["read"] : [], "categories": [],
-      "hasAttachments": false, "attachments": [], "preview": item.preview,
-      "body": ["type": "text", "content": item.preview],
+      "hasAttachments": item.hasAttachments || !attachments.isEmpty,
+      "attachments": attachments, "preview": item.preview,
+      "body": ["type": item.bodyHtml ? "html" : "text", "content": item.body.isEmpty ? item.preview : item.body],
     ]
   }
 

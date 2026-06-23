@@ -46,6 +46,9 @@ export interface NexusNativeModule {
 
   // — iOS-Hintergrund-Sync (BGTaskScheduler) —
   transportScheduleBackgroundSync(): Promise<void>;
+
+  // — Anhänge (EWS GetAttachment) — Rückgabe ist JSON-String —
+  transportGetAttachment(accountId: string, attachmentId: string): Promise<string>;
 }
 
 function resolveNative(): NexusNativeModule {
