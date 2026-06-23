@@ -1,14 +1,14 @@
 # Phase 5 — UX & Design
 
 > Designprinzipien, Design System, Navigation, Flows und Accessibility für NEXUS.
-> Anspruch: **einfacher, moderner und schneller** als Outlook — auf vier Plattformen.
+> Anspruch: **einfach, modern und schnell** — auf vier Plattformen.
 
 ---
 
 ## 1. Designprinzipien
 
-1. **Apple-inspiriert, plattform-respektierend.** Klar, ruhig, inhaltsfokussiert — aber
-   auf jeder Plattform wie ein Bürger der Plattform (HIG auf Apple, Material auf Android).
+1. **Klar & plattform-respektierend.** Klar, ruhig, inhaltsfokussiert — aber
+   auf jeder Plattform wie ein Bürger der Plattform (HIG auf iOS/macOS, Material auf Android).
 2. **Geschwindigkeit ist ein Feature.** Optimistic UI, sofortige Reaktion, keine Spinner
    wo lokale Daten verfügbar sind.
 3. **Minimalismus mit Tiefe.** Aufgeräumte Oberfläche; Power-Features (Delegation,
@@ -44,7 +44,7 @@ elevation     = subtil, schattenarm (flach, modern)
 ```
 
 ### 2.2 Typografie
-- **Apple:** SF Pro (System). **Android:** Roboto/System. Dynamische Schriftgrößen
+- **iOS/macOS:** System-Schrift (SF Pro). **Android:** Roboto/System. Dynamische Schriftgrößen
   (Dynamic Type / Font Scaling) durchgängig.
 - Hierarchie: `Title` (Postfach), `Headline` (Betreff), `Body` (Inhalt), `Caption` (Meta).
 

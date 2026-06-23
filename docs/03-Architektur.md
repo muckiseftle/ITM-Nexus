@@ -240,11 +240,11 @@ flowchart LR
 | UI-Framework | React Native CLI (+ RN-macOS) |
 | Sprache UI | TypeScript (`strict`) |
 | State | Redux Toolkit **oder** Zustand (Festlegung in Phase 10) |
-| Native | Swift (Apple), Kotlin (Android) |
+| Native | Swift (iOS/macOS), Kotlin (Android) |
 | Bridge | TurboModules / JSI |
 | DB | SQLite + **SQLCipher** |
 | Suche | SQLite **FTS5** |
-| Secure-Storage | Keychain (Apple) / Android Keystore |
+| Secure-Storage | Keychain (iOS/macOS) / Android Keystore |
 | Transport | EWS (SOAP/XML) + EAS (WBXML) + Autodiscover |
 | Krypto/S/MIME | native Plattform-Krypto + S/MIME-Bibliotheken |
 | Push | APNs / FCM (Weck-Signal) + EAS Direct Push |

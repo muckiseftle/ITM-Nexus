@@ -3,8 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 /**
  * Dependency-freie Linien-Icons (ohne `react-native-svg`, damit der native Build schlank
- * bleibt). Die vier Tab-Symbole sind aus RN-Views komponiert und erben die Farbe — so wirken
- * sie monochrom wie SF-Symbols und passen sich Hell/Dunkel an.
+ * bleibt). Die vier Tab-Symbole sind aus RN-Views komponiert und erben die Farbe — so bleiben
+ * sie monochrom und passen sich Hell/Dunkel an.
  */
 export type IconName = 'mail' | 'calendar' | 'contacts' | 'more';
 

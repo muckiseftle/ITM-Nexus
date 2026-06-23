@@ -95,7 +95,7 @@ if [ "$PLATFORM" = "ios-live" ]; then
   /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string processing" "$PLIST" 2>/dev/null || true
   /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers array" "$PLIST" 2>/dev/null || true
   /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers:0 string de.itm.nexus.refresh" "$PLIST" 2>/dev/null || true
-  # BGTask-Handler VOR Ende von didFinishLaunchingWithOptions registrieren (Apple-Vorgabe).
+  # BGTask-Handler VOR Ende von didFinishLaunchingWithOptions registrieren (iOS-Vorgabe).
   ruby -e '
     p = "ios/NEXUS/AppDelegate.swift"
     if File.exist?(p)
