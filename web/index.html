@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="NEXUS" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="icon" href="icon.svg" />
+    <title>NEXUS</title>
+    <style>
+      /* Design-Tokens — identisch zu packages/ui-kit/src/tokens.ts */
+      :root {
+        --brandPrimary: #2563eb;
+        --brandPrimaryDark: #1d4ed8;
+        --accent: #0ea5e9;
+        --success: #16a34a;
+        --warning: #d97706;
+        --danger: #dc2626;
+        --bgCanvas: #ffffff;
+        --bgElevated: #f7f8fa;
+        --textPrimary: #0b0f14;
+        --textSecondary: #5b6573;
+        --xxs: 4px;
+        --xs: 8px;
+        --sm: 12px;
+        --md: 16px;
+        --lg: 24px;
+        --xl: 32px;
+        --rsm: 8px;
+        --rmd: 12px;
+        --rlg: 16px;
+        --pill: 999px;
+        --fTitle: 28px;
+        --fHeadline: 20px;
+        --fBody: 16px;
+        --fCaption: 13px;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0f14;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        overscroll-behavior: none;
+      }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        min-height: 540px;
+        max-width: 480px;
+        margin: 0 auto;
+        background: var(--bgCanvas);
+        position: relative;
+        overflow: hidden;
+      }
+      #screen {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: env(safe-area-inset-bottom);
+        will-change: transform, opacity;
+      }
+      .pad-top {
+        padding-top: env(safe-area-inset-top);
+      }
+
+      /* ---- Animationen ---- */
+      @keyframes inForward {
+        from {
+          opacity: 0;
+          transform: translateX(26px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes inBack {
+        from {
+          opacity: 0;
+          transform: translateX(-26px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes inFade {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes rowIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      /* Gestaffeltes Einblenden von Listenzeilen */
+      .stagger > .row,
+      .stagger > .c-row,
+      .stagger > .cal-row,
+      .stagger > .card {
+        animation: rowIn 0.32s ease both;
+      }
+      .stagger > *:nth-child(2) {
+        animation-delay: 0.02s;
+      }
+      .stagger > *:nth-child(3) {
+        animation-delay: 0.05s;
+      }
+      .stagger > *:nth-child(4) {
+        animation-delay: 0.08s;
+      }
+      .stagger > *:nth-child(5) {
+        animation-delay: 0.11s;
+      }
+      .stagger > *:nth-child(6) {
+        animation-delay: 0.14s;
+      }
+      .stagger > *:nth-child(7) {
+        animation-delay: 0.17s;
+      }
+
+      /* Tab-Leiste */
+      #tabbar {
+        display: flex;
+        border-top: 1px solid var(--bgElevated);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: saturate(180%) blur(12px);
+        -webkit-backdrop-filter: saturate(180%) blur(12px);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .tab {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: var(--xs) 0;
+        color: var(--textSecondary);
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.18s;
+      }
+      .tab svg {
+        width: 24px;
+        height: 24px;
+        transition: transform 0.18s ease;
+      }
+      .tab .tablabel {
+        font-size: 10px;
+      }
+      .tab.active {
+        color: var(--brandPrimary);
+        font-weight: 700;
+      }
+      .tab.active svg {
+        transform: translateY(-1px) scale(1.08);
+      }
+      .tab:active svg {
+        transform: scale(0.9);
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--sm) var(--md);
+        position: sticky;
+        top: 0;
+        background: var(--bgCanvas);
+        z-index: 5;
+      }
+      .bar.border {
+        border-bottom: 1px solid var(--bgElevated);
+      }
+      .bar-title {
+        font-size: var(--fHeadline);
+        font-weight: 700;
+        color: var(--textPrimary);
+      }
+      .compose-btn {
+        background: var(--brandPrimary);
+        color: #fff;
+        font-size: var(--fBody);
+        font-weight: 600;
+        border: none;
+        border-radius: var(--pill);
+        padding: var(--xs) var(--md);
+        transition:
+          transform 0.12s,
+          background 0.12s;
+      }
+      .compose-btn:active {
+        transform: scale(0.94);
+        background: var(--brandPrimaryDark);
+      }
+
+      .row {
+        display: flex;
+        padding: var(--md);
+        border-bottom: 1px solid var(--bgElevated);
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .row:active {
+        background: #eef1f5;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: var(--brandPrimary);
+        margin-right: var(--sm);
+        margin-top: var(--xs);
+        flex: 0 0 auto;
+      }
+      .row-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .sender {
+        color: var(--textPrimary);
+        font-size: var(--fBody);
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sender.unread {
+        font-weight: 800;
+      }
+      .subject {
+        color: var(--textPrimary);
+        font-size: var(--fBody);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .preview {
+        color: var(--textSecondary);
+        font-size: var(--fCaption);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .flag {
+        color: var(--warning);
+        font-size: var(--fBody);
+        margin-left: var(--sm);
+      }
+      .empty {
+        color: var(--textSecondary);
+        font-size: var(--fBody);
+        text-align: center;
+        padding: var(--lg);
+      }
+
+      .back {
+        padding: var(--sm) var(--md);
+        color: var(--brandPrimary);
+        font-size: var(--fBody);
+        cursor: pointer;
+        position: sticky;
+        top: 0;
+        background: var(--bgCanvas);
+        z-index: 5;
+      }
+      .content {
+        padding: var(--md);
+      }
+      .msg-subject {
+        font-size: var(--fHeadline);
+        font-weight: 700;
+        color: var(--textPrimary);
+        margin: 0 0 var(--xs);
+      }
+      .meta {
+        color: var(--textSecondary);
+        font-size: var(--fCaption);
+        margin-top: var(--xxs);
+      }
+      .categories {
+        color: var(--accent);
+        font-size: var(--fCaption);
+        margin-top: var(--xs);
+      }
+      .body-text {
+        color: var(--textPrimary);
+        font-size: var(--fBody);
+        margin-top: var(--md);
+        white-space: pre-wrap;
+        line-height: 1.45;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--xs);
+        padding: var(--md);
+        border-top: 1px solid var(--bgElevated);
+      }
+      .action {
+        flex: 1 1 28%;
+        background: var(--bgElevated);
+        border: none;
+        border-radius: var(--rsm);
+        padding: var(--sm);
+        font-size: var(--fCaption);
+        font-weight: 600;
+        color: var(--textPrimary);
+        text-align: center;
+        transition: transform 0.12s;
+      }
+      .action:active {
+        transform: scale(0.95);
+        background: #eceef1;
+      }
+      .action.primary {
+        color: var(--brandPrimary);
+        font-weight: 700;
+      }
+      .action.danger {
+        color: var(--danger);
+      }
+
+      .label {
+        color: var(--textSecondary);
+        font-size: var(--fCaption);
+        margin-bottom: var(--xxs);
+        display: block;
+      }
+      .input {
+        width: 100%;
+        background: var(--bgElevated);
+        border: 1px solid transparent;
+        border-radius: var(--rmd);
+        color: var(--textPrimary);
+        font-size: var(--fBody);
+        padding: var(--md);
+        margin-bottom: var(--sm);
+        font-family: inherit;
+        transition: border-color 0.15s;
+      }
+      .input:focus {
+        outline: none;
+        border-color: var(--brandPrimary);
+      }
+      textarea.input {
+        min-height: 200px;
+        resize: vertical;
+      }
+      .bar-action {
+        color: var(--textSecondary);
+        font-size: var(--fBody);
+        cursor: pointer;
+      }
+      .bar-send {
+        color: var(--brandPrimary);
+        font-size: var(--fBody);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .from {
+        color: var(--textSecondary);
+        font-size: var(--fCaption);
+        margin-top: var(--md);
+      }
+
+      .cal-row {
+        display: flex;
+        padding: var(--md);
+        border-bottom: 1px solid var(--bgElevated);
+      }
+      .when {
+        width: 92px;
+        margin-right: var(--md);
+        flex: 0 0 auto;
+      }
+      .day {
+        color: var(--textPrimary);
+        font-size: var(--fCaption);
+        font-weight: 600;
+      }
+      .time {
+        color: var(--brandPrimary);
+        font-size: var(--fCaption);
+      }
+
+      .search {
+        background: var(--bgElevated);
+        border: 1px solid transparent;
+        border-radius: var(--rmd);
+        color: var(--textPrimary);
+        font-size: var(--fBody);
+        padding: var(--md);
+        margin: var(--md);
+        width: calc(100% - 2 * var(--md));
+        font-family: inherit;
+        transition: border-color 0.15s;
+      }
+      .search:focus {
+        outline: none;
+        border-color: var(--brandPrimary);
+      }
+      .c-row {
+        display: flex;
+        align-items: center;
+        padding: var(--md);
+        border-bottom: 1px solid var(--bgElevated);
+      }
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--pill);
+        background: var(--brandPrimary);
+        color: #fff;
+        font-size: var(--fCaption);
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: var(--md);
+        flex: 0 0 auto;
+      }
+      .name {
+        color: var(--textPrimary);
+        font-size: var(--fBody);
+        font-weight: 600;
+      }
+      .sub {
+        color: var(--textSecondary);
+        font-size: var(--fCaption);
+      }
+
+      /* Einstellungen */
+      .settings-head {
+        font-size: var(--fTitle);
+        font-weight: 700;
+        color: var(--textPrimary);
+        padding: var(--md) var(--md) var(--xs);
+      }
+      .section-title {
+        font-size: var(--fCaption);
+        font-weight: 700;
+        color: var(--textSecondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: var(--lg) var(--md) var(--xs);
+      }
+      .card {
+        background: var(--bgElevated);
+        border-radius: var(--rmd);
+        margin: 0 var(--md);
+        overflow: hidden;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        gap: var(--sm);
+        padding: var(--md);
+        border-bottom: 1px solid #eceef1;
+        transition: background 0.15s;
+      }
+      .item:last-child {
+        border-bottom: none;
+      }
+      .item:active {
+        background: #eceef1;
+      }
+      .item .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .item-title {
+        font-size: var(--fBody);
+        color: var(--textPrimary);
+      }
+      .item-sub {
+        font-size: var(--fCaption);
+        color: var(--textSecondary);
+        margin-top: 2px;
+      }
+      .item-value {
+        font-size: var(--fBody);
+        color: var(--textSecondary);
+      }
+      .chev {
+        color: var(--textSecondary);
+        font-size: var(--fBody);
+      }
+      .danger-text {
+        color: var(--danger);
+      }
+      .avatar-lg {
+        width: 56px;
+        height: 56px;
+        border-radius: var(--pill);
+        background: var(--brandPrimary);
+        color: #fff;
+        font-size: var(--fHeadline);
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+      .pill-on {
+        font-size: var(--fCaption);
+        font-weight: 700;
+        color: var(--success);
+      }
+      .switch {
+        width: 46px;
+        height: 28px;
+        border-radius: var(--pill);
+        background: #cfd4da;
+        position: relative;
+        flex: 0 0 auto;
+        transition: background 0.25s;
+      }
+      .switch.on {
+        background: var(--success);
+      }
+      .switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #fff;
+        transition: left 0.25s cubic-bezier(0.4, 1.3, 0.5, 1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+      }
+      .switch.on::after {
+        left: 20px;
+      }
+      .check {
+        color: var(--brandPrimary);
+        font-weight: 700;
+        font-size: var(--fBody);
+      }
+
+      /* Toast */
+      #toast {
+        position: absolute;
+        left: 50%;
+        bottom: 92px;
+        transform: translateX(-50%) translateY(20px);
+        background: #0b0f14;
+        color: #fff;
+        font-size: var(--fCaption);
+        padding: 10px 16px;
+        border-radius: var(--pill);
+        opacity: 0;
+        transition: all 0.25s;
+        pointer-events: none;
+        white-space: nowrap;
+        z-index: 50;
+      }
+      #toast.show {
+        opacity: 0.96;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      /* Splash / Start-Animation */
+      #splash {
+        position: absolute;
+        inset: 0;
+        background: var(--brandPrimary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        animation: splashOut 0.5s ease 0.9s forwards;
+      }
+      #splash .word {
+        color: #fff;
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: 2px;
+        opacity: 0;
+        transform: scale(0.8);
+        animation: wordIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+      }
+      @keyframes wordIn {
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes splashOut {
+        to {
+          opacity: 0;
+          visibility: hidden;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="screen" class="pad-top"></div>
+      <div id="tabbar"></div>
+      <div id="toast"></div>
+      <div id="splash"><div class="word">NEXUS</div></div>
+    </div>
+
+    <script>
+      // ---- Demo-Daten (entspricht packages/services/src/demo-seed.ts) ----
+      const HOUR = 3600000;
+      const now = Date.now();
+      const ACCOUNT_EMAIL = 'demo@nexus.local';
+
+      let messages = [
+        {
+          id: 'm-100',
+          subject: 'Angebot Q3 — Rückfrage',
+          fromName: 'Markus Brandt',
+          fromAddress: 'm.brandt@kunde.example.com',
+          preview: 'Können wir die Konditionen aus dem Angebot noch einmal durchgehen?',
+          receivedAt: now - 1 * HOUR,
+          folderId: 'inbox',
+          categories: ['Vertrieb'],
+          read: false,
+          flagged: false,
+          body:
+            'Hallo,\n\nkönnen wir die Konditionen aus dem Angebot Q3 noch einmal durchgehen? ' +
+            'Insbesondere die Staffelpreise.\n\nViele Grüße\nMarkus Brandt',
+        },
+        {
+          id: 'm-101',
+          subject: 'Re: Angebot Q3 — Rückfrage',
+          fromName: 'Sandra Keil',
+          fromAddress: 's.keil@itm-technologies.de',
+          preview: 'Anbei die aktualisierte Staffel. Passt der Termin am Donnerstag?',
+          receivedAt: now - 0.5 * HOUR,
+          folderId: 'inbox',
+          categories: [],
+          read: true,
+          flagged: false,
+          body: 'Anbei die aktualisierte Staffel. Passt der Termin am Donnerstag?',
+        },
+        {
+          id: 'm-102',
+          subject: 'Wartungsfenster Exchange am Wochenende',
+          fromName: 'IT-Betrieb',
+          fromAddress: 'it@itm-technologies.de',
+          preview: 'Am Samstag von 22:00–02:00 Uhr ist ein Wartungsfenster geplant.',
+          receivedAt: now - 5 * HOUR,
+          folderId: 'inbox',
+          categories: ['Wichtig'],
+          read: false,
+          flagged: true,
+          body: 'Am Samstag von 22:00–02:00 Uhr ist ein Wartungsfenster geplant.',
+        },
+        {
+          id: 'm-103',
+          subject: 'NEXUS Newsletter — Juni',
+          fromName: 'NEXUS News',
+          fromAddress: 'news@itm-technologies.de',
+          preview: 'Neuigkeiten rund um Ihre sichere Kommunikationsplattform.',
+          receivedAt: now - 26 * HOUR,
+          folderId: 'inbox',
+          categories: [],
+          read: false,
+          flagged: false,
+          body: 'Neuigkeiten rund um Ihre sichere Kommunikationsplattform.',
+        },
+      ];
+      const contacts = [
+        { displayName: 'Markus Brandt', email: 'm.brandt@kunde.example.com', company: 'Kunde GmbH' },
+        { displayName: 'Sandra Keil', email: 's.keil@itm-technologies.de', company: 'ITM Technologies' },
+      ];
+      const events = [
+        {
+          subject: 'Abstimmung Angebot Q3',
+          startAt: now + 2 * HOUR,
+          endAt: now + 3 * HOUR,
+          location: 'Teams',
+          organizer: 'Sandra Keil',
+        },
+      ];
+
+      // ---- Navigation / State ----
+      const I = {
+        mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+        calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+        contacts: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/>',
+        search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+        settings:
+          '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+      };
+      const svg = (p) =>
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+      const TABS = [
+        { key: 'mail', label: 'Mail', icon: I.mail },
+        { key: 'calendar', label: 'Kalender', icon: I.calendar },
+        { key: 'contacts', label: 'Kontakte', icon: I.contacts },
+        { key: 'search', label: 'Suche', icon: I.search },
+        { key: 'settings', label: 'Mehr', icon: I.settings },
+      ];
+      let tab = 'mail';
+      let mailRoute = { name: 'list' };
+      let contactQuery = '';
+      let searchQuery = '';
+      let settingsRoute = 'root';
+      let pendingAnim = 'fade';
+
+      const settings = {
+        syncWindow: '1m',
+        syncInterval: '5m',
+        push: true,
+        background: true,
+        wifiOnly: false,
+        appLock: true,
+      };
+      const WINDOW_OPTS = [
+        { key: '1w', label: '1 Woche' },
+        { key: '1m', label: '1 Monat' },
+        { key: '3m', label: '3 Monate' },
+        { key: '6m', label: '6 Monate' },
+        { key: 'all', label: 'Alle Nachrichten' },
+      ];
+      const INTERVAL_OPTS = [
+        { key: '1m', label: 'Alle 1 Minute' },
+        { key: '5m', label: 'Alle 5 Minuten' },
+        { key: '15m', label: 'Alle 15 Minuten' },
+        { key: 'manual', label: 'Manuell' },
+      ];
+      const labelOf = (o, k) => (o.find((x) => x.key === k) || {}).label || k;
+
+      const screenEl = document.getElementById('screen');
+      const tabbarEl = document.getElementById('tabbar');
+      const toastEl = document.getElementById('toast');
+      const esc = (s) =>
+        String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const inbox = () =>
+        messages.filter((m) => m.folderId === 'inbox').sort((a, b) => b.receivedAt - a.receivedAt);
+      const byId = (id) => messages.find((m) => m.id === id);
+
+      function toast(t) {
+        toastEl.textContent = t;
+        toastEl.classList.add('show');
+        clearTimeout(toast._t);
+        toast._t = setTimeout(() => toastEl.classList.remove('show'), 1600);
+      }
+      const fmtTime = (ms) =>
+        new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const fmtDay = (ms) =>
+        new Date(ms).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: 'short' });
+      const initials = (n) =>
+        n.split(/\s+/).slice(0, 2).map((p) => p.charAt(0).toUpperCase()).join('');
+
+      // ---- Screens ----
+      function renderMailList() {
+        const list = inbox();
+        const rows = list
+          .map(
+            (m) => `
+        <div class="row" onclick="openMessage('${m.id}')">
+          <div class="dot" style="opacity:${m.read ? 0 : 1}"></div>
+          <div class="row-body">
+            <div class="sender ${m.read ? '' : 'unread'}">${esc(m.fromName)}</div>
+            <div class="subject">${esc(m.subject)}</div>
+            <div class="preview">${esc(m.preview)}</div>
+          </div>
+          ${m.flagged ? '<div class="flag">⚑</div>' : ''}
+        </div>`,
+          )
+          .join('');
+        return `
+        <div class="bar"><div class="bar-title">Posteingang</div>
+          <button class="compose-btn" onclick="openCompose()">＋ Neu</button></div>
+        <div class="stagger">${list.length ? rows : '<div class="empty">Keine Nachrichten.</div>'}</div>`;
+      }
+      function renderMessage(id) {
+        const m = byId(id);
+        if (!m) return '<div class="empty">Nachricht nicht gefunden.</div>';
+        return `
+        <div class="back" onclick="goList()">‹ Posteingang</div>
+        <div class="content">
+          <h1 class="msg-subject">${esc(m.subject)}</h1>
+          <div class="meta">${esc(m.fromName)} &lt;${esc(m.fromAddress)}&gt;</div>
+          ${m.categories.length ? `<div class="categories">${esc(m.categories.join(' · '))}</div>` : ''}
+          <div class="body-text">${esc(m.body)}</div>
+        </div>
+        <div class="actions">
+          <button class="action primary" onclick="replyTo('${m.id}')">Antworten</button>
+          <button class="action" onclick="toggleRead('${m.id}')">${m.read ? 'Ungelesen' : 'Gelesen'}</button>
+          <button class="action" onclick="toggleFlag('${m.id}')">${m.flagged ? 'Entmarkieren' : 'Markieren'}</button>
+          <button class="action" onclick="archive('${m.id}')">Archiv</button>
+          <button class="action danger" onclick="del('${m.id}')">Löschen</button>
+        </div>`;
+      }
+      function renderCompose(replyId) {
+        const r = replyId ? byId(replyId) : null;
+        const to = r ? r.fromAddress : '';
+        const subject = r ? (r.subject.startsWith('Re:') ? r.subject : 'Re: ' + r.subject) : '';
+        return `
+        <div class="bar border">
+          <span class="bar-action" onclick="goList()">Abbrechen</span>
+          <span class="bar-title" style="font-size:var(--fBody);font-weight:600">${r ? 'Antworten' : 'Neue E-Mail'}</span>
+          <span class="bar-send" onclick="sendMail()">Senden</span>
+        </div>
+        <div class="content">
+          <label class="label">An</label>
+          <input id="c-to" class="input" inputmode="email" placeholder="empfaenger@firma.de" value="${esc(to)}" />
+          <label class="label">Betreff</label>
+          <input id="c-subject" class="input" placeholder="Betreff" value="${esc(subject)}" />
+          <label class="label">Nachricht</label>
+          <textarea id="c-body" class="input" placeholder="Text verfassen…"></textarea>
+          <div class="from">Von: ${esc(ACCOUNT_EMAIL)}</div>
+        </div>`;
+      }
+      function renderCalendar() {
+        if (!events.length) return '<div class="empty">Keine Termine im Zeitraum.</div>';
+        return (
+          '<div class="bar"><div class="bar-title">Kalender</div></div><div class="stagger">' +
+          events
+            .slice()
+            .sort((a, b) => a.startAt - b.startAt)
+            .map(
+              (e) => `
+        <div class="cal-row">
+          <div class="when"><div class="day">${fmtDay(e.startAt)}</div><div class="time">${fmtTime(e.startAt)}</div></div>
+          <div style="flex:1">
+            <div class="name">${esc(e.subject)}</div>
+            ${e.location ? `<div class="sub">${esc(e.location)}</div>` : ''}
+            <div class="sub">${esc(e.organizer)}</div>
+          </div>
+        </div>`,
+            )
+            .join('') +
+          '</div>'
+        );
+      }
+      function renderContacts() {
+        const q = contactQuery.trim().toLowerCase();
+        const list = contacts.filter(
+          (c) => !q || c.displayName.toLowerCase().includes(q) || c.email.toLowerCase().includes(q),
+        );
+        const rows = list
+          .map(
+            (c) => `
+        <div class="c-row">
+          <div class="avatar">${initials(c.displayName)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="name">${esc(c.displayName)}</div>
+            <div class="sub">${esc(c.email)}</div>
+            <div class="sub">${esc(c.company)}</div>
+          </div>
+        </div>`,
+          )
+          .join('');
+        return `
+        <input class="search" placeholder="Kontakte durchsuchen" value="${esc(contactQuery)}"
+          oninput="contactQuery=this.value;rerender()" />
+        <div class="stagger">${list.length ? rows : '<div class="empty">Keine Kontakte gefunden.</div>'}</div>`;
+      }
+      function renderSearch() {
+        const q = searchQuery.trim().toLowerCase();
+        let rows;
+        if (q) {
+          const hits = messages.filter(
+            (m) => m.subject.toLowerCase().includes(q) || m.preview.toLowerCase().includes(q),
+          );
+          rows = hits.length
+            ? hits
+                .map(
+                  (m) => `
+          <div class="row" onclick="openMessage('${m.id}')">
+            <div class="row-body">
+              <div class="sender">${esc(m.fromName)}</div>
+              <div class="subject">${esc(m.subject)}</div>
+              <div class="preview">${esc(m.preview)}</div>
+            </div>
+          </div>`,
+                )
+                .join('')
+            : '<div class="empty">Keine Treffer.</div>';
+        } else {
+          rows = '<div class="empty">Begriff eingeben, um zu suchen.</div>';
+        }
+        return `
+        <input class="search" placeholder="E-Mails durchsuchen" value="${esc(searchQuery)}"
+          oninput="searchQuery=this.value;rerender()" />
+        <div>${rows}</div>`;
+      }
+      const sw2 = (on) => `<div class="switch ${on ? 'on' : ''}"></div>`;
+      function renderSettings() {
+        if (settingsRoute === 'window' || settingsRoute === 'interval') {
+          const isWin = settingsRoute === 'window';
+          const opts = isWin ? WINDOW_OPTS : INTERVAL_OPTS;
+          const cur = isWin ? settings.syncWindow : settings.syncInterval;
+          const rows = opts
+            .map(
+              (o) => `
+          <div class="item" onclick="pickOption('${settingsRoute}','${o.key}')">
+            <div class="grow"><div class="item-title">${esc(o.label)}</div></div>
+            ${o.key === cur ? '<span class="check">✓</span>' : ''}
+          </div>`,
+            )
+            .join('');
+          return `
+          <div class="back" onclick="goSettingsRoot()">‹ Einstellungen</div>
+          <div class="settings-head" style="font-size:var(--fHeadline)">${isWin ? 'Sync-Zeitraum' : 'Aktualisierung'}</div>
+          <div class="section-title">${isWin ? 'Wie weit zurück werden Mails geladen' : 'Wie oft im Vordergrund geprüft wird'}</div>
+          <div class="card">${rows}</div>
+          <div class="section-title" style="text-transform:none;letter-spacing:0;font-weight:400">
+            ${isWin ? 'Ältere Nachrichten bleiben auf dem Server und werden bei Bedarf nachgeladen.' : 'Im Hintergrund taktet iOS die Aktualisierung zusätzlich automatisch.'}
+          </div>`;
+        }
+        return `
+        <div class="settings-head">Einstellungen</div>
+        <div class="section-title">Konto</div>
+        <div class="card">
+          <div class="item">
+            <div class="avatar-lg">ND</div>
+            <div class="grow"><div class="item-title" style="font-weight:600">NEXUS Demo</div>
+              <div class="item-sub">${esc(ACCOUNT_EMAIL)}</div></div>
+          </div>
+          <div class="item" onclick="toast('Server: mail.firma.de (Demo)')">
+            <div class="grow"><div class="item-title">Server</div></div><div class="item-value">mail.firma.de</div></div>
+          <div class="item" onclick="toast('Konto bearbeiten (Demo)')">
+            <div class="grow"><div class="item-title">Konto bearbeiten</div></div><span class="chev">›</span></div>
+          <div class="item" onclick="toast('Abgemeldet (Demo)')">
+            <div class="grow"><div class="item-title danger-text">Abmelden</div></div></div>
+        </div>
+        <div class="section-title">Synchronisierung</div>
+        <div class="card">
+          <div class="item" onclick="goSync('window')">
+            <div class="grow"><div class="item-title">Sync-Zeitraum</div>
+              <div class="item-sub">Wie weit zurück Mails geladen werden</div></div>
+            <div class="item-value">${esc(labelOf(WINDOW_OPTS, settings.syncWindow))}</div><span class="chev">›</span></div>
+          <div class="item" onclick="goSync('interval')">
+            <div class="grow"><div class="item-title">Aktualisierung</div></div>
+            <div class="item-value">${esc(labelOf(INTERVAL_OPTS, settings.syncInterval))}</div><span class="chev">›</span></div>
+          <div class="item" onclick="flip('push')">
+            <div class="grow"><div class="item-title">Push (DirectPush)</div>
+              <div class="item-sub">Neue Mails sofort, ohne Abfrage-Intervall</div></div>${sw2(settings.push)}</div>
+          <div class="item" onclick="flip('background')">
+            <div class="grow"><div class="item-title">Hintergrund-Aktualisierung</div>
+              <div class="item-sub">Sync auch bei geschlossener App (BGTaskScheduler)</div></div>${sw2(settings.background)}</div>
+          <div class="item" onclick="flip('wifiOnly')">
+            <div class="grow"><div class="item-title">Nur über WLAN synchronisieren</div></div>${sw2(settings.wifiOnly)}</div>
+        </div>
+        <div class="section-title">Sicherheit</div>
+        <div class="card">
+          <div class="item" onclick="flip('appLock')">
+            <div class="grow"><div class="item-title">App-Sperre (Face ID)</div>
+              <div class="item-sub">Beim Öffnen entsperren</div></div>${sw2(settings.appLock)}</div>
+          <div class="item"><div class="grow"><div class="item-title">Zertifikat-Pinning</div>
+            <div class="item-sub">Verbindung nur zu vertrauten Servern (fail-closed)</div></div><span class="pill-on">Aktiv</span></div>
+          <div class="item"><div class="grow"><div class="item-title">Lokale Verschlüsselung</div>
+            <div class="item-sub">SQLCipher AES-256, Schlüssel im Keychain</div></div><span class="pill-on">Aktiv</span></div>
+        </div>
+        <div class="section-title">Über</div>
+        <div class="card">
+          <div class="item"><div class="grow"><div class="item-title">Version</div></div><div class="item-value">1.0.0 (Vorschau)</div></div>
+        </div>
+        <div style="height:var(--lg)"></div>`;
+      }
+
+      function renderBody() {
+        if (tab === 'mail') {
+          if (mailRoute.name === 'message') return renderMessage(mailRoute.id);
+          if (mailRoute.name === 'compose') return renderCompose(mailRoute.replyId);
+          return renderMailList();
+        }
+        if (tab === 'calendar') return renderCalendar();
+        if (tab === 'contacts') return renderContacts();
+        if (tab === 'settings') return renderSettings();
+        return renderSearch();
+      }
+      function playAnim() {
+        const map = { forward: 'inForward', back: 'inBack', fade: 'inFade', none: null };
+        const name = map[pendingAnim];
+        pendingAnim = 'fade';
+        if (!name) return;
+        screenEl.style.animation = 'none';
+        void screenEl.offsetWidth;
+        screenEl.style.animation = name + ' .28s ease';
+      }
+      function render(keepScroll) {
+        const y = screenEl.scrollTop;
+        screenEl.innerHTML = renderBody();
+        tabbarEl.innerHTML = TABS.map(
+          (t) =>
+            `<div class="tab ${t.key === tab ? 'active' : ''}" onclick="setTab('${t.key}')">${svg(t.icon)}<span class="tablabel">${t.label}</span></div>`,
+        ).join('');
+        if (keepScroll) {
+          screenEl.scrollTop = y;
+        } else {
+          screenEl.scrollTop = 0;
+          playAnim();
+        }
+      }
+      function rerender() {
+        render(true);
+      }
+
+      // ---- Aktionen ----
+      function setTab(t) {
+        if (t === tab && t !== 'settings') return;
+        tab = t;
+        if (t === 'settings') settingsRoute = 'root';
+        pendingAnim = 'fade';
+        render();
+      }
+      function openMessage(id) {
+        const m = byId(id);
+        if (m && !m.read) m.read = true;
+        tab = 'mail';
+        mailRoute = { name: 'message', id };
+        pendingAnim = 'forward';
+        render();
+      }
+      function goList() {
+        mailRoute = { name: 'list' };
+        pendingAnim = 'back';
+        render();
+      }
+      function openCompose() {
+        mailRoute = { name: 'compose' };
+        pendingAnim = 'forward';
+        render();
+      }
+      function replyTo(id) {
+        mailRoute = { name: 'compose', replyId: id };
+        pendingAnim = 'forward';
+        render();
+      }
+      function goSync(which) {
+        settingsRoute = which;
+        pendingAnim = 'forward';
+        render();
+      }
+      function goSettingsRoot() {
+        settingsRoute = 'root';
+        pendingAnim = 'back';
+        render();
+      }
+      function toggleRead(id) {
+        const m = byId(id);
+        m.read = !m.read;
+        render(true);
+      }
+      function toggleFlag(id) {
+        const m = byId(id);
+        m.flagged = !m.flagged;
+        toast(m.flagged ? 'Markiert' : 'Markierung entfernt');
+        render(true);
+      }
+      function archive(id) {
+        byId(id).folderId = 'archive';
+        toast('Archiviert');
+        goList();
+      }
+      function del(id) {
+        messages = messages.filter((m) => m.id !== id);
+        toast('Gelöscht');
+        goList();
+      }
+      function sendMail() {
+        const to = (document.getElementById('c-to') || {}).value || '';
+        if (!to.trim()) {
+          toast('Empfänger fehlt');
+          return;
+        }
+        toast('In Outbox — wird gesendet');
+        goList();
+      }
+      function flip(key) {
+        settings[key] = !settings[key];
+        render(true);
+      }
+      function pickOption(route, key) {
+        if (route === 'window') settings.syncWindow = key;
+        else settings.syncInterval = key;
+        settingsRoute = 'root';
+        toast('Gespeichert');
+        pendingAnim = 'back';
+        render();
+      }
+
+      render();
+
+      // PWA: Service Worker registrieren (Offline-Hülle für die Design-Vorschau).
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+      }
+    </script>
+  </body>
+</html>
