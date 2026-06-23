@@ -54,6 +54,8 @@ export interface AppContainer {
   readonly backgroundSync: BackgroundSyncService;
   /** DirectPush (Long-Poll). Nur im Live-Modus verfügbar (nativer Connector). */
   readonly push?: PushTransport;
+  /** Plant den nativen iOS-Hintergrund-Sync (BGTaskScheduler). Nur Live-Modus. */
+  readonly scheduleBackgroundSync?: () => Promise<void>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -122,6 +124,9 @@ export async function createContainer(): Promise<AppContainer> {
       defaultSyncTargets(),
     ),
     push: transport,
+    scheduleBackgroundSync: async () => {
+      await NexusNative.transportScheduleBackgroundSync();
+    },
   };
 }
 

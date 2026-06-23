@@ -43,6 +43,9 @@ export interface NexusNativeModule {
   // — TLS-Pinning & DirectPush —
   transportConfigurePinning(pinsJson: string): Promise<void>;
   transportPing(accountId: string, folderIdsJson: string, timeoutSec: number): Promise<string>;
+
+  // — iOS-Hintergrund-Sync (BGTaskScheduler) —
+  transportScheduleBackgroundSync(): Promise<void>;
 }
 
 function resolveNative(): NexusNativeModule {

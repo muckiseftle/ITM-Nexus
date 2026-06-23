@@ -69,9 +69,8 @@ jobs:
   ios-live:
     name: iOS Live-Build (mit nativem Modul)
     runs-on: macos-14
-    # Darf scheitern, ohne den Demo-Build/Artefakte zu blockieren (native Integration
-    # wird iterativ über die CI-Logs gehärtet — siehe docs/11-Native-und-App.md).
-    continue-on-error: true
+    # Stabil grün → blockiert den Lauf bei echten Fehlern (kein continue-on-error mehr),
+    # damit native Regressionen sofort sichtbar werden statt verdeckt zu bleiben.
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

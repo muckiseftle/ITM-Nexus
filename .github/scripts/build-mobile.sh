@@ -87,6 +87,35 @@ if [ "$PLATFORM" = "ios-live" ]; then
     File.write(pf, out.join)
   '
   cat ios/Podfile | grep -n "NexusNative\|SQLCipher" || true
+
+  # Background-Sync (BGTaskScheduler): Info.plist-Modi + erlaubte Task-IDs, AppDelegate-Wiring.
+  PLIST="ios/NEXUS/Info.plist"
+  /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string fetch" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string processing" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers array" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers:0 string de.itm.nexus.refresh" "$PLIST" 2>/dev/null || true
+  # BGTask-Handler VOR Ende von didFinishLaunchingWithOptions registrieren (Apple-Vorgabe).
+  ruby -e '
+    p = "ios/NEXUS/AppDelegate.swift"
+    if File.exist?(p)
+      s = File.read(p)
+      # Pod-Modul importieren (NexusBackgroundSync ist im NexusNative-Modul, public).
+      # Immer sicherstellen, dass der Import vorhanden ist (sonst unaufgelöstes Symbol).
+      unless s.include?("import NexusNative")
+        if s =~ /^import UIKit\n/
+          s = s.sub(/^(import UIKit\n)/) { $1 + "import NexusNative\n" }
+        else
+          s = "import NexusNative\n" + s
+        end
+      end
+      unless s.include?("NexusBackgroundSync.register()")
+        s = s.sub(/(didFinishLaunchingWithOptions[^\n]*\{\n)/) { $1 + "    NexusBackgroundSync.register()\n" }
+      end
+      File.write(p, s)
+    end
+  '
+  grep -n "NexusBackgroundSync\|UIBackgroundModes" ios/NEXUS/AppDelegate.swift "$PLIST" || true
   echo "::endgroup::"
 
   echo "::group::iOS-Live-Build (Gerät, UNSIGNIERT, mit nativem Modul)"

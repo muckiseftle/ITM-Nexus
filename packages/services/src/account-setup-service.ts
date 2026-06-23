@@ -7,6 +7,8 @@ import type {
 
 const secretKey = (email: string): string => `nexus:secret:${email.toLowerCase()}`;
 const metaKey = (email: string): string => `nexus:account:${email.toLowerCase()}`;
+/** Zeiger auf das aktive Konto — der native Hintergrund-Task liest ihn beim Cold Start. */
+const CURRENT_ACCOUNT_KEY = 'nexus:current-account';
 
 /**
  * Konto-Einrichtung: führt Autodiscover über den Transport-Port aus und legt das Secret
@@ -40,6 +42,8 @@ export class AccountSetupService {
         manual: credentials.manual !== undefined,
       }),
     );
+    // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).
+    await this.secureStore.set(CURRENT_ACCOUNT_KEY, email.toLowerCase());
 
     return {
       ...result,
@@ -52,5 +56,6 @@ export class AccountSetupService {
   async forget(email: string): Promise<void> {
     await this.secureStore.delete(secretKey(email));
     await this.secureStore.delete(metaKey(email));
+    await this.secureStore.delete(CURRENT_ACCOUNT_KEY);
   }
 }

@@ -80,6 +80,9 @@ export default function App(): React.JSX.Element {
       void container.backgroundSync.runDue(account);
     }, SYNC_INTERVALS.messages);
 
+    // Nativen iOS-Hintergrund-Sync einplanen (greift, wenn die App im Hintergrund/beendet ist).
+    void container.scheduleBackgroundSync?.();
+
     const pushLoop = async (): Promise<void> => {
       const inbox = toFolderId(DEMO_INBOX_ID);
       while (!cancelled && container.push !== undefined) {

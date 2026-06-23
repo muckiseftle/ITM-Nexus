@@ -384,6 +384,44 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     return try Self.json(hits)
   }
 
+  // MARK: Hintergrund-Sync (nativer Cold-Start ohne JS-Kontext)
+
+  /// Stellt EWS-URL + Credentials aus dem Keychain wieder her (Hintergrund-Task startet ohne
+  /// laufenden JS-Kontext, der die Session sonst im Speicher hält). Liefert die accountId.
+  @discardableResult
+  func restoreSession() throws -> String? {
+    guard let account = try NexusSecureStore.get("nexus:current-account") else { return nil }
+    guard let metaStr = try NexusSecureStore.get("nexus:account:\(account)"),
+      let meta = try JSONSerialization.jsonObject(with: Data(metaStr.utf8)) as? [String: Any],
+      let ews = meta["ewsUrl"] as? String, let url = URL(string: ews),
+      let secret = try NexusSecureStore.get("nexus:secret:\(account)")
+    else { return nil }
+    let user = meta["username"] as? String ?? account
+    let domain = meta["domain"] as? String
+    let effectiveUser =
+      (domain != nil && !user.contains("\\") && !user.contains("@")) ? "\(domain!)\\\(user)" : user
+    ewsUrl = url
+    username = effectiveUser
+    password = secret
+    basicAuthHeader = Self.basicAuth(user: effectiveUser, password: secret)
+    return account
+  }
+
+  /// Synchronisiert den Posteingang nativ in die verschlüsselte DB. Liefert die Anzahl
+  /// gespeicherter Nachrichten. Für den Hintergrund-Task (siehe NexusBackgroundSync).
+  @discardableResult
+  func syncInboxNative() async throws -> Int {
+    guard let account = try restoreSession() else { return 0 }
+    let json = try await syncMessages(accountId: account, folderId: "inbox", syncKey: nil)
+    guard let delta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+      let created = delta["created"] as? [[String: Any]]
+    else { return 0 }
+    for msg in created {
+      try NexusDatabase.shared.upsertMessage(msg)
+    }
+    return created.count
+  }
+
   // MARK: HTTP/Helpers
 
   private func post(_ soap: String) async throws -> Data {

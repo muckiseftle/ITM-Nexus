@@ -149,4 +149,10 @@ final class NexusModule: NSObject {
       catch { reject("transport_ping", "\(error)", error) }
     }
   }
+
+  @objc(transportScheduleBackgroundSync:rejecter:)
+  func transportScheduleBackgroundSync(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    NexusBackgroundSync.schedule()
+    resolve(nil)
+  }
 }
