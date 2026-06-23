@@ -9,7 +9,13 @@ import type {
   MessageId,
   OutgoingMessage,
 } from '@nexus/domain';
-import type { AutodiscoverResult, Credentials, SyncDelta, TransportCapabilities } from './dto';
+import type {
+  AttachmentContent,
+  AutodiscoverResult,
+  Credentials,
+  SyncDelta,
+  TransportCapabilities,
+} from './dto';
 import type { OutboxOperation, OutboxState } from './outbox';
 import type { SearchHit } from './search-merge';
 
@@ -41,10 +47,25 @@ export interface MailTransport {
   getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage>;
   sendMessage(accountId: AccountId, message: OutgoingMessage): Promise<MessageId>;
 
+  /** Lädt den Inhalt eines Anhangs (EWS GetAttachment) als Base64. */
+  getAttachment(accountId: AccountId, attachmentId: string): Promise<AttachmentContent>;
+
   /** Führt eine Outbox-Operation gegen den Server aus (idempotent). */
   applyOperation(operation: OutboxOperation): Promise<void>;
 
   searchServer(accountId: AccountId, query: string): Promise<readonly SearchHit[]>;
+}
+
+/**
+ * Persistente Sync-Cursor (EWS-SyncState / EAS-SyncKey) je (Konto, Art, Ordner). Ermöglicht
+ * echtes inkrementelles Delta-Sync über App-Starts hinweg (statt jedes Mal Vollabgleich).
+ * Produktiv: SQLCipher-Tabelle; In-Memory als Referenz/Test-Double.
+ */
+export interface SyncCursorStore {
+  getCursor(key: string): Promise<string | undefined>;
+  setCursor(key: string, cursor: string): Promise<void>;
+  /** Setzt alle Cursor eines Kontos zurück (erzwingt Voll-Resync). */
+  clear(accountId: AccountId): Promise<void>;
 }
 
 /** Sicherer Schlüssel/Wert-Speicher (Keychain / Android Keystore). */

@@ -1,4 +1,9 @@
-import { BackgroundSyncService, createInMemoryContainer, seedDemoData } from '@nexus/services';
+import {
+  BackgroundSyncService,
+  InMemorySyncCursorStore,
+  createInMemoryContainer,
+  seedDemoData,
+} from '@nexus/services';
 import type { Clock } from '@nexus/core-transport';
 import type { AppContainer } from './container';
 import { defaultSyncTargets } from './container';
@@ -36,6 +41,7 @@ export async function createDemoContainer(): Promise<AppContainer> {
       c.outbox,
       demoClock,
       defaultSyncTargets(),
+      new InMemorySyncCursorStore(),
     ),
   };
 }

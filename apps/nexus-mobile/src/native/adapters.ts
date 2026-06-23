@@ -10,8 +10,12 @@ import type {
   OutgoingMessage,
 } from '@nexus/domain';
 import type {
+  AttachmentContent,
   AutodiscoverResult,
+  CalendarStore,
+  ContactStore,
   Credentials,
+  FolderStore,
   MailStore,
   MailTransport,
   OutboxOperation,
@@ -21,11 +25,17 @@ import type {
   PushTransport,
   SearchHit,
   SecureStore,
+  SyncCursorStore,
   SyncDelta,
   TransportCapabilities,
 } from '@nexus/core-transport';
 import { emptyOutbox } from '@nexus/core-transport';
 import { NexusNative } from './NexusNative';
+
+interface PayloadRow {
+  readonly payload: string;
+  readonly [column: string]: string | number | null;
+}
 
 /** Übergibt die Pinning-Policy ans native Modul (TLS-Challenge wertet sie fail-closed aus). */
 export async function configurePinning(config: PinningConfig): Promise<void> {
@@ -210,5 +220,120 @@ export class NativeMailTransport implements MailTransport, PushTransport {
   async getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage> {
     const json = await NexusNative.transportGetMessage(accountId, messageId);
     return JSON.parse(json) as MailMessage;
+  }
+
+  async getAttachment(accountId: AccountId, attachmentId: string): Promise<AttachmentContent> {
+    const json = await NexusNative.transportGetAttachment(accountId, attachmentId);
+    return JSON.parse(json) as AttachmentContent;
+  }
+}
+
+/** FolderStore-Port → verschlüsselte SQLite-Tabelle `folders` (Payload als JSON). */
+export class SqlFolderStore implements FolderStore {
+  async upsertFolders(folders: readonly MailFolder[]): Promise<void> {
+    for (const f of folders) {
+      await NexusNative.dbExec(
+        `INSERT INTO folders (id, account_id, payload) VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+        [f.id, f.accountId, JSON.stringify(f)],
+      );
+    }
+  }
+  async deleteFolders(accountId: AccountId, folderIds: readonly string[]): Promise<void> {
+    for (const id of folderIds) {
+      await NexusNative.dbExec('DELETE FROM folders WHERE account_id = ? AND id = ?', [
+        accountId,
+        id,
+      ]);
+    }
+  }
+  async listFolders(accountId: AccountId): Promise<readonly MailFolder[]> {
+    const rows = (await NexusNative.dbQuery('SELECT payload FROM folders WHERE account_id = ?', [
+      accountId,
+    ])) as readonly PayloadRow[];
+    return rows.map((r) => JSON.parse(r.payload) as MailFolder);
+  }
+}
+
+/** CalendarStore-Port → verschlüsselte SQLite-Tabelle `events`. */
+export class SqlCalendarStore implements CalendarStore {
+  async upsertEvents(events: readonly CalendarEvent[]): Promise<void> {
+    for (const e of events) {
+      await NexusNative.dbExec(
+        `INSERT INTO events (id, account_id, start_at, end_at, payload) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET start_at=excluded.start_at, end_at=excluded.end_at, payload=excluded.payload`,
+        [e.id, e.accountId, e.startAt, e.endAt, JSON.stringify(e)],
+      );
+    }
+  }
+  async deleteEvents(accountId: AccountId, eventIds: readonly string[]): Promise<void> {
+    for (const id of eventIds) {
+      await NexusNative.dbExec('DELETE FROM events WHERE account_id = ? AND id = ?', [
+        accountId,
+        id,
+      ]);
+    }
+  }
+  async listRange(
+    accountId: AccountId,
+    fromMs: number,
+    toMs: number,
+  ): Promise<readonly CalendarEvent[]> {
+    const rows = (await NexusNative.dbQuery(
+      `SELECT payload FROM events WHERE account_id = ? AND start_at < ? AND end_at > ? ORDER BY start_at ASC`,
+      [accountId, toMs, fromMs],
+    )) as readonly PayloadRow[];
+    return rows.map((r) => JSON.parse(r.payload) as CalendarEvent);
+  }
+}
+
+/** ContactStore-Port → verschlüsselte SQLite-Tabelle `contacts`. */
+export class SqlContactStore implements ContactStore {
+  async upsertContacts(contacts: readonly Contact[]): Promise<void> {
+    for (const c of contacts) {
+      await NexusNative.dbExec(
+        `INSERT INTO contacts (id, account_id, display_name, email, payload) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, email=excluded.email, payload=excluded.payload`,
+        [c.id, c.accountId, c.displayName, c.emailAddresses[0]?.address ?? null, JSON.stringify(c)],
+      );
+    }
+  }
+  async deleteContacts(accountId: AccountId, contactIds: readonly string[]): Promise<void> {
+    for (const id of contactIds) {
+      await NexusNative.dbExec('DELETE FROM contacts WHERE account_id = ? AND id = ?', [
+        accountId,
+        id,
+      ]);
+    }
+  }
+  async search(accountId: AccountId, query: string): Promise<readonly Contact[]> {
+    const like = `%${query}%`;
+    const rows = (await NexusNative.dbQuery(
+      `SELECT payload FROM contacts WHERE account_id = ? AND (display_name LIKE ? OR email LIKE ?)`,
+      [accountId, like, like],
+    )) as readonly PayloadRow[];
+    return rows.map((r) => JSON.parse(r.payload) as Contact);
+  }
+}
+
+/** SyncCursorStore-Port → verschlüsselte SQLite-Tabelle `sync_cursors` (echtes Delta-Sync). */
+export class SqlSyncCursorStore implements SyncCursorStore {
+  async getCursor(key: string): Promise<string | undefined> {
+    const rows = (await NexusNative.dbQuery(
+      'SELECT cursor FROM sync_cursors WHERE key = ? LIMIT 1',
+      [key],
+    )) as readonly { readonly cursor?: string | number | null }[];
+    const c = rows[0]?.cursor;
+    return typeof c === 'string' ? c : undefined;
+  }
+  async setCursor(key: string, cursor: string): Promise<void> {
+    await NexusNative.dbExec(
+      `INSERT INTO sync_cursors (key, cursor) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET cursor = excluded.cursor`,
+      [key, cursor],
+    );
+  }
+  async clear(accountId: AccountId): Promise<void> {
+    await NexusNative.dbExec('DELETE FROM sync_cursors WHERE key LIKE ?', [`${accountId}:%`]);
   }
 }

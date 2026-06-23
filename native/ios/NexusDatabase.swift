@@ -38,6 +38,30 @@ final class NexusDatabase {
     account_id TEXT PRIMARY KEY,
     payload    TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS folders (
+    id         TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    payload    TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS events (
+    id         TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    start_at   INTEGER NOT NULL,
+    end_at     INTEGER NOT NULL,
+    payload    TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_events_range ON events(account_id, start_at);
+  CREATE TABLE IF NOT EXISTS contacts (
+    id           TEXT PRIMARY KEY,
+    account_id   TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    email        TEXT,
+    payload      TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sync_cursors (
+    key    TEXT PRIMARY KEY,
+    cursor TEXT NOT NULL
+  );
   CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
     USING fts5(subject, preview, content='messages', content_rowid='rowid');
   """

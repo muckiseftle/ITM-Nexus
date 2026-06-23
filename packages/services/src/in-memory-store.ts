@@ -15,6 +15,7 @@ import type {
   OutboxState,
   SearchHit,
   SecureStore,
+  SyncCursorStore,
 } from '@nexus/core-transport';
 import { emptyOutbox } from '@nexus/core-transport';
 
@@ -199,5 +200,24 @@ export class InMemoryFolderStore implements FolderStore {
   listFolders(accountId: AccountId): Promise<readonly MailFolder[]> {
     const own = [...this.folders.values()].filter((f) => f.accountId === accountId);
     return Promise.resolve(own);
+  }
+}
+
+/** In-Memory-{@link SyncCursorStore} (Referenz/Test-Double). Produktiv: SQLCipher. */
+export class InMemorySyncCursorStore implements SyncCursorStore {
+  private readonly cursors = new Map<string, string>();
+
+  getCursor(key: string): Promise<string | undefined> {
+    return Promise.resolve(this.cursors.get(key));
+  }
+  setCursor(key: string, cursor: string): Promise<void> {
+    this.cursors.set(key, cursor);
+    return Promise.resolve();
+  }
+  clear(accountId: AccountId): Promise<void> {
+    for (const k of [...this.cursors.keys()]) {
+      if (k.startsWith(`${accountId}:`)) this.cursors.delete(k);
+    }
+    return Promise.resolve();
   }
 }

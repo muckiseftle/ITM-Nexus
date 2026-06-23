@@ -1,16 +1,44 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
+  BodyType,
   hasFlag,
   isUnread,
   MessageFlag,
   type AccountId,
+  type Attachment,
   type MailMessage,
   type MessageId,
 } from '@nexus/domain';
 import { color, radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { archive, remove, setRead, toggleFlag } from '../actions/messageActions';
+
+/** Sehr einfache HTML→Text-Reduktion (ohne WebView-Abhängigkeit; echtes HTML-Rendering folgt). */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function bodyText(m: MailMessage): string {
+  const content = m.body?.content ?? m.preview;
+  return m.body?.type === BodyType.Html ? htmlToText(content) : content;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1000) return `${Math.round(bytes / 1000)} KB`;
+  return `${bytes} B`;
+}
 
 interface Props {
   readonly container: AppContainer;
@@ -70,6 +98,18 @@ export function MessageScreen({
     onBack();
   };
 
+  const onDownload = async (a: Attachment): Promise<void> => {
+    try {
+      const content = await container.transport.getAttachment(account, a.id);
+      Alert.alert(
+        content.name,
+        `${content.contentType} · ${formatSize(content.sizeBytes)} geladen.`,
+      );
+    } catch {
+      Alert.alert('Anhang', 'Konnte nicht geladen werden.');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Pressable style={styles.back} onPress={onBack} hitSlop={8}>
@@ -85,7 +125,22 @@ export function MessageScreen({
             {message.categories.length > 0 ? (
               <Text style={styles.categories}>{message.categories.join(' · ')}</Text>
             ) : null}
-            <Text style={styles.body}>{message.body?.content ?? message.preview}</Text>
+            <Text style={styles.body}>{bodyText(message)}</Text>
+
+            {message.attachments.length > 0 ? (
+              <View style={styles.attachWrap}>
+                <Text style={styles.attachHead}>Anhänge ({message.attachments.length})</Text>
+                {message.attachments.map((a) => (
+                  <Pressable key={a.id} style={styles.attachRow} onPress={() => void onDownload(a)}>
+                    <Text style={styles.attachIcon}>📎</Text>
+                    <Text style={styles.attachName} numberOfLines={1}>
+                      {a.name}
+                    </Text>
+                    <Text style={styles.attachMeta}>{formatSize(a.sizeBytes)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
           </ScrollView>
 
           <View style={styles.actions}>
@@ -157,6 +212,28 @@ const styles = StyleSheet.create({
     gap: space.xs,
     padding: space.md,
   },
+  attachHead: {
+    color: color.textSecondary,
+    fontSize: typography.caption.size,
+    fontWeight: '700',
+    marginBottom: space.xs,
+  },
+  attachIcon: { fontSize: typography.body.size, marginRight: space.sm },
+  attachMeta: {
+    color: color.textSecondary,
+    fontSize: typography.caption.size,
+    marginLeft: space.sm,
+  },
+  attachName: { color: color.textPrimary, flex: 1, fontSize: typography.body.size },
+  attachRow: {
+    alignItems: 'center',
+    backgroundColor: color.bgElevated,
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    marginBottom: space.xs,
+    padding: space.sm,
+  },
+  attachWrap: { marginTop: space.lg },
   back: { paddingHorizontal: space.md, paddingVertical: space.sm },
   backText: { color: color.brandPrimary, fontSize: typography.body.size },
   body: { color: color.textPrimary, fontSize: typography.body.size, marginTop: space.md },

@@ -1,4 +1,4 @@
-import type { CalendarEvent, Contact, MailFolder, MailMessage } from '@nexus/domain';
+import type { Attachment, CalendarEvent, Contact, MailFolder, MailMessage } from '@nexus/domain';
 import {
   BodyType,
   FolderType,
@@ -41,11 +41,14 @@ function message(params: {
   readonly flagged?: boolean;
   readonly categories?: readonly string[];
   readonly body?: string;
+  readonly bodyType?: BodyType;
+  readonly attachments?: readonly Attachment[];
 }): MailMessage {
   const flags = [
     ...(params.read === true ? [MessageFlag.Read] : []),
     ...(params.flagged === true ? [MessageFlag.Flagged] : []),
   ];
+  const attachments = params.attachments ?? [];
   return {
     id: toMessageId(params.id),
     accountId: DEMO_ACCOUNT,
@@ -58,10 +61,10 @@ function message(params: {
     importance: Importance.Normal,
     flags,
     categories: params.categories ?? [],
-    hasAttachments: false,
-    attachments: [],
+    hasAttachments: attachments.length > 0,
+    attachments,
     preview: params.preview,
-    body: { type: BodyType.Text, content: params.body ?? params.preview },
+    body: { type: params.bodyType ?? BodyType.Text, content: params.body ?? params.preview },
   };
 }
 
@@ -91,7 +94,17 @@ export function buildDemoData(): DemoData {
       hoursAgo: 1,
       conversationId: 'conv-angebot',
       categories: ['Vertrieb'],
-      body: 'Hallo,\n\nkönnen wir die Konditionen aus dem Angebot Q3 noch einmal durchgehen? Insbesondere die Staffelpreise.\n\nViele Grüße\nMarkus Brandt',
+      bodyType: BodyType.Html,
+      body: '<p>Hallo,</p><p>können wir die Konditionen aus dem <b>Angebot Q3</b> noch einmal durchgehen? Insbesondere die <i>Staffelpreise</i>.</p><p>Viele Grüße<br>Markus Brandt</p>',
+      attachments: [
+        {
+          id: 'att-q3-pdf',
+          name: 'Angebot_Q3.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 248_000,
+          isInline: false,
+        },
+      ],
     }),
     message({
       id: 'm-101',
