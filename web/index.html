@@ -187,13 +187,26 @@
       .wd.sel .wdd { outline: 2px solid var(--brandPrimary); outline-offset: -2px; }
       .dots { display: flex; gap: 3px; justify-content: center; margin-top: 3px; min-height: 6px; }
       .dots .d { width: 5px; height: 5px; border-radius: 50%; }
-      .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); }
-      .mgrid.head .mh { text-align: center; font-size: 11px; color: var(--textSecondary); padding: 6px 0; }
-      .mcell { min-height: 56px; padding: 4px 0; text-align: center; cursor: pointer; border-top: 1px solid var(--bgElevated); }
-      .mcell.dim { opacity: .35; }
-      .mcell.sel { background: #eaf0fe; }
-      .mnum { width: 28px; height: 28px; line-height: 28px; margin: 0 auto; border-radius: 50%; font-size: var(--fCaption); color: var(--textPrimary); }
-      .mnum.today { background: var(--brandPrimary); color: #fff; }
+      .mhead { display: flex; align-items: center; padding: 2px var(--md) 4px; }
+      .mhead .wnum { width: 18px; flex: 0 0 auto; }
+      .mhead .mrow { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+      .mh { text-align: center; font-size: 11px; color: var(--textSecondary); }
+      .mh.we { opacity: .55; }
+      .mcal { padding: 0 var(--md) var(--sm); }
+      .mweek { display: flex; align-items: flex-start; }
+      .mweek .wnum { width: 18px; flex: 0 0 auto; font-size: 10px; color: var(--textSecondary); padding-top: 8px; text-align: center; }
+      .mrow { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+      .mcell { min-height: 76px; padding: 3px 1px 2px; cursor: pointer; border-radius: 10px; overflow: hidden; }
+      .mcell:active { background: var(--bgElevated); }
+      .mcell.dim { opacity: .38; }
+      .mnum { width: 26px; height: 26px; line-height: 26px; margin: 0 auto 3px; border-radius: 50%; font-size: var(--fCaption); color: var(--textPrimary); text-align: center; }
+      .mnum.today { background: var(--brandPrimary); color: #fff; font-weight: 700; }
+      .mnum.sel { background: var(--bgElevated); font-weight: 700; }
+      .mcell.we .mnum { color: var(--textSecondary); }
+      .chip { display: flex; align-items: center; gap: 3px; border-radius: 5px; padding: 1px 3px; margin: 0 1px 2px; overflow: hidden; }
+      .chip .cdot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+      .chip .ct { font-size: 9.5px; line-height: 1.3; color: var(--textPrimary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cmore { font-size: 9px; color: var(--textSecondary); padding-left: 5px; }
 
       .drawer { position: absolute; inset: 0; z-index: 40; visibility: hidden; }
       .drawer.open { visibility: visible; }
@@ -234,6 +247,22 @@
       @keyframes wordIn { to { opacity: 1; transform: scale(1); } }
       @keyframes splashOut { to { opacity: 0; visibility: hidden; } }
       @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; } }
+
+      /* Dark Mode (folgt der System-Einstellung) */
+      @media (prefers-color-scheme: dark) {
+        :root { --bgCanvas: #0c1014; --bgElevated: #171c23; --textPrimary: #e6eaf0; --textSecondary: #98a2b0; }
+        body { background: #000; }
+        #tabbar { background: rgba(18,23,30,.92); border-top-color: #222a33; }
+        .row { border-bottom-color: #1c232b; }
+        .row:active, .ev:active, .iconbtn:active, .mcell:active, .frow:active, .mbx:active, .item:active, .action:active { background: #1c232b; }
+        .item { border-bottom-color: #222a33; }
+        .seg button.active { background: #2a313b; color: #e6eaf0; }
+        .frow.active { background: #1b2740; color: #e6eaf0; }
+        .switch { background: #39414c; }
+        .weekstrip { border-bottom-color: #222a33; }
+        .hourrow { border-top-color: #222a33; }
+        #toast { background: #e6eaf0; color: #0b0f14; }
+      }
     </style>
   </head>
   <body>
@@ -489,6 +518,12 @@
       const calOf = (id) => calendars.find((c) => c.id === id) || calendars[0];
       const dStart = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
       const mondayOf = (ms) => { const d0 = dStart(ms); const wd = (new Date(d0).getDay() + 6) % 7; return d0 - wd * DAY; };
+      function isoWeek(ms) {
+        const d = new Date(dStart(ms));
+        d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+        const week1 = new Date(d.getFullYear(), 0, 4);
+        return 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+      }
       const hm = (ms) => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
       const longDay = (ms) => new Date(ms).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
       function evFiltered() {
@@ -551,18 +586,31 @@
         const first = new Date(y, m, 1);
         const start = mondayOf(first.getTime());
         const monthName = first.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
-        const head = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((x) => `<div class="mh">${x}</div>`).join('');
-        let cells = '';
-        for (let i = 0; i < 42; i++) {
-          const d0 = start + i * DAY;
-          const inMonth = new Date(d0).getMonth() === m;
-          cells += `<div class="mcell ${inMonth ? '' : 'dim'} ${d0 === calSel ? 'sel' : ''}" onclick="selectDay(${d0})">
-            <div class="mnum ${d0 === T ? 'today' : ''}">${new Date(d0).getDate()}</div><div class="dots">${dots(d0)}</div></div>`;
+        const head = ['M', 'D', 'M', 'D', 'F', 'S', 'S'].map((x, i) => `<div class="mh ${i >= 5 ? 'we' : ''}">${x}</div>`).join('');
+        let weeks = '';
+        for (let w = 0; w < 6; w++) {
+          const ws = start + w * 7 * DAY;
+          let cells = '';
+          for (let i = 0; i < 7; i++) {
+            const d0 = ws + i * DAY;
+            const dt = new Date(d0);
+            const inMonth = dt.getMonth() === m;
+            const evs = evOn(d0);
+            const chips = evs.slice(0, 3).map((e) => {
+              const c = calOf(e.cal);
+              return `<div class="chip" style="background:${c.color}26"><span class="cdot" style="background:${c.color}"></span><span class="ct">${esc(e.title)}</span></div>`;
+            }).join('');
+            const more = evs.length > 3 ? `<div class="cmore">+${evs.length - 3} mehr</div>` : '';
+            cells += `<div class="mcell ${inMonth ? '' : 'dim'} ${i >= 5 ? 'we' : ''}" onclick="selectDay(${d0})">
+              <div class="mnum ${d0 === T ? 'today' : ''} ${d0 === calSel && d0 !== T ? 'sel' : ''}">${dt.getDate()}</div>${chips}${more}</div>`;
+          }
+          weeks += `<div class="mweek"><div class="wnum">${isoWeek(ws)}</div><div class="mrow">${cells}</div></div>`;
         }
         return `<div class="daynav"><button class="iconbtn" onclick="shiftMonth(-1)">${svg(I.chevL)}</button>
             <div class="daynav-title">${esc(monthName)}</div>
             <button class="iconbtn" onclick="shiftMonth(1)">${svg(I.chevR)}</button></div>
-          <div class="mgrid head">${head}</div><div class="mgrid">${cells}</div>
+          <div class="mhead"><div class="wnum"></div><div class="mrow">${head}</div></div>
+          <div class="mcal">${weeks}</div>
           ${dayHeader(calSel)}${evOn(calSel).map(evRow).join('') || '<div class="empty">Keine Termine an diesem Tag.</div>'}`;
       }
       function renderCalendar() {
