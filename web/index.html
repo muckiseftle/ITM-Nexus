@@ -147,6 +147,13 @@
         background: #fff; transition: left .25s cubic-bezier(.4,1.3,.5,1); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
       .switch.on::after { left: 20px; }
       .check { color: var(--brandPrimary); font-weight: 700; font-size: var(--fBody); }
+      .acct-hero { display: flex; align-items: center; gap: var(--md); padding: var(--md); }
+      .hero-name { font-size: var(--fHeadline); font-weight: 700; color: var(--textPrimary); }
+      .rm { background: transparent; border: 1px solid #e6b9b9; color: var(--danger); border-radius: var(--rsm);
+        font-size: var(--fCaption); font-weight: 600; padding: 6px 12px; flex: 0 0 auto; }
+      .rm:active { background: #fdecec; }
+      .formrow { display: flex; gap: var(--xs); margin-top: var(--xs); }
+      .formrow .action { flex: 1; }
 
       .drawer { position: absolute; inset: 0; z-index: 40; visibility: hidden; }
       .drawer.open { visibility: visible; }
@@ -310,7 +317,10 @@
       let drawerOpen = false, drawerView = 'folders';
       const q = { mail: '', calendar: '', contacts: '' };
 
-      const settings = { syncWindow: '1m', syncInterval: '5m', push: true, background: true, wifiOnly: false, appLock: true };
+      const settings = { push: true, background: true, wifiOnly: false, appLock: true };
+      const acctSettings = { demo: { syncWindow: '1m', syncInterval: '5m' }, work: { syncWindow: '3m', syncInterval: '15m' } };
+      let settingsRoute = 'root', detailAccount = null, showAddShared = false;
+      const newShared = { name: '', addr: '' };
       const WINDOW_OPTS = [
         { key: '1w', label: '1 Woche' }, { key: '1m', label: '1 Monat' }, { key: '3m', label: '3 Monate' },
         { key: '6m', label: '6 Monate' }, { key: 'all', label: 'Alle Nachrichten' },
@@ -431,32 +441,21 @@
       }
       const sw2 = (on) => `<div class="switch ${on ? 'on' : ''}"></div>`;
       function renderSettings() {
-        const mlist = mbxList().map((m) => `
-          <div class="item"><div class="grow"><div class="item-title">${esc(m.name)}</div><div class="item-sub">${esc(m.addr)}</div></div>
-            <span class="kindtag">${KIND_LABEL[m.kind]}</span></div>`).join('');
         const alist = accounts.map((a) => `
-          <div class="item" onclick="switchAccount('${a.id}')"><div class="avatar" style="width:40px;height:40px;margin-right:0">${initials(a.name)}</div>
+          <div class="item" onclick="openAccount('${a.id}')"><div class="avatar" style="width:40px;height:40px;margin-right:0">${initials(a.name)}</div>
             <div class="grow"><div class="item-title">${esc(a.name)}</div><div class="item-sub">${esc(a.email)}</div></div>
-            ${a.id === currentAccount ? '<span class="check">✓</span>' : ''}</div>`).join('');
+            ${a.id === currentAccount ? '<span class="kindtag">Aktiv</span>' : ''}<span class="chev">›</span></div>`).join('');
         return `
           <div class="settings-head">Einstellungen</div>
           <div class="section-title">Konten</div>
           <div class="card">${alist}
             <div class="item" onclick="toast('Konto hinzufügen (Demo)')"><div class="grow"><div class="item-title add-text">＋ Konto hinzufügen</div></div></div>
           </div>
-          <div class="section-title">Postfächer &amp; Freigaben</div>
-          <div class="card">${mlist}
-            <div class="item" onclick="toast('Freigegebenes Postfach hinzufügen (Demo)')"><div class="grow"><div class="item-title add-text">＋ Freigegebenes Postfach hinzufügen</div></div></div>
-          </div>
-          <div class="section-title">Synchronisierung</div>
+          <div class="section-title">App</div>
           <div class="card">
-            <div class="item" onclick="toast('Sync-Zeitraum (Demo)')"><div class="grow"><div class="item-title">Sync-Zeitraum</div><div class="item-sub">Wie weit zurück Mails geladen werden</div></div>
-              <div class="item-value">${esc(labelOf(WINDOW_OPTS, settings.syncWindow))}</div><span class="chev">›</span></div>
-            <div class="item" onclick="toast('Aktualisierung (Demo)')"><div class="grow"><div class="item-title">Aktualisierung</div></div>
-              <div class="item-value">${esc(labelOf(INTERVAL_OPTS, settings.syncInterval))}</div><span class="chev">›</span></div>
-            <div class="item" onclick="flip('push')"><div class="grow"><div class="item-title">Push (DirectPush)</div><div class="item-sub">Neue Mails sofort</div></div>${sw2(settings.push)}</div>
-            <div class="item" onclick="flip('background')"><div class="grow"><div class="item-title">Hintergrund-Aktualisierung</div></div>${sw2(settings.background)}</div>
-            <div class="item" onclick="flip('wifiOnly')"><div class="grow"><div class="item-title">Nur über WLAN</div></div>${sw2(settings.wifiOnly)}</div>
+            <div class="item" onclick="flip('push')"><div class="grow"><div class="item-title">Push (DirectPush)</div><div class="item-sub">Neue Mails sofort, ohne Abfrage-Intervall</div></div>${sw2(settings.push)}</div>
+            <div class="item" onclick="flip('background')"><div class="grow"><div class="item-title">Hintergrund-Aktualisierung</div><div class="item-sub">Sync auch bei geschlossener App</div></div>${sw2(settings.background)}</div>
+            <div class="item" onclick="flip('wifiOnly')"><div class="grow"><div class="item-title">Nur über WLAN synchronisieren</div></div>${sw2(settings.wifiOnly)}</div>
           </div>
           <div class="section-title">Sicherheit</div>
           <div class="card">
@@ -466,6 +465,41 @@
           </div>
           <div class="section-title">Über</div>
           <div class="card"><div class="item"><div class="grow"><div class="item-title">Version</div></div><div class="item-value">1.0.0 (Vorschau)</div></div></div>
+          <div style="height:var(--lg)"></div>`;
+      }
+      function renderAccountDetail(id) {
+        const a = accounts.find((x) => x.id === id);
+        if (!a) return renderSettings();
+        const s = acctSettings[id];
+        const shared = (mailboxesByAccount[id] || []).filter((m) => m.kind !== 'primary');
+        const sharedRows = shared.map((m) => `
+          <div class="item"><div class="grow"><div class="item-title">${esc(m.name)}</div><div class="item-sub">${esc(m.addr)} · ${KIND_LABEL[m.kind]}</div></div>
+            <button class="rm" onclick="removeShared('${id}','${m.id}')">Entfernen</button></div>`).join('');
+        const addBlock = showAddShared
+          ? `<div class="item" style="display:block">
+               <input class="input" placeholder="Name (optional)" value="${esc(newShared.name)}" oninput="newShared.name=this.value" />
+               <input class="input" placeholder="postfach@firma.de" inputmode="email" value="${esc(newShared.addr)}" oninput="newShared.addr=this.value" />
+               <div class="formrow"><button class="action primary" onclick="addShared('${id}')">Hinzufügen</button><button class="action" onclick="toggleAddShared()">Abbrechen</button></div>
+             </div>`
+          : `<div class="item" onclick="toggleAddShared()"><div class="grow"><div class="item-title add-text">＋ Freigegebenes Postfach hinzufügen</div></div></div>`;
+        return `
+          <div class="back" onclick="settingsBack()">‹ Einstellungen</div>
+          <div class="acct-hero"><div class="avatar" style="width:56px;height:56px;font-size:var(--fHeadline);margin-right:0">${initials(a.name)}</div>
+            <div><div class="hero-name">${esc(a.name)}</div><div class="item-sub">${esc(a.email)}</div></div></div>
+          <div class="section-title">Konto</div>
+          <div class="card">
+            <div class="item"><div class="grow"><div class="item-title">Server</div></div><div class="item-value">${esc(a.server)}</div></div>
+            <div class="item" onclick="cycleAcct('${id}','syncWindow','w')"><div class="grow"><div class="item-title">Sync-Zeitraum</div><div class="item-sub">Wie weit zurück Mails geladen werden</div></div><div class="item-value">${esc(labelOf(WINDOW_OPTS, s.syncWindow))}</div><span class="chev">›</span></div>
+            <div class="item" onclick="cycleAcct('${id}','syncInterval','i')"><div class="grow"><div class="item-title">Aktualisierung</div></div><div class="item-value">${esc(labelOf(INTERVAL_OPTS, s.syncInterval))}</div><span class="chev">›</span></div>
+            <div class="item" onclick="toast('Signatur (Demo)')"><div class="grow"><div class="item-title">Signatur</div></div><span class="chev">›</span></div>
+          </div>
+          <div class="section-title">Freigegebene Postfächer</div>
+          <div class="card">${sharedRows}${addBlock}</div>
+          <div class="section-title">&nbsp;</div>
+          <div class="card">
+            <div class="item" onclick="toast('Abgemeldet (Demo)')"><div class="grow"><div class="item-title danger-text">Abmelden</div></div></div>
+            <div class="item" onclick="toast('Konto entfernt (Demo)')"><div class="grow"><div class="item-title danger-text">Konto entfernen</div></div></div>
+          </div>
           <div style="height:var(--lg)"></div>`;
       }
 
@@ -510,7 +544,7 @@
         }
         if (tab === 'calendar') return renderCalendar();
         if (tab === 'contacts') return renderContacts();
-        return renderSettings();
+        return settingsRoute === 'account' ? renderAccountDetail(detailAccount) : renderSettings();
       }
       function playAnim() {
         const map = { forward: 'inForward', back: 'inBack', fade: 'inFade', none: null };
@@ -526,7 +560,32 @@
       }
       function rerender() { render(true); }
 
-      function setTab(t) { if (t === tab) return; tab = t; pendingAnim = 'fade'; render(); }
+      function setTab(t) {
+        if (t === tab) { if (t === 'settings' && settingsRoute !== 'root') { settingsRoute = 'root'; pendingAnim = 'back'; render(); } return; }
+        tab = t; pendingAnim = 'fade'; render();
+      }
+      function openAccount(id) { detailAccount = id; settingsRoute = 'account'; showAddShared = false; pendingAnim = 'forward'; render(); }
+      function settingsBack() { settingsRoute = 'root'; showAddShared = false; pendingAnim = 'back'; render(); }
+      function cycleAcct(id, key, kind) {
+        const opts = kind === 'w' ? WINDOW_OPTS : INTERVAL_OPTS;
+        const i = opts.findIndex((o) => o.key === acctSettings[id][key]);
+        acctSettings[id][key] = opts[(i + 1) % opts.length].key;
+        render(true);
+      }
+      function removeShared(accId, mbxId) {
+        mailboxesByAccount[accId] = (mailboxesByAccount[accId] || []).filter((m) => m.id !== mbxId);
+        if (currentAccount === accId && currentMailbox === mbxId) { currentMailbox = 'primary'; currentFolder = 'inbox'; }
+        toast('Postfach entfernt'); render(true);
+      }
+      function toggleAddShared() { showAddShared = !showAddShared; render(true); }
+      function addShared(accId) {
+        const addr = newShared.addr.trim();
+        if (!addr || addr.indexOf('@') < 1) { toast('Gültige Adresse eingeben'); return; }
+        const id = 's' + Date.now();
+        (mailboxesByAccount[accId] = mailboxesByAccount[accId] || []).push({ id, kind: 'shared', name: newShared.name.trim() || addr.split('@')[0], addr });
+        newShared.name = ''; newShared.addr = ''; showAddShared = false;
+        toast('Postfach hinzugefügt'); render(true);
+      }
       function openMessage(id) { const m = byId(id); if (m && !m.read) m.read = true; tab = 'mail'; mailRoute = { name: 'message', id }; pendingAnim = 'forward'; render(); }
       function goList() { mailRoute = { name: 'list' }; pendingAnim = 'back'; render(); }
       function openCompose() { mailRoute = { name: 'compose' }; pendingAnim = 'forward'; render(); }
