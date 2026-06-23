@@ -13,6 +13,8 @@ export async function createDemoContainer(): Promise<AppContainer> {
   return {
     secureStore: c.secureStore,
     mailStore: c.mailStore,
+    calendarStore: c.calendarStore,
+    contactStore: c.contactStore,
     transport: c.transport,
     setup: c.setup,
     sync: c.sync,
@@ -20,5 +22,7 @@ export async function createDemoContainer(): Promise<AppContainer> {
     search: c.search,
     compose: c.compose,
     rules: c.rules,
+    calendar: c.calendar,
+    contacts: c.contacts,
   };
 }
