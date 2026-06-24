@@ -72,6 +72,14 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportRestore:rejecter:)
+  func transportRestore(_ resolve: RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    // Stellt Endpoint + Auth aus dem Keychain wieder her (kein Netz). Liefert die accountId
+    // oder null. Bewusst OHNE Anmeldeprüfung — Offline-First: Sync verifiziert später.
+    do { resolve(try NexusTransport.shared.restoreSession()) }
+    catch { reject("transport_restore", "\(error)", error) }
+  }
+
   @objc(transportSyncMessages:folderId:syncKey:resolver:rejecter:)
   func transportSyncMessages(_ accountId: String, folderId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {

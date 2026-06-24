@@ -58,6 +58,11 @@ export interface AppContainer {
   readonly push?: PushTransport;
   /** Plant den nativen iOS-Hintergrund-Sync (BGTaskScheduler). Nur Live-Modus. */
   readonly scheduleBackgroundSync?: () => Promise<void>;
+  /**
+   * Stellt eine bestehende Sitzung aus dem Keychain wieder her (kein Netz, keine
+   * Anmeldeprüfung — Offline-First). Liefert die accountId (E-Mail) oder null. Nur Live-Modus.
+   */
+  readonly restoreSession?: () => Promise<string | null>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -131,6 +136,7 @@ export async function createContainer(): Promise<AppContainer> {
     scheduleBackgroundSync: async () => {
       await NexusNative.transportScheduleBackgroundSync();
     },
+    restoreSession: () => NexusNative.transportRestore(),
   };
 }
 

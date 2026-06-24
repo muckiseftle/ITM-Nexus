@@ -58,6 +58,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
 
   // Schritt 1 → 2: E-Mail prüfen, dann zur Anmeldung.
   const continueFromEmail = (): void => {
+    if (busy) return;
     const trimmed = email.trim();
     if (!isValidEmail(trimmed)) {
       fail('E-Mail prüfen', 'Bitte eine gültige E-Mail-Adresse eingeben.', `ungültig: ${trimmed}`);
@@ -69,6 +70,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
 
   // Baut die Credentials und führt Autodiscover + echte Anmeldeprüfung aus.
   const attempt = async (withManualServer: boolean): Promise<void> => {
+    if (busy) return; // Doppel-Submit verhindern (z. B. schnelles Doppeltippen).
     const trimmedEmail = email.trim();
     if (password.length === 0) {
       fail('Passwort fehlt', 'Bitte dein Passwort eingeben.', 'leeres Passwort');

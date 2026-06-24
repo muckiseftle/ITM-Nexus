@@ -51,21 +51,28 @@ export class AccountSetupService {
   ): Promise<AutodiscoverResult> {
     await this.transport.verifyCredentials(email);
 
-    await this.secureStore.set(secretKey(email), credentials.secret);
-    await this.secureStore.set(
-      metaKey(email),
-      JSON.stringify({
-        username: credentials.username,
-        scheme: credentials.scheme,
-        ...(credentials.domain !== undefined ? { domain: credentials.domain } : {}),
-        auth: discovered.auth,
-        ewsUrl: discovered.ewsUrl,
-        easUrl: discovered.easUrl,
-        manual: credentials.manual !== undefined,
-      }),
-    );
-    // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).
-    await this.secureStore.set(CURRENT_ACCOUNT_KEY, email.toLowerCase());
+    // Persistenz atomar behandeln: schlägt ein Teilschritt fehl, alles zurücknehmen, damit
+    // kein halb eingerichtetes Konto (z. B. verwaistes Secret) zurückbleibt.
+    try {
+      await this.secureStore.set(secretKey(email), credentials.secret);
+      await this.secureStore.set(
+        metaKey(email),
+        JSON.stringify({
+          username: credentials.username,
+          scheme: credentials.scheme,
+          ...(credentials.domain !== undefined ? { domain: credentials.domain } : {}),
+          auth: discovered.auth,
+          ewsUrl: discovered.ewsUrl,
+          easUrl: discovered.easUrl,
+          manual: credentials.manual !== undefined,
+        }),
+      );
+      // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).
+      await this.secureStore.set(CURRENT_ACCOUNT_KEY, email.toLowerCase());
+    } catch (e) {
+      await this.forget(email).catch(() => undefined);
+      throw e;
+    }
 
     return discovered;
   }

@@ -116,10 +116,22 @@ function AppInner(): React.JSX.Element {
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
     factory()
-      .then((c) => {
+      .then(async (c) => {
         setContainer(c);
         if (APP_MODE === 'demo') {
           setAccount(toAccountId(DEMO_ACCOUNT_ID));
+          return;
+        }
+        // Live: bestehende Sitzung aus dem Keychain wiederherstellen → kein erneuter Login
+        // bei jedem App-Start. Fehler hier sind unkritisch → normaler Login-Screen.
+        try {
+          const restored = await c.restoreSession?.();
+          if (restored !== null && restored !== undefined && restored.length > 0) {
+            setAccount(toAccountId(restored.toLowerCase()));
+            setAccountEmail(restored);
+          }
+        } catch {
+          /* kein Restore möglich → Login-Screen */
         }
       })
       .catch((e: unknown) => {

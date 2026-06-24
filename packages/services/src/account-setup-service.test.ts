@@ -1,8 +1,21 @@
-import type { Credentials } from '@nexus/core-transport';
+import type { Credentials, SecureStore } from '@nexus/core-transport';
 import { describe, expect, it } from 'vitest';
 import { AccountSetupService } from './account-setup-service';
 import { InMemorySecureStore } from './in-memory-store';
 import { FakeMailTransport } from './testing/fakes';
+
+/** SecureStore, der beim N-ten `set` fehlschlägt (für Rollback-Tests). */
+class FlakySecureStore extends InMemorySecureStore implements SecureStore {
+  private sets = 0;
+  constructor(private readonly failOnSet: number) {
+    super();
+  }
+  override async set(key: string, value: string): Promise<void> {
+    this.sets += 1;
+    if (this.sets === this.failOnSet) throw new Error('Keychain-Schreibfehler');
+    await super.set(key, value);
+  }
+}
 
 const credentials: Credentials = {
   username: 'm.brandt',
@@ -73,6 +86,17 @@ describe('AccountSetupService', () => {
     // Kein „Pseudo-Login": weder Secret noch Metadaten noch aktives Konto dürfen entstehen.
     expect(await secure.get('nexus:secret:user@example.com')).toBeUndefined();
     expect(await secure.get('nexus:account:user@example.com')).toBeUndefined();
+    expect(await secure.get('nexus:current-account')).toBeUndefined();
+  });
+
+  it('rollt die Persistenz zurück, wenn ein Schreibschritt fehlschlägt', async () => {
+    const secure = new FlakySecureStore(2); // 2. set() (Metadaten) schlägt fehl
+    const service = new AccountSetupService(new FakeMailTransport(), secure);
+
+    await expect(service.setUp('user@example.com', credentials)).rejects.toThrow();
+
+    // Bereits geschriebenes Secret muss wieder entfernt sein (kein halbes Konto).
+    expect(await secure.get('nexus:secret:user@example.com')).toBeUndefined();
     expect(await secure.get('nexus:current-account')).toBeUndefined();
   });
 
