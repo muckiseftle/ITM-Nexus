@@ -26,6 +26,8 @@ export interface NexusNativeModule {
 
   // — Exchange-Transport (EWS/EAS, TLS+Pinning) — Rückgaben sind JSON-Strings —
   transportDiscover(email: string, credentialsJson: string): Promise<string>;
+  /** Authentifizierter EWS-Roundtrip zur Anmeldeprüfung — rejectet bei 401/403/Serverfehler. */
+  transportVerify(email: string): Promise<string>;
   transportSyncMessages(
     accountId: string,
     folderId: string,

@@ -24,6 +24,11 @@ export class AccountSetupService {
   async setUp(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
     const result = await this.transport.discover(email, credentials);
 
+    // Echte Anmeldeprüfung: genau ein authentifizierter Roundtrip gegen den ermittelten
+    // Endpunkt. Schlägt das fehl (falsches Passwort/Server), wird KEIN Konto gespeichert —
+    // es gibt keinen „Pseudo-Login" allein durch erfolgreiche Endpunkt-Erkennung.
+    await this.transport.verifyCredentials(email);
+
     // Im manuellen Modus die feste EWS-Konfiguration bevorzugen, falls der Transport
     // (z. B. der In-Memory-Fall) keinen Endpunkt aus der Antwort liefert.
     const ewsUrl = result.ewsUrl ?? credentials.manual?.ewsUrl;

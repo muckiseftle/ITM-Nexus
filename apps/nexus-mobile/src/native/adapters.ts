@@ -174,6 +174,11 @@ export class NativeMailTransport implements MailTransport, PushTransport {
     return JSON.parse(json) as AutodiscoverResult;
   }
 
+  async verifyCredentials(email: string): Promise<void> {
+    // Wirft (Bridge-Reject) bei abgelehnter Anmeldung/Serverfehler — siehe natives post().
+    await NexusNative.transportVerify(email);
+  }
+
   async syncMessages(
     accountId: AccountId,
     folderId: FolderId,

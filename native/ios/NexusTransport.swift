@@ -399,6 +399,14 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     return try Self.json("sent-\(UUID().uuidString)")
   }
 
+  /// Anmeldeprüfung: genau ein authentifizierter EWS-Roundtrip (FindFolder auf der
+  /// Postfach-Wurzel). `post()` wirft AUTH bei 401/403 bzw. SERVER bei sonstigem Nicht-200 —
+  /// damit werden falsche Anmeldedaten verlässlich abgelehnt (kein „Pseudo-Login").
+  func verifyCredentials(email: String) async throws -> String {
+    _ = try await post(EwsSoap.findFolders())
+    return try Self.json(["verified": true])
+  }
+
   func searchServer(accountId: String, query: String) async throws -> String {
     let xml = try await post(EwsSoap.findItem(folderId: "inbox", query: query))
     let hits = EwsSoap.extractItemIds(xml).enumerated().map { (i, id) -> [String: Any] in

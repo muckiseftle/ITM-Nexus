@@ -53,6 +53,29 @@ describe('AccountSetupService', () => {
     expect(meta).toContain('https://mail.contoso.com/EWS/Exchange.asmx');
   });
 
+  it('prüft die Anmeldedaten mit einem authentifizierten Roundtrip', async () => {
+    const secure = new InMemorySecureStore();
+    const transport = new FakeMailTransport();
+    const service = new AccountSetupService(transport, secure);
+
+    await service.setUp('user@example.com', credentials);
+
+    expect(transport.verifyCallCount).toBe(1);
+  });
+
+  it('speichert KEIN Konto, wenn die Anmeldung abgelehnt wird', async () => {
+    const secure = new InMemorySecureStore();
+    const transport = new FakeMailTransport({ failVerify: true });
+    const service = new AccountSetupService(transport, secure);
+
+    await expect(service.setUp('user@example.com', credentials)).rejects.toThrow();
+
+    // Kein „Pseudo-Login": weder Secret noch Metadaten noch aktives Konto dürfen entstehen.
+    expect(await secure.get('nexus:secret:user@example.com')).toBeUndefined();
+    expect(await secure.get('nexus:account:user@example.com')).toBeUndefined();
+    expect(await secure.get('nexus:current-account')).toBeUndefined();
+  });
+
   it('forget entfernt Secret und Metadaten', async () => {
     const secure = new InMemorySecureStore();
     const service = new AccountSetupService(new FakeMailTransport(), secure);

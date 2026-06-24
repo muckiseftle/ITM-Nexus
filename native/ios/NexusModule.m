@@ -19,6 +19,8 @@ RCT_EXTERN_METHOD(dbQuery:(NSString *)sql params:(NSArray *)params
 
 RCT_EXTERN_METHOD(transportDiscover:(NSString *)email credentialsJson:(NSString *)credentialsJson
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportVerify:(NSString *)email
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSyncMessages:(NSString *)accountId folderId:(NSString *)folderId syncKey:(NSString *)syncKey
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportApplyOperation:(NSString *)operationJson

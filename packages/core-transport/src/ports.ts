@@ -33,6 +33,13 @@ export interface MailTransport {
   readonly capabilities: TransportCapabilities;
 
   discover(email: string, credentials: Credentials): Promise<AutodiscoverResult>;
+  /**
+   * Bestätigt Server-Erreichbarkeit UND Anmeldedaten mit genau einem authentifizierten
+   * EWS-Roundtrip. Wirft bei abgelehnter Anmeldung (401/403) bzw. Serverfehler. Muss nach
+   * {@link MailTransport.discover} aufgerufen werden (nutzt den dort ermittelten Endpunkt
+   * und Auth-Header). Ohne diesen Schritt wäre eine „Anmeldung" nur eine Endpunkt-Erkennung.
+   */
+  verifyCredentials(email: string): Promise<void>;
   loadAccount(accountId: AccountId): Promise<Account>;
 
   syncFolders(accountId: AccountId, syncKey?: string): Promise<SyncDelta<MailFolder>>;

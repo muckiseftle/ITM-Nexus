@@ -64,6 +64,14 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportVerify:resolver:rejecter:)
+  func transportVerify(_ email: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.verifyCredentials(email: email)) }
+      catch { reject("transport_verify", "\(error)", error) }
+    }
+  }
+
   @objc(transportSyncMessages:folderId:syncKey:resolver:rejecter:)
   func transportSyncMessages(_ accountId: String, folderId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {

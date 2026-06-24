@@ -53,6 +53,11 @@ export class InMemoryMailTransport implements MailTransport {
     });
   }
 
+  /** Demo-Transport: keine echte Server-Prüfung — Anmeldung gilt immer als bestätigt. */
+  verifyCredentials(_email: string): Promise<void> {
+    return Promise.resolve();
+  }
+
   loadAccount(accountId: AccountId): Promise<Account> {
     return Promise.resolve({
       id: accountId,

@@ -21,7 +21,7 @@ import type {
   SyncDelta,
   TransportCapabilities,
 } from '@nexus/core-transport';
-import { NetworkError } from '@nexus/core-transport';
+import { AuthError, NetworkError } from '@nexus/core-transport';
 
 const DEFAULT_CAPABILITIES: TransportCapabilities = {
   ews: true,
@@ -44,6 +44,8 @@ export interface FakeTransportConfig {
   readonly failApplyTimes?: number;
   /** Lässt `searchServer` werfen (Degradations-Tests). */
   readonly failServerSearch?: boolean;
+  /** Lässt `verifyCredentials` mit {@link AuthError} fehlschlagen (Login-Ablehnung). */
+  readonly failVerify?: boolean;
 }
 
 function emptyDelta<T>(): SyncDelta<T> {
@@ -57,6 +59,8 @@ export class FakeMailTransport implements MailTransport {
   applyCallCount = 0;
   /** Zuletzt an `discover` übergebene Credentials (für Passthrough-Assertions). */
   lastDiscoverCredentials?: Credentials;
+  /** Anzahl der `verifyCredentials`-Aufrufe (für Login-Prüfungs-Assertions). */
+  verifyCallCount = 0;
 
   constructor(private readonly config: FakeTransportConfig = {}) {
     this.capabilities = config.capabilities ?? DEFAULT_CAPABILITIES;
@@ -80,6 +84,14 @@ export class FakeMailTransport implements MailTransport {
       ewsUrl: 'https://mail.example.com/EWS/Exchange.asmx',
     };
     return Promise.resolve(result);
+  }
+
+  verifyCredentials(_email: string): Promise<void> {
+    this.verifyCallCount += 1;
+    if (this.config.failVerify === true) {
+      return Promise.reject(new AuthError('Anmeldung abgelehnt (HTTP 401)'));
+    }
+    return Promise.resolve();
   }
 
   /** Zuletzt an `syncMessages` übergebener Cursor (für Delta-Sync-Assertions). */
