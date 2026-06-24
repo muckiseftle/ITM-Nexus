@@ -74,21 +74,37 @@ export function buildEwsFallbackUrls(domain: string): readonly string[] {
   ];
 }
 
-/** Normalisiert eine vom Nutzer eingegebene Server-/EWS-URL (manueller Modus). */
+/**
+ * Normalisiert eine vom Nutzer eingegebene Server-/EWS-URL (manueller Modus).
+ *
+ * Bewusst OHNE die `URL`-Web-API: In React Native/Hermes ist deren Implementierung
+ * unvollständig (z. B. liefert `pathname` nicht zuverlässig), wodurch gültige Eingaben wie
+ * `mail.firma.de` fälschlich als ungültig abgelehnt würden. Reine String-Verarbeitung
+ * verhält sich auf Gerät und in Node identisch.
+ */
 export function normalizeEwsUrl(input: string): string | undefined {
   let value = input.trim();
   if (value.length === 0) return undefined;
+  if (/\s/.test(value)) return undefined;
+
+  // Schema ergänzen (Standard: https).
   if (!/^https?:\/\//i.test(value)) {
     value = `https://${value}`;
   }
-  // Bloßer Host (ohne Pfad) → Standard-EWS-Pfad anhängen.
-  try {
-    const url = new URL(value);
-    if (url.pathname === '' || url.pathname === '/') {
-      url.pathname = '/EWS/Exchange.asmx';
-    }
-    return url.toString();
-  } catch {
+
+  const m = /^(https?:\/\/)([^/?#]+)([/?#].*)?$/i.exec(value);
+  if (m === null) return undefined;
+  const scheme = (m[1] ?? '').toLowerCase();
+  const host = m[2] ?? '';
+  // Host muss wie ein Server aussehen (mind. ein Punkt, Doppelpunkt für Port, oder localhost).
+  if (host.length === 0 || !(host.includes('.') || host.includes(':') || host === 'localhost')) {
     return undefined;
   }
+
+  let rest = m[3] ?? '';
+  // Bloßer Host (ohne Pfad) → Standard-EWS-Pfad anhängen.
+  if (rest === '' || rest === '/') {
+    rest = '/EWS/Exchange.asmx';
+  }
+  return `${scheme}${host}${rest}`;
 }

@@ -21,18 +21,35 @@ export class AccountSetupService {
     private readonly secureStore: SecureStore,
   ) {}
 
-  async setUp(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
+  /**
+   * Schritt 1: Endpunkt ermitteln (Autodiscover bzw. manuelle Konfiguration). Persistiert
+   * NICHTS und prüft die Anmeldedaten NICHT — erlaubt der UI, dem Nutzer die ermittelte
+   * EWS-URL anzuzeigen, bevor die eigentliche Anmeldung erfolgt.
+   */
+  async discover(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
     const result = await this.transport.discover(email, credentials);
-
-    // Echte Anmeldeprüfung: genau ein authentifizierter Roundtrip gegen den ermittelten
-    // Endpunkt. Schlägt das fehl (falsches Passwort/Server), wird KEIN Konto gespeichert —
-    // es gibt keinen „Pseudo-Login" allein durch erfolgreiche Endpunkt-Erkennung.
-    await this.transport.verifyCredentials(email);
-
     // Im manuellen Modus die feste EWS-Konfiguration bevorzugen, falls der Transport
     // (z. B. der In-Memory-Fall) keinen Endpunkt aus der Antwort liefert.
     const ewsUrl = result.ewsUrl ?? credentials.manual?.ewsUrl;
     const easUrl = result.easUrl ?? credentials.manual?.easUrl;
+    return {
+      ...result,
+      ...(ewsUrl !== undefined ? { ewsUrl } : {}),
+      ...(easUrl !== undefined ? { easUrl } : {}),
+    };
+  }
+
+  /**
+   * Schritt 2: Echte Anmeldeprüfung (genau ein authentifizierter Roundtrip) und — nur bei
+   * Erfolg — Persistenz von Secret + Metadaten im {@link SecureStore}. Schlägt die Prüfung
+   * fehl, wird KEIN Konto gespeichert (kein „Pseudo-Login").
+   */
+  async completeSetup(
+    email: string,
+    credentials: Credentials,
+    discovered: AutodiscoverResult,
+  ): Promise<AutodiscoverResult> {
+    await this.transport.verifyCredentials(email);
 
     await this.secureStore.set(secretKey(email), credentials.secret);
     await this.secureStore.set(
@@ -41,20 +58,22 @@ export class AccountSetupService {
         username: credentials.username,
         scheme: credentials.scheme,
         ...(credentials.domain !== undefined ? { domain: credentials.domain } : {}),
-        auth: result.auth,
-        ewsUrl,
-        easUrl,
+        auth: discovered.auth,
+        ewsUrl: discovered.ewsUrl,
+        easUrl: discovered.easUrl,
         manual: credentials.manual !== undefined,
       }),
     );
     // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).
     await this.secureStore.set(CURRENT_ACCOUNT_KEY, email.toLowerCase());
 
-    return {
-      ...result,
-      ...(ewsUrl !== undefined ? { ewsUrl } : {}),
-      ...(easUrl !== undefined ? { easUrl } : {}),
-    };
+    return discovered;
+  }
+
+  /** Bequemer Gesamtablauf: Endpunkt ermitteln → Anmeldung prüfen → speichern. */
+  async setUp(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
+    const discovered = await this.discover(email, credentials);
+    return this.completeSetup(email, credentials, discovered);
   }
 
   /** Sicheres Vergessen eines Kontos (Teil der Datenlöschungs-Strategie). */

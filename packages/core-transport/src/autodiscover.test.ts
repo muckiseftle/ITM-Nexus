@@ -71,4 +71,21 @@ describe('normalizeEwsUrl', () => {
   it('liefert undefined bei leerer Eingabe', () => {
     expect(normalizeEwsUrl('   ')).toBeUndefined();
   });
+  it('akzeptiert Hostnamen mit Bindestrich (Hermes-URL-Bug umgangen)', () => {
+    expect(normalizeEwsUrl('mail.itm-technologies.de')).toBe(
+      'https://mail.itm-technologies.de/EWS/Exchange.asmx',
+    );
+    expect(normalizeEwsUrl('https://exchange.firma-gmbh.de')).toBe(
+      'https://exchange.firma-gmbh.de/EWS/Exchange.asmx',
+    );
+  });
+  it('akzeptiert Host mit Port', () => {
+    expect(normalizeEwsUrl('mail.firma.de:8443')).toBe(
+      'https://mail.firma.de:8443/EWS/Exchange.asmx',
+    );
+  });
+  it('lehnt Eingaben mit Leerzeichen und einzelne Wörter ohne Punkt ab', () => {
+    expect(normalizeEwsUrl('mail firma de')).toBeUndefined();
+    expect(normalizeEwsUrl('exchange')).toBeUndefined();
+  });
 });

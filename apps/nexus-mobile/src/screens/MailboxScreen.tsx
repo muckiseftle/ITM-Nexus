@@ -9,7 +9,8 @@ import {
   type MailMessage,
   type MessageId,
 } from '@nexus/domain';
-import { space, typography } from '@nexus/ui-kit';
+import { classifyError } from '@nexus/core-transport';
+import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { GLYPH, IconButton } from '../components/Icon';
@@ -40,6 +41,7 @@ export function MailboxScreen({
   const [messages, setMessages] = useState<readonly MailMessage[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const items = await container.mailStore.listFolder(account, folderId, 100, 0);
@@ -48,10 +50,14 @@ export function MailboxScreen({
 
   const sync = useCallback(async () => {
     setRefreshing(true);
+    setSyncError(null);
     try {
       await container.sync.syncMessages(account, folderId);
       await container.outbox.drain(account);
       await load();
+    } catch (e: unknown) {
+      // Fehler dürfen die App NIE abstürzen lassen — als Banner zeigen, lokale Mails bleiben.
+      setSyncError(classifyError(e).detail);
     } finally {
       setRefreshing(false);
     }
@@ -80,6 +86,13 @@ export function MailboxScreen({
         right={<IconButton glyph={GLYPH.compose} color={t.c.brandPrimary} onPress={onCompose} />}
         search={{ value: query, onChange: setQuery, placeholder: `In „${folderTitle}" suchen` }}
       />
+      {syncError !== null ? (
+        <Pressable style={s.banner} onPress={() => setSyncError(null)}>
+          <Text style={s.bannerText} numberOfLines={2}>
+            Aktualisierung fehlgeschlagen: {syncError}
+          </Text>
+        </Pressable>
+      ) : null}
       <FlatList
         data={filtered}
         keyExtractor={(m) => m.id}
@@ -121,6 +134,14 @@ export function MailboxScreen({
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
+    banner: {
+      backgroundColor: t.c.danger + '14',
+      borderRadius: radius.sm,
+      marginHorizontal: space.md,
+      marginBottom: space.xs,
+      padding: space.sm,
+    },
+    bannerText: { color: t.c.danger, fontSize: typography.caption.size },
     dot: {
       backgroundColor: t.c.brandPrimary,
       borderRadius: 4,

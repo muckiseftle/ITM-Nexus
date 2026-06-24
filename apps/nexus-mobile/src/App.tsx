@@ -24,6 +24,7 @@ import {
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
 import { ThemeProvider, useTheme, type AppTheme } from './theme/ThemeContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Icon, type IconName } from './components/Icon';
 import { FolderDrawer } from './components/FolderDrawer';
 import { LoginScreen } from './screens/LoginScreen';
@@ -86,7 +87,9 @@ function deriveName(email: string): string {
 export default function App(): React.JSX.Element {
   return (
     <ThemeProvider>
-      <AppInner />
+      <ErrorBoundary>
+        <AppInner />
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }
@@ -136,7 +139,8 @@ function AppInner(): React.JSX.Element {
     let cancelled = false;
 
     const interval = setInterval(() => {
-      void container.backgroundSync.runDue(account);
+      // Fehler im Hintergrund-Sync NIE als unbehandelte Rejection durchschlagen lassen.
+      container.backgroundSync.runDue(account).catch(() => undefined);
     }, SYNC_INTERVALS.messages);
 
     void container.scheduleBackgroundSync?.();

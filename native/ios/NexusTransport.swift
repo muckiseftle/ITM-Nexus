@@ -510,7 +510,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   ]
 
   private static func json(_ value: Any) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: value, options: [])
+    // `.fragmentsAllowed`: erlaubt auch String/Zahl als Wurzel (z. B. "sent-…"). Ohne diese
+    // Option löst JSONSerialization für Nicht-Collection-Wurzeln eine Objective-C-Ausnahme aus,
+    // die `try` in Swift NICHT abfängt → App-Crash. Mit der Option bleibt es ein Swift-Fehler.
+    let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
     return String(decoding: data, as: UTF8.self)
   }
 }

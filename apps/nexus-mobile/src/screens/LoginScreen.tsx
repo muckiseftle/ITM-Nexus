@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { isValidEmail, toAccountId, type AccountId } from '@nexus/domain';
 import {
   classifyError,
+  domainFromEmail,
   normalizeEwsUrl,
   parseLogin,
   type Credentials,
@@ -40,12 +41,19 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('');
+  const [resolvedServer, setResolvedServer] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
 
   const fail = (title: string, detail: string, technical: string): void => {
     setError({ kind: 'unknown', title, detail, technical });
+  };
+
+  /** Üblicher Standard-Hostname für die manuelle Eingabe (editierbar vorbefüllt). */
+  const defaultServerHost = (forEmail: string): string | undefined => {
+    const domain = domainFromEmail(forEmail);
+    return domain !== undefined ? `mail.${domain}` : undefined;
   };
 
   // Schritt 1 → 2: E-Mail prüfen, dann zur Anmeldung.
@@ -96,19 +104,38 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
     setError(null);
     setShowTechnical(false);
     try {
-      await container.setup.setUp(trimmedEmail, credentials);
+      // Schritt 1: Endpunkt ermitteln und die gefundene Server-URL sichtbar machen.
+      const discovered = await container.setup.discover(trimmedEmail, credentials);
+      setResolvedServer(discovered.ewsUrl ?? manualEws ?? null);
+      // Schritt 2: echte Anmeldeprüfung + Speichern (nur bei Erfolg).
+      await container.setup.completeSetup(trimmedEmail, credentials, discovered);
       onLoggedIn(toAccountId(trimmedEmail.toLowerCase()), trimmedEmail);
     } catch (e: unknown) {
       const info = classifyError(e);
       setError(info);
-      // Server per Autodiscover nicht auffindbar → in den manuellen Schritt wechseln.
+      // Server per Autodiscover nicht auffindbar → in den manuellen Schritt wechseln und
+      // einen sinnvollen Standard-Host vorbefüllen, den der Nutzer prüfen/anpassen kann.
       if (info.kind === 'autodiscover' && step !== 'manual') {
+        if (serverUrl.trim().length === 0) {
+          const host = defaultServerHost(trimmedEmail);
+          if (host !== undefined) setServerUrl(host);
+        }
         setStep('manual');
       }
     } finally {
       setBusy(false);
     }
   };
+
+  const serverInfo =
+    resolvedServer !== null ? (
+      <View style={s.serverInfoBox}>
+        <Text style={s.serverInfoLabel}>Ermittelter Server</Text>
+        <Text style={s.serverInfoUrl} numberOfLines={2}>
+          {resolvedServer}
+        </Text>
+      </View>
+    ) : null;
 
   const errorBox =
     error !== null ? (
@@ -184,6 +211,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
             value={username}
             onChangeText={setUsername}
           />
+          {serverInfo}
           {errorBox}
           <Pressable
             style={[s.button, busy ? s.buttonDisabled : null]}
@@ -244,6 +272,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
           <Text style={s.advancedHint}>
             Nutze diesen Schritt nur, wenn Autodiscover im Firmennetz nicht freigegeben ist.
           </Text>
+          {serverInfo}
           {errorBox}
           <Pressable
             style={[s.button, busy ? s.buttonDisabled : null]}
@@ -312,6 +341,14 @@ function makeStyles(t: AppTheme) {
       marginTop: space.md,
       textAlign: 'center',
     },
+    serverInfoBox: {
+      backgroundColor: t.c.success + '14',
+      borderRadius: radius.sm,
+      marginBottom: space.sm,
+      padding: space.md,
+    },
+    serverInfoLabel: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    serverInfoUrl: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
     subtitle: { color: t.c.textSecondary, fontSize: typography.body.size, marginBottom: space.lg },
     title: { color: t.c.brandPrimary, fontSize: 34, fontWeight: '700', marginBottom: space.sm },
   });
