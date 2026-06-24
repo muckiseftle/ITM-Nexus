@@ -510,10 +510,24 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   ]
 
   private static func json(_ value: Any) throws -> String {
-    // `.fragmentsAllowed`: erlaubt auch String/Zahl als Wurzel (z. B. "sent-…"). Ohne diese
-    // Option löst JSONSerialization für Nicht-Collection-Wurzeln eine Objective-C-Ausnahme aus,
-    // die `try` in Swift NICHT abfängt → App-Crash. Mit der Option bleibt es ein Swift-Fehler.
-    let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
-    return String(decoding: data, as: UTF8.self)
+    // JSONSerialization wirft für ungültige Werte (NaN/Infinity, nicht-serialisierbarer Typ)
+    // eine Objective-C-NSException — die Swift `try` NICHT abfängt. Erreicht eine solche
+    // NSException die React-Native-Bridge, stürzt deren NSException→JSError-Konverter ab
+    // (SIGSEGV). Daher in einem Obj-C-@try/@catch ausführen und in einen Swift-Fehler wandeln.
+    var out: String?
+    var swiftError: Error?
+    let exception = NexusExceptionGuard.run {
+      do {
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+        out = String(decoding: data, as: UTF8.self)
+      } catch {
+        swiftError = error
+      }
+    }
+    if exception != nil {
+      throw NexusError.transport("JSON-Serialisierung fehlgeschlagen (ungültiger Wert)")
+    }
+    if let swiftError = swiftError { throw swiftError }
+    return out ?? "null"
   }
 }

@@ -8,50 +8,73 @@ import React
 final class NexusModule: NSObject {
   @objc static func requiresMainQueueSetup() -> Bool { false }
 
+  /// Führt einen synchronen Methodenrumpf aus und wandelt eine etwaige Objective-C-NSException
+  /// in ein reject() um. Swift kann NSExceptions nicht fangen; erreichen sie die RN-Bridge,
+  /// stürzt deren NSException→JSError-Konverter ab (SIGSEGV). Dieser Guard verhindert das.
+  private func guarded(_ code: String, _ reject: RCTPromiseRejectBlock, _ body: () -> Void) {
+    if let exception = NexusExceptionGuard.run(body) {
+      reject(code, "NSException: \(exception.reason ?? exception.name.rawValue)", nil)
+    }
+  }
+
   // MARK: Secure-Storage
 
   @objc(secureSet:value:resolver:rejecter:)
   func secureSet(_ key: String, value: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { try NexusSecureStore.set(key, value: value); resolve(nil) }
-    catch { reject("secure_set", "\(error)", error) }
+    guarded("secure_set", reject) {
+      do { try NexusSecureStore.set(key, value: value); resolve(nil) }
+      catch { reject("secure_set", "\(error)", error) }
+    }
   }
 
   @objc(secureGet:resolver:rejecter:)
   func secureGet(_ key: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { resolve(try NexusSecureStore.get(key)) }
-    catch { reject("secure_get", "\(error)", error) }
+    guarded("secure_get", reject) {
+      do { resolve(try NexusSecureStore.get(key)) }
+      catch { reject("secure_get", "\(error)", error) }
+    }
   }
 
   @objc(secureDelete:resolver:rejecter:)
   func secureDelete(_ key: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { try NexusSecureStore.delete(key); resolve(nil) }
-    catch { reject("secure_delete", "\(error)", error) }
+    guarded("secure_delete", reject) {
+      do { try NexusSecureStore.delete(key); resolve(nil) }
+      catch { reject("secure_delete", "\(error)", error) }
+    }
   }
 
   @objc(secureWipe:rejecter:)
   func secureWipe(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { try NexusSecureStore.wipe(); resolve(nil) }
-    catch { reject("secure_wipe", "\(error)", error) }
+    guarded("secure_wipe", reject) {
+      do { try NexusSecureStore.wipe(); resolve(nil) }
+      catch { reject("secure_wipe", "\(error)", error) }
+    }
   }
 
   // MARK: Verschlüsselte DB
 
   @objc(dbInit:rejecter:)
   func dbInit(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { try NexusDatabase.shared.initialize(); resolve(nil) }
-    catch { reject("db_init", "\(error)", error) }
+    guarded("db_init", reject) {
+      do { try NexusDatabase.shared.initialize(); resolve(nil) }
+      catch { reject("db_init", "\(error)", error) }
+    }
   }
 
   @objc(dbExec:params:resolver:rejecter:)
   func dbExec(_ sql: String, params: [Any], resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { resolve(try NexusDatabase.shared.exec(sql, params: params)) }
-    catch { reject("db_exec", "\(error)", error) }
+    guarded("db_exec", reject) {
+      do { resolve(try NexusDatabase.shared.exec(sql, params: params)) }
+      catch { reject("db_exec", "\(error)", error) }
+    }
   }
 
   @objc(dbQuery:params:resolver:rejecter:)
   func dbQuery(_ sql: String, params: [Any], resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    do { resolve(try NexusDatabase.shared.query(sql, params: params)) }
-    catch { reject("db_query", "\(error)", error) }
+    guarded("db_query", reject) {
+      do { resolve(try NexusDatabase.shared.query(sql, params: params)) }
+      catch { reject("db_query", "\(error)", error) }
+    }
   }
 
   // MARK: Transport (async → Promise)
@@ -76,8 +99,10 @@ final class NexusModule: NSObject {
   func transportRestore(_ resolve: RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     // Stellt Endpoint + Auth aus dem Keychain wieder her (kein Netz). Liefert die accountId
     // oder null. Bewusst OHNE Anmeldeprüfung — Offline-First: Sync verifiziert später.
-    do { resolve(try NexusTransport.shared.restoreSession()) }
-    catch { reject("transport_restore", "\(error)", error) }
+    guarded("transport_restore", reject) {
+      do { resolve(try NexusTransport.shared.restoreSession()) }
+      catch { reject("transport_restore", "\(error)", error) }
+    }
   }
 
   @objc(transportSyncMessages:folderId:syncKey:resolver:rejecter:)
@@ -154,8 +179,10 @@ final class NexusModule: NSObject {
 
   @objc(transportConfigurePinning:resolver:rejecter:)
   func transportConfigurePinning(_ pinsJson: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    NexusTransport.shared.configurePinning(pinsJson)
-    resolve(nil)
+    guarded("transport_pinning", reject) {
+      NexusTransport.shared.configurePinning(pinsJson)
+      resolve(nil)
+    }
   }
 
   @objc(transportPing:folderIdsJson:timeoutSec:resolver:rejecter:)
@@ -168,8 +195,10 @@ final class NexusModule: NSObject {
 
   @objc(transportScheduleBackgroundSync:rejecter:)
   func transportScheduleBackgroundSync(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    NexusBackgroundSync.schedule()
-    resolve(nil)
+    guarded("transport_bgsync", reject) {
+      NexusBackgroundSync.schedule()
+      resolve(nil)
+    }
   }
 
   @objc(transportGetAttachment:attachmentId:resolver:rejecter:)
