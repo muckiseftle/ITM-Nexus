@@ -15,12 +15,17 @@ public enum NexusBackgroundSync {
   /// Registriert den Task-Handler. iOS ruft den Handler später (vom System getaktet) auf.
   /// Wird vom App-Target (AppDelegate) aufgerufen ⇒ `public`.
   public static func register() {
-    BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
-      guard let refresh = task as? BGAppRefreshTask else {
-        task.setTaskCompleted(success: false)
-        return
+    // BGTaskScheduler kann eine NSException werfen, wenn das Background-Entitlement fehlt
+    // (typisch bei Sideload mit kostenloser Apple-ID). Swift kann NSExceptions nicht fangen
+    // → Obj-C-Guard, damit der App-Start NICHT abstürzt (Hintergrund-Sync ist dann inaktiv).
+    _ = NexusExceptionGuard.run {
+      BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
+        guard let refresh = task as? BGAppRefreshTask else {
+          task.setTaskCompleted(success: false)
+          return
+        }
+        handle(refresh)
       }
-      handle(refresh)
     }
   }
 
@@ -28,7 +33,11 @@ public enum NexusBackgroundSync {
   public static func schedule() {
     let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
     request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-    try? BGTaskScheduler.shared.submit(request)
+    // `submit()` wirft auf Builds ohne Background-Entitlement eine NSException (kein Swift-
+    // Error → `try?` greift nicht). Obj-C-Guard verhindert den Crash; bleibt dann ein No-op.
+    _ = NexusExceptionGuard.run {
+      try? BGTaskScheduler.shared.submit(request)
+    }
   }
 
   private static func handle(_ task: BGAppRefreshTask) {
