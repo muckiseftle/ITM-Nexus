@@ -78,6 +78,22 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     }
   }
 
+  /// Redirects: einen evtl. gesetzten Authorization-Header entfernen, wenn die Umleitung NICHT
+  /// auf https zeigt (Defense-in-Depth gegen Klartext-Credential-Leak über einen 30x-Redirect).
+  func urlSession(
+    _ session: URLSession,
+    task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest,
+    completionHandler: @escaping (URLRequest?) -> Void
+  ) {
+    var req = request
+    if req.url?.scheme?.lowercased() != "https" {
+      req.setValue(nil, forHTTPHeaderField: "Authorization")
+    }
+    completionHandler(req)
+  }
+
   // MARK: Autodiscover
 
   func discover(email: String, credentialsJson: String) async throws -> String {
@@ -181,7 +197,12 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       req.setValue("text/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
       req.httpBody = Data(pox.utf8)
     }
-    if let auth = basicAuthHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
+    // Anmeldedaten NUR über https mitsenden — niemals über die http-Redirect-Probe (Schritt 3),
+    // sonst ginge das Passwort im Klartext über das Netz (MITM). Diese Probe dient nur dazu,
+    // den 301/302-Redirect zum https-Endpunkt zu finden.
+    if url.scheme?.lowercased() == "https", let auth = basicAuthHeader {
+      req.setValue(auth, forHTTPHeaderField: "Authorization")
+    }
     let (data, response) = try await session.data(for: req)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     if status == 401 || status == 403 {
