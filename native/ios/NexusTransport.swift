@@ -259,16 +259,23 @@ final class NexusTransport: NSObject, URLSessionDelegate {
 
   func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
     let syncXml = try await post(EwsSoap.syncFolderItems(folderId: mapFolder(folderId), syncState: syncKey))
-    let ids = EwsSoap.extractItemIds(syncXml)
+    let changes = EwsSoap.parseSyncChanges(syncXml)
     let newState = EwsSoap.extractSyncState(syncXml) ?? (syncKey ?? "")
     var created: [[String: Any]] = []
-    if !ids.isEmpty {
-      let itemsXml = try await post(EwsSoap.getItems(ids: ids))
-      created = EwsSoap.parseItems(itemsXml).map { Self.messageJson($0, accountId: accountId, folderId: folderId) }
+    if !changes.upsertIds.isEmpty {
+      // In Blöcken holen (große Erst-Syncs nicht in einen Riesen-Request packen).
+      for chunk in stride(from: 0, to: changes.upsertIds.count, by: 20) {
+        let slice = Array(changes.upsertIds[chunk..<min(chunk + 20, changes.upsertIds.count)])
+        let itemsXml = try await post(EwsSoap.getItems(ids: slice))
+        created.append(
+          contentsOf: EwsSoap.parseItems(itemsXml).map {
+            Self.messageJson($0, accountId: accountId, folderId: folderId)
+          })
+      }
     }
     let delta: [String: Any] = [
       "syncKey": newState, "created": created, "updated": [],
-      "deletedIds": [], "hasMore": false,
+      "deletedIds": changes.deletedIds, "hasMore": !changes.includesLast,
     ]
     return try Self.json(delta)
   }
@@ -301,8 +308,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       let cats = (command["categories"] as? [String]) ?? []
       _ = try await post(EwsSoap.setCategories(itemId: itemId, categories: cats))
     case "send":
-      // 'send' wird über sendMessage zugestellt; hier no-op.
-      break
+      // Die Outbox stellt 'send' hier zu (idempotenter Retry-Pfad). Das vollständige
+      // OutgoingMessage steckt in command["message"].
+      if let message = command["message"] as? [String: Any] {
+        try await deliver(message)
+      } else {
+        throw NexusError.transport("send: message fehlt")
+      }
     default:
       throw NexusError.transport("Unbekannter OutboxCommand: \(type)")
     }
@@ -379,24 +391,29 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func sendMessage(accountId: String, messageJson: String) async throws -> String {
-    let msg = try JSONSerialization.jsonObject(with: Data(messageJson.utf8)) as? [String: Any]
-    let from = (msg?["from"] as? [String: Any])?["address"] as? String ?? ""
-    let sender = (msg?["sender"] as? [String: Any])?["address"] as? String
-    let subject = msg?["subject"] as? String ?? ""
-    let body = (msg?["body"] as? [String: Any])?["content"] as? String ?? ""
-    let recipients = msg?["recipients"] as? [[String: Any]] ?? []
+    let msg = try JSONSerialization.jsonObject(with: Data(messageJson.utf8)) as? [String: Any] ?? [:]
+    try await deliver(msg)
+    return try Self.json("sent-\(UUID().uuidString)")
+  }
+
+  /// Baut aus einem OutgoingMessage-Dict den CreateItem-SOAP und versendet ihn (EWS).
+  /// Wird von `sendMessage` UND vom Outbox-`send`-Befehl (`applyOperation`) genutzt.
+  private func deliver(_ msg: [String: Any]) async throws {
+    let from = (msg["from"] as? [String: Any])?["address"] as? String ?? ""
+    let sender = (msg["sender"] as? [String: Any])?["address"] as? String
+    let subject = msg["subject"] as? String ?? ""
+    let body = (msg["body"] as? [String: Any])?["content"] as? String ?? ""
+    let recipients = msg["recipients"] as? [[String: Any]] ?? []
     func addresses(kind: String) -> [String] {
       recipients
         .filter { ($0["kind"] as? String) == kind }
         .compactMap { ($0["address"] as? [String: Any])?["address"] as? String }
     }
-    let to = addresses(kind: "to")
-    let cc = addresses(kind: "cc")
-    let bcc = addresses(kind: "bcc")
     _ = try await post(
-      EwsSoap.createItem(from: from, sender: sender, to: to, cc: cc, bcc: bcc, subject: subject, body: body)
-    )
-    return try Self.json("sent-\(UUID().uuidString)")
+      EwsSoap.createItem(
+        from: from, sender: sender,
+        to: addresses(kind: "to"), cc: addresses(kind: "cc"), bcc: addresses(kind: "bcc"),
+        subject: subject, body: body))
   }
 
   /// Anmeldeprüfung: genau ein authentifizierter EWS-Roundtrip (FindFolder auf der
@@ -492,11 +509,18 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let attachments = item.attachments.map { (a) -> [String: Any] in
       ["id": a.id, "name": a.name, "contentType": a.contentType, "sizeBytes": a.size, "isInline": a.isInline]
     }
+    // Empfänger (To/Cc) ins Domänenmodell überführen — für „Allen antworten"/Weiterleiten.
+    let recipients = item.recipients.compactMap { (r) -> [String: Any]? in
+      guard let addr = r["address"], !addr.isEmpty else { return nil }
+      let name = r["name"] ?? ""
+      let address: [String: Any] = name.isEmpty ? ["address": addr] : ["address": addr, "displayName": name]
+      return ["kind": r["kind"] ?? "to", "address": address]
+    }
     return [
       "id": item.id, "accountId": accountId, "folderId": folderId,
       "subject": item.subject,
       "from": ["address": item.fromAddress, "displayName": item.fromName],
-      "recipients": [], "receivedAt": item.receivedAt, "importance": "normal",
+      "recipients": recipients, "receivedAt": item.receivedAt, "importance": "normal",
       "flags": item.isRead ? ["read"] : [], "categories": [],
       "hasAttachments": item.hasAttachments || !attachments.isEmpty,
       "attachments": attachments, "preview": item.preview,

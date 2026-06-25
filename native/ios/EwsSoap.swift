@@ -273,6 +273,8 @@ enum EwsSoap {
     var bodyHtml = false
     var hasAttachments = false
     var attachments: [ParsedAttachment] = []
+    /// Empfänger als [["kind","name","address"]] (kind: "to"/"cc") — für Reply-All/Weiterleiten.
+    var recipients: [[String: String]] = []
   }
 
   struct ParsedAttachmentContent {
@@ -280,6 +282,24 @@ enum EwsSoap {
     var contentType = "application/octet-stream"
     var base64 = ""
     var size = 0
+  }
+
+  /// Ergebnis eines SyncFolderItems-Deltas: zu holende (Create/Update), zu löschende IDs und
+  /// ob die letzte Änderung im Bereich enthalten war (`false` ⇒ weitere Seiten verfügbar).
+  struct SyncChanges {
+    var upsertIds: [String] = []
+    var deletedIds: [String] = []
+    var includesLast = true
+  }
+
+  /// Parst die Änderungsblöcke (`Create`/`Update`/`Delete`/`ReadFlagChange`) einer
+  /// SyncFolderItems-Antwort inkl. `IncludesLastItemInRange`.
+  static func parseSyncChanges(_ xml: Data) -> SyncChanges {
+    let p = SyncChangesParser()
+    let xp = XMLParser(data: xml)
+    xp.delegate = p
+    xp.parse()
+    return p.result
   }
 
   /// Extrahiert `ItemId`-Werte aus einer SyncFolderItems/FindItem-Antwort.
@@ -328,7 +348,7 @@ private final class ItemIdParser: NSObject, XMLParserDelegate {
   }
 }
 
-/// GetItem-Parser für Kernfelder inkl. HTML-Body und Datei-Anhängen (Metadaten).
+/// GetItem-Parser für Kernfelder inkl. HTML-Body, Datei-Anhängen (Metadaten) und Empfängern.
 private final class ItemParser: NSObject, XMLParserDelegate {
   var items: [EwsSoap.ParsedItem] = []
   private var current: EwsSoap.ParsedItem?
@@ -336,6 +356,12 @@ private final class ItemParser: NSObject, XMLParserDelegate {
   private var bodyType = "Text"
   private var inAttachment = false
   private var curAtt: EwsSoap.ParsedAttachment?
+  // Empfänger-/Absender-Kontext: From gewinnt für `from`, To/Cc sammeln Mailboxen.
+  private var inFrom = false
+  private var inTo = false
+  private var inCc = false
+  private var mbName = ""
+  private var mbAddr = ""
 
   private static func stripHtml(_ s: String) -> String {
     s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
@@ -347,11 +373,18 @@ private final class ItemParser: NSObject, XMLParserDelegate {
   func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
               qualifiedName: String?, attributes attrs: [String: String]) {
     text = ""
-    if name == "Message" || name == "Item" || name == "MeetingRequest" { current = EwsSoap.ParsedItem() }
-    if name == "ItemId", !inAttachment, let id = attrs["Id"] { current?.id = id }
-    if name == "Body" { bodyType = attrs["BodyType"] ?? "Text" }
-    if name == "FileAttachment" || name == "ItemAttachment" { inAttachment = true; curAtt = EwsSoap.ParsedAttachment() }
-    if name == "AttachmentId", inAttachment, let id = attrs["Id"] { curAtt?.id = id }
+    switch name {
+    case "Message", "Item", "MeetingRequest": current = EwsSoap.ParsedItem()
+    case "ItemId": if !inAttachment, let id = attrs["Id"] { current?.id = id }
+    case "Body": bodyType = attrs["BodyType"] ?? "Text"
+    case "FileAttachment", "ItemAttachment": inAttachment = true; curAtt = EwsSoap.ParsedAttachment()
+    case "AttachmentId": if inAttachment, let id = attrs["Id"] { curAtt?.id = id }
+    case "From": inFrom = true
+    case "ToRecipients": inTo = true
+    case "CcRecipients": inCc = true
+    case "Mailbox": mbName = ""; mbAddr = ""
+    default: break
+    }
   }
 
   func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
@@ -360,8 +393,27 @@ private final class ItemParser: NSObject, XMLParserDelegate {
               qualifiedName: String?) {
     switch name {
     case "Subject": if !inAttachment { current?.subject = text }
-    case "Name": if inAttachment { curAtt?.name = text } else if current?.fromName.isEmpty == true { current?.fromName = text }
-    case "EmailAddress": if !inAttachment, current?.fromAddress.isEmpty == true { current?.fromAddress = text }
+    case "Name":
+      if inAttachment { curAtt?.name = text } else if inTo || inCc { mbName = text } else if inFrom { current?.fromName = text } else if current?.fromName.isEmpty == true { current?.fromName = text }
+    case "EmailAddress":
+      if inTo || inCc {
+        mbAddr = text
+      } else if inFrom {
+        current?.fromAddress = text  // From gewinnt (überschreibt evtl. Sender)
+      } else if !inAttachment, current?.fromAddress.isEmpty == true {
+        current?.fromAddress = text  // Fallback (z. B. Sender, falls From fehlt)
+      }
+    case "Mailbox":
+      if inTo {
+        current?.recipients.append(["kind": "to", "name": mbName, "address": mbAddr])
+      } else if inCc {
+        current?.recipients.append(["kind": "cc", "name": mbName, "address": mbAddr])
+      }
+      mbName = ""
+      mbAddr = ""
+    case "From": inFrom = false
+    case "ToRecipients": inTo = false
+    case "CcRecipients": inCc = false
     case "DateTimeReceived":
       current?.receivedAt = (ISO8601DateFormatter().date(from: text)?.timeIntervalSince1970 ?? 0) * 1000
     case "IsRead": current?.isRead = (text == "true")
@@ -375,12 +427,54 @@ private final class ItemParser: NSObject, XMLParserDelegate {
       current?.preview = String((bodyType == "HTML" ? Self.stripHtml(text) : text).prefix(140))
     case "FileAttachment", "ItemAttachment":
       if let a = curAtt { current?.attachments.append(a) }
-      inAttachment = false; curAtt = nil
+      inAttachment = false
+      curAtt = nil
     case "Message", "Item", "MeetingRequest":
       if let item = current { items.append(item); current = nil }
     default: break
     }
     text = ""
+  }
+}
+
+/// Trennt Create/Update (zu holen) von Delete (zu entfernen) und liest IncludesLastItemInRange.
+private final class SyncChangesParser: NSObject, XMLParserDelegate {
+  var result = EwsSoap.SyncChanges()
+  private var changeKind = ""  // "", "upsert", "delete"
+  private var captureLast = false
+  private var text = ""
+
+  func parser(_ p: XMLParser, didStartElement name: String, namespaceURI: String?,
+              qualifiedName: String?, attributes attrs: [String: String]) {
+    switch name {
+    case "Create", "Update", "ReadFlagChange": changeKind = "upsert"
+    case "Delete": changeKind = "delete"
+    case "ItemId":
+      if let id = attrs["Id"] {
+        if changeKind == "delete" {
+          result.deletedIds.append(id)
+        } else if changeKind == "upsert" {
+          result.upsertIds.append(id)
+        }
+      }
+    case "IncludesLastItemInRange":
+      captureLast = true
+      text = ""
+    default: break
+    }
+  }
+
+  func parser(_ p: XMLParser, foundCharacters string: String) { if captureLast { text += string } }
+
+  func parser(_ p: XMLParser, didEndElement name: String, namespaceURI: String?,
+              qualifiedName: String?) {
+    switch name {
+    case "Create", "Update", "ReadFlagChange", "Delete": changeKind = ""
+    case "IncludesLastItemInRange":
+      result.includesLast = (text.trimmingCharacters(in: .whitespacesAndNewlines) == "true")
+      captureLast = false
+    default: break
+    }
   }
 }
 
