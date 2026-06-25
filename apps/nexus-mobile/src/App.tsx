@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import {
   buildComposePrefill,
   createMailAddress,
@@ -34,7 +26,8 @@ import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
 import { ThemeProvider, useTheme, type AppTheme } from './theme/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Icon, type IconName } from './components/Icon';
+import { type IconName } from './components/Icon';
+import { TabBar } from './components/TabBar';
 import { FolderDrawer } from './components/FolderDrawer';
 import { LoginScreen } from './screens/LoginScreen';
 import { MailboxScreen } from './screens/MailboxScreen';
@@ -359,26 +352,7 @@ function AppInner(): React.JSX.Element {
         )}
       </View>
 
-      <View style={s.tabBar}>
-        {TABS.map((tabDef) => {
-          const active = tab === tabDef.key;
-          const tint = active ? t.c.brandPrimary : t.c.textSecondary;
-          return (
-            <Pressable
-              key={tabDef.key}
-              style={s.tab}
-              onPress={() => {
-                setTab(tabDef.key);
-              }}
-            >
-              <Icon name={tabDef.icon} size={25} color={tint} />
-              <Text style={[s.tabText, { color: tint }, active ? s.tabActive : null]}>
-                {tabDef.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <TabBar tabs={TABS} active={tab} onSelect={setTab} />
 
       <FolderDrawer
         visible={drawerOpen}
@@ -408,15 +382,5 @@ function makeStyles(t: AppTheme) {
     },
     error: { color: t.c.danger, padding: space.lg, textAlign: 'center' },
     root: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    tab: { alignItems: 'center', flex: 1, gap: 4, paddingTop: space.xs, paddingBottom: space.xxs },
-    tabActive: { fontWeight: '700' },
-    tabBar: {
-      backgroundColor: t.c.bgCanvas,
-      borderTopColor: t.border,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      flexDirection: 'row',
-      paddingTop: space.xxs,
-    },
-    tabText: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2 },
   });
 }
