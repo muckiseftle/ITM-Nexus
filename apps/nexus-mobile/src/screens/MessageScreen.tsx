@@ -45,15 +45,22 @@ export function MessageScreen({
 
   useEffect(() => {
     let active = true;
-    void container.mailStore.getMessage(account, messageId).then((m) => {
-      if (!active) return;
-      setMessage(m);
-      if (m !== undefined && isUnread(m)) {
-        void setRead(container, account, m).then((updated) => {
-          if (active) setMessage(updated);
-        });
-      }
-    });
+    void container.mailStore
+      .getMessage(account, messageId)
+      .then((m) => {
+        if (!active) return;
+        setMessage(m);
+        if (m !== undefined && isUnread(m)) {
+          void setRead(container, account, m)
+            .then((updated) => {
+              if (active) setMessage(updated);
+            })
+            .catch(() => undefined);
+        }
+      })
+      .catch(() => {
+        if (active) setMessage(undefined);
+      });
     return () => {
       active = false;
     };

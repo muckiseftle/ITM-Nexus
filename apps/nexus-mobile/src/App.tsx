@@ -157,7 +157,10 @@ function AppInner(): React.JSX.Element {
   // Ordnerstruktur für das Schubfach laden (und bei Konto-/Sync-Wechsel aktualisieren).
   useEffect(() => {
     if (container === null || account === null) return;
-    void container.folders.listFolders(account).then(setFolders);
+    void container.folders
+      .listFolders(account)
+      .then(setFolders)
+      .catch(() => undefined);
   }, [container, account]);
 
   // Hintergrund-Sync (Vordergrund-Intervall) + DirectPush-Long-Poll, sobald ein Konto offen ist.
@@ -173,7 +176,7 @@ function AppInner(): React.JSX.Element {
         await c.backgroundSync.runDue(acc);
         if (!cancelled) setSyncTick((x) => x + 1);
       } catch (e: unknown) {
-        if (classifyError(e).kind === 'auth') authExpiredRef.current();
+        if (!cancelled && classifyError(e).kind === 'auth') authExpiredRef.current();
       }
     };
 
@@ -185,17 +188,31 @@ function AppInner(): React.JSX.Element {
 
     void c.scheduleBackgroundSync?.();
 
+    // Abbrechbarer Backoff-Timer für die Push-Schleife (wird beim Unmount geleert).
+    let pushDelayTimer: ReturnType<typeof setTimeout> | undefined;
     const pushLoop = async (): Promise<void> => {
       const inbox = toFolderId(DEMO_INBOX_ID);
+      let failures = 0;
       while (!cancelled && c.push !== undefined) {
         try {
           const result = await c.push.ping(acc, [inbox], PUSH_TIMEOUT_MS);
+          failures = 0;
           if (!cancelled) {
             await c.backgroundSync.applyPing(acc, result);
             setSyncTick((x) => x + 1);
           }
-        } catch {
-          await new Promise((r) => setTimeout(r, 5000));
+        } catch (e: unknown) {
+          // Auth-Fehler → Long-Poll beenden (Login-Screen erscheint), nicht endlos weiterpollen.
+          if (classifyError(e).kind === 'auth') {
+            if (!cancelled) authExpiredRef.current();
+            break;
+          }
+          // Exponentielles Backoff (5 s … 2 min) statt Tight-Spin, falls ping sofort fehlschlägt.
+          failures += 1;
+          const delayMs = Math.min(5000 * 2 ** Math.min(failures - 1, 5), 120_000);
+          await new Promise<void>((resolve) => {
+            pushDelayTimer = setTimeout(resolve, delayMs);
+          });
         }
       }
     };
@@ -204,6 +221,7 @@ function AppInner(): React.JSX.Element {
     return () => {
       cancelled = true;
       if (interval !== undefined) clearInterval(interval);
+      if (pushDelayTimer !== undefined) clearTimeout(pushDelayTimer);
     };
   }, [container, account, settings.syncInterval]);
 
@@ -356,7 +374,10 @@ function AppInner(): React.JSX.Element {
               onOpenMessage={openMessage}
               onAuthExpired={handleAuthExpired}
               onOpenDrawer={() => {
-                void container.folders.listFolders(account).then(setFolders);
+                void container.folders
+                  .listFolders(account)
+                  .then(setFolders)
+                  .catch(() => undefined);
                 setDrawerOpen(true);
               }}
               onCompose={() => {

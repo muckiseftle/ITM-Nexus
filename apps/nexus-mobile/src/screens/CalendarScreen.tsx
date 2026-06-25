@@ -62,7 +62,7 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
   }, [container, account, selected]);
 
   useEffect(() => {
-    void load();
+    void load().catch(() => undefined);
   }, [load]);
 
   const evColor = useCallback(

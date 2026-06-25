@@ -79,7 +79,7 @@ export function MailboxScreen({
 
   // Lokal laden: beim Öffnen/Ordnerwechsel UND nach jedem Hintergrund-Sync (syncSignal).
   useEffect(() => {
-    void load();
+    void load().catch(() => undefined);
   }, [load, syncSignal]);
 
   // Beim Öffnen/Ordnerwechsel einmal vom Server holen. Die Inbox synct bereits App.runDue

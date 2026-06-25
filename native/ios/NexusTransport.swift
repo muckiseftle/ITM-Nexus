@@ -101,7 +101,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     guard let domain = email.split(separator: "@").last.map(String.init)?.lowercased() else {
       throw NexusError.transport("Ungültige E-Mail-Adresse")
     }
-    let creds = try JSONSerialization.jsonObject(with: Data(credentialsJson.utf8)) as? [String: Any]
+    let creds = Self.jsonObject(credentialsJson) as? [String: Any]
 
     // Login-Namen ggf. um die NetBIOS-Domäne ergänzen (NTLM erwartet DOMÄNE\Benutzer).
     if let user = creds?["username"] as? String, let secret = creds?["secret"] as? String {
@@ -220,7 +220,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
 
   /// Setzt die Pinning-Policy aus JSON (`{ policies: [{ host, pins, includeSubdomains }] }`).
   func configurePinning(_ json: String) {
-    guard let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+    guard let obj = Self.jsonObject(json) as? [String: Any],
       let policies = obj["policies"] as? [[String: Any]]
     else {
       pinPolicies = []
@@ -249,8 +249,11 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// Der erste Aufruf setzt die Basislinie. (Vollwertiges EAS-Ping/WBXML folgt iterativ.)
   func ping(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws -> String {
     let folders =
-      (try? JSONSerialization.jsonObject(with: Data(folderIdsJson.utf8)) as? [String]) ?? []
-    let deadline = Date().addingTimeInterval(timeoutSec)
+      (Self.jsonObject(folderIdsJson) as? [String]) ?? []
+    // Timeout defensiv begrenzen (1 s … 10 min), damit ein fehlerhafter JS-Wert keinen
+    // quasi-endlosen Long-Poll/Resource-Hang auslöst.
+    let boundedTimeout = min(max(timeoutSec, 1), 600)
+    let deadline = Date().addingTimeInterval(boundedTimeout)
     let pollInterval: UInt64 = 15_000_000_000  // 15 s
 
     while Date() < deadline {
@@ -358,7 +361,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func applyOperation(operationJson: String) async throws {
-    let op = try JSONSerialization.jsonObject(with: Data(operationJson.utf8)) as? [String: Any]
+    let op = Self.jsonObject(operationJson) as? [String: Any]
     guard let command = op?["command"] as? [String: Any], let type = command["type"] as? String else {
       throw NexusError.transport("Ungültige Operation")
     }
@@ -459,7 +462,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func sendMessage(accountId: String, messageJson: String) async throws -> String {
-    let msg = try JSONSerialization.jsonObject(with: Data(messageJson.utf8)) as? [String: Any] ?? [:]
+    let msg = (Self.jsonObject(messageJson) as? [String: Any]) ?? [:]
     try await deliver(msg)
     return try Self.json("sent-\(UUID().uuidString)")
   }
@@ -523,7 +526,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   func restoreSession() throws -> String? {
     guard let account = try NexusSecureStore.get("nexus:current-account") else { return nil }
     guard let metaStr = try NexusSecureStore.get("nexus:account:\(account)"),
-      let meta = try JSONSerialization.jsonObject(with: Data(metaStr.utf8)) as? [String: Any],
+      let meta = Self.jsonObject(metaStr) as? [String: Any],
       let ews = meta["ewsUrl"] as? String, let url = URL(string: ews),
       let secret = try NexusSecureStore.get("nexus:secret:\(account)")
     else { return nil }
@@ -544,7 +547,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   func syncInboxNative() async throws -> Int {
     guard let account = try restoreSession() else { return 0 }
     let json = try await syncMessages(accountId: account, folderId: "inbox", syncKey: nil)
-    guard let delta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+    guard let delta = Self.jsonObject(json) as? [String: Any],
       let created = delta["created"] as? [[String: Any]]
     else { return 0 }
     for msg in created {
@@ -636,5 +639,17 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     }
     if let swiftError = swiftError { throw swiftError }
     return out ?? "null"
+  }
+
+  /// Parst einen JSON-String defensiv. `JSONSerialization.jsonObject` kann — wie `.data` —
+  /// eine Objective-C-NSException werfen, die Swift `try`/`try?` NICHT abfängt und die die
+  /// RN-Bridge zum Absturz bringt. Daher in NexusExceptionGuard ausführen; bei jeder Art von
+  /// Fehler (NSException ODER Swift-Fehler) `nil`. Aufrufer casten das Ergebnis selbst.
+  private static func jsonObject(_ string: String) -> Any? {
+    var result: Any?
+    _ = NexusExceptionGuard.run {
+      result = try? JSONSerialization.jsonObject(with: Data(string.utf8))
+    }
+    return result
   }
 }

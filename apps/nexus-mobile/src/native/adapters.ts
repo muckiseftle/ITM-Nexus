@@ -38,6 +38,42 @@ interface PayloadRow {
   readonly [column: string]: string | number | null;
 }
 
+/**
+ * Parst eine JSON-Antwort der nativen Bridge defensiv. Liefert die Bridge einen leeren/
+ * ungültigen String (Fehlerpfad, abgeschnittene Antwort), würde ein nacktes `JSON.parse` einen
+ * SyntaxError werfen und die Operation hart abbrechen. Stattdessen werfen wir einen klar
+ * benannten Fehler, den die aufrufenden Schichten (classifyError) sauber behandeln können.
+ */
+function parseBridge<T>(json: string): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    throw new Error('Ungültige Antwort vom Server (kein gültiges JSON).');
+  }
+}
+
+/** Parst eine in der DB gespeicherte JSON-Payload; bei Korruption `fallback` statt Absturz. */
+function safeParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Mappt DB-Zeilen über ihre `payload`-Spalte; korrupte Zeilen werden übersprungen statt zu werfen. */
+function parsePayloadRows<T>(rows: readonly PayloadRow[]): T[] {
+  const out: T[] = [];
+  for (const r of rows) {
+    try {
+      out.push(JSON.parse(r.payload) as T);
+    } catch {
+      /* korrupte Zeile überspringen — eine kaputte Zeile darf nicht die ganze Liste killen */
+    }
+  }
+  return out;
+}
+
 /** Übergibt die Pinning-Policy ans native Modul (TLS-Challenge wertet sie fail-closed aus). */
 export async function configurePinning(config: PinningConfig): Promise<void> {
   await NexusNative.transportConfigurePinning(JSON.stringify(config));
@@ -121,7 +157,9 @@ export class SqlMailStore implements MailStore {
       [accountId, messageId],
     )) as readonly MessageRow[];
     const row = rows[0];
-    return row === undefined ? undefined : (JSON.parse(row.payload) as MailMessage);
+    return row === undefined
+      ? undefined
+      : safeParse<MailMessage | undefined>(row.payload, undefined);
   }
 
   async listFolder(
@@ -190,7 +228,7 @@ export class SqlMailStore implements MailStore {
       [accountId],
     )) as readonly MessageRow[];
     const row = rows[0];
-    return row === undefined ? emptyOutbox() : (JSON.parse(row.payload) as OutboxState);
+    return row === undefined ? emptyOutbox() : safeParse<OutboxState>(row.payload, emptyOutbox());
   }
 
   async saveOutbox(accountId: AccountId, state: OutboxState): Promise<void> {
@@ -216,12 +254,12 @@ export class NativeMailTransport implements MailTransport, PushTransport {
       JSON.stringify(folderIds),
       Math.round(timeoutMs / 1000),
     );
-    return JSON.parse(json) as PingResult;
+    return parseBridge<PingResult>(json);
   }
 
   async discover(email: string, credentials: Credentials): Promise<AutodiscoverResult> {
     const json = await NexusNative.transportDiscover(email, JSON.stringify(credentials));
-    return JSON.parse(json) as AutodiscoverResult;
+    return parseBridge<AutodiscoverResult>(json);
   }
 
   async verifyCredentials(email: string): Promise<void> {
@@ -240,7 +278,7 @@ export class NativeMailTransport implements MailTransport, PushTransport {
     syncKey?: string,
   ): Promise<SyncDelta<MailMessage>> {
     const json = await NexusNative.transportSyncMessages(accountId, folderId, syncKey ?? null);
-    return JSON.parse(json) as SyncDelta<MailMessage>;
+    return parseBridge<SyncDelta<MailMessage>>(json);
   }
 
   async applyOperation(operation: OutboxOperation): Promise<void> {
@@ -249,42 +287,42 @@ export class NativeMailTransport implements MailTransport, PushTransport {
 
   async sendMessage(accountId: AccountId, message: OutgoingMessage): Promise<MessageId> {
     const json = await NexusNative.transportSendMessage(accountId, JSON.stringify(message));
-    return JSON.parse(json) as MessageId;
+    return parseBridge<MessageId>(json);
   }
 
   async searchServer(accountId: AccountId, query: string): Promise<readonly SearchHit[]> {
     const json = await NexusNative.transportSearchServer(accountId, query);
-    return JSON.parse(json) as readonly SearchHit[];
+    return parseBridge<readonly SearchHit[]>(json);
   }
 
   async loadAccount(accountId: AccountId): Promise<Account> {
     const json = await NexusNative.transportLoadAccount(accountId);
-    return JSON.parse(json) as Account;
+    return parseBridge<Account>(json);
   }
 
   async syncFolders(accountId: AccountId, syncKey?: string): Promise<SyncDelta<MailFolder>> {
     const json = await NexusNative.transportSyncFolders(accountId, syncKey ?? null);
-    return JSON.parse(json) as SyncDelta<MailFolder>;
+    return parseBridge<SyncDelta<MailFolder>>(json);
   }
 
   async syncCalendar(accountId: AccountId, syncKey?: string): Promise<SyncDelta<CalendarEvent>> {
     const json = await NexusNative.transportSyncCalendar(accountId, syncKey ?? null);
-    return JSON.parse(json) as SyncDelta<CalendarEvent>;
+    return parseBridge<SyncDelta<CalendarEvent>>(json);
   }
 
   async syncContacts(accountId: AccountId, syncKey?: string): Promise<SyncDelta<Contact>> {
     const json = await NexusNative.transportSyncContacts(accountId, syncKey ?? null);
-    return JSON.parse(json) as SyncDelta<Contact>;
+    return parseBridge<SyncDelta<Contact>>(json);
   }
 
   async getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage> {
     const json = await NexusNative.transportGetMessage(accountId, messageId);
-    return JSON.parse(json) as MailMessage;
+    return parseBridge<MailMessage>(json);
   }
 
   async getAttachment(accountId: AccountId, attachmentId: string): Promise<AttachmentContent> {
     const json = await NexusNative.transportGetAttachment(accountId, attachmentId);
-    return JSON.parse(json) as AttachmentContent;
+    return parseBridge<AttachmentContent>(json);
   }
 }
 
@@ -311,7 +349,7 @@ export class SqlFolderStore implements FolderStore {
     const rows = (await NexusNative.dbQuery('SELECT payload FROM folders WHERE account_id = ?', [
       accountId,
     ])) as readonly PayloadRow[];
-    return rows.map((r) => JSON.parse(r.payload) as MailFolder);
+    return parsePayloadRows<MailFolder>(rows);
   }
 }
 
@@ -343,7 +381,7 @@ export class SqlCalendarStore implements CalendarStore {
       `SELECT payload FROM events WHERE account_id = ? AND start_at < ? AND end_at > ? ORDER BY start_at ASC`,
       [accountId, toMs, fromMs],
     )) as readonly PayloadRow[];
-    return rows.map((r) => JSON.parse(r.payload) as CalendarEvent);
+    return parsePayloadRows<CalendarEvent>(rows);
   }
 }
 
@@ -372,7 +410,7 @@ export class SqlContactStore implements ContactStore {
       `SELECT payload FROM contacts WHERE account_id = ? AND (display_name LIKE ? OR email LIKE ?)`,
       [accountId, like, like],
     )) as readonly PayloadRow[];
-    return rows.map((r) => JSON.parse(r.payload) as Contact);
+    return parsePayloadRows<Contact>(rows);
   }
 }
 

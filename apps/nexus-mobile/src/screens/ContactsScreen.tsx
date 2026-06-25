@@ -35,7 +35,7 @@ export function ContactsScreen({ container, account }: Props): React.JSX.Element
   );
 
   useEffect(() => {
-    void load(query);
+    void load(query).catch(() => undefined);
   }, [load, query]);
 
   return (
