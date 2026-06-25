@@ -1,144 +1,169 @@
-// Erzeugt das NEXUS-App-Icon als echte PNGs (ohne externe Bild-Tools).
-// Design: Schild (Sicherheit) mit Briefumschlag (Mail) + Blitz (Performance) auf Blau-Verlauf.
+// Bereitet das NEXUS-App-Icon aus der Vorlage `icon-src.png` auf (ohne externe Bild-Tools):
+// dekodiert das PNG, beschneidet weißen Rand + runde Ecken (iOS rundet selbst) → vollflächige,
+// ALPHA-FREIE Icons (App-Store-konform) in den benötigten Größen.
 // Aufruf: node apps/nexus-mobile/assets/gen-icon.mjs
-import { deflateSync } from 'node:zlib';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { deflateSync, inflateSync } from 'node:zlib';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), 'icon');
+const DIR = dirname(fileURLToPath(import.meta.url));
+const OUT = join(DIR, 'icon');
 mkdirSync(OUT, { recursive: true });
 
-// — Farben —
-// Verlauf für Tiefe/Premium-Look: Brand-Blau → tiefes Indigo.
-const TOP = [37, 99, 235]; // #2563EB
-const BOT = [23, 37, 84]; // #172554
-const WHITE = [255, 255, 255];
-const BOLT = [14, 165, 233]; // #0EA5E9 Cyan-Akzent = Geschwindigkeit/Performance
-const lerp = (a, b, p) => Math.round(a + (b - a) * p);
-
-// Konzept: SCHILD (Sicherheit) — darin oben ein BRIEFUMSCHLAG (Mail/Kommunikation) und
-// unten ein BLITZ (Performance/Geschwindigkeit). Auf Blau-Verlauf.
-const CX = 0.5;
-const ENVCOL = [37, 99, 235]; // Umschlag in Brand-Blau auf weißem Schild
-const SHIELD = { top: 0.135, shoulder: 0.5, bottom: 0.87, halfW: 0.31, rTop: 0.07 };
-
-// Briefumschlag (oben im Schild) — gefüllter Körper + weiße Klappe (V).
-const ENV = { x0: 0.335, y0: 0.305, x1: 0.665, y1: 0.475, r: 0.022 };
-const FLAP_APEX = [0.5, 0.425];
-const FLAP_T = 0.013;
-
-// Blitz (unten im Schild) — Cyan-Akzent.
-const BOLT_POLY = [
-  [0.55, 0.55],
-  [0.435, 0.675],
-  [0.508, 0.675],
-  [0.452, 0.805],
-  [0.588, 0.64],
-  [0.508, 0.64],
-];
-
-function shieldHalfWidth(ny) {
-  const s = SHIELD;
-  if (ny < s.top || ny > s.bottom) return -1;
-  if (ny <= s.shoulder) return s.halfW;
-  const k = 1 - (ny - s.shoulder) / (s.bottom - s.shoulder);
-  return s.halfW * Math.max(0, k);
-}
-
-function inShield(nx, ny) {
-  const hw = shieldHalfWidth(ny);
-  if (hw < 0) return false;
-  const dx = Math.abs(nx - CX);
-  if (ny < SHIELD.top + SHIELD.rTop && dx > SHIELD.halfW - SHIELD.rTop) {
-    const ccx = CX + Math.sign(nx - CX) * (SHIELD.halfW - SHIELD.rTop);
-    const ccy = SHIELD.top + SHIELD.rTop;
-    return Math.hypot(nx - ccx, ny - ccy) <= SHIELD.rTop;
+// — PNG-Decoder (8-bit, RGB/RGBA) —
+function decodePNG(buf) {
+  let p = 8;
+  let w = 0,
+    h = 0,
+    colorType = 6;
+  const idat = [];
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p);
+    const type = buf.toString('ascii', p + 4, p + 8);
+    const data = buf.subarray(p + 8, p + 8 + len);
+    if (type === 'IHDR') {
+      w = data.readUInt32BE(0);
+      h = data.readUInt32BE(4);
+      colorType = data[9];
+    } else if (type === 'IDAT') {
+      idat.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+    p += 12 + len;
   }
-  return dx <= hw;
-}
-
-function inRoundRect(x, y, R) {
-  if (x < R.x0 || x > R.x1 || y < R.y0 || y > R.y1) return false;
-  const inCx = x < R.x0 + R.r || x > R.x1 - R.r;
-  const inCy = y < R.y0 + R.r || y > R.y1 - R.r;
-  if (inCx && inCy) {
-    const cx = Math.min(Math.max(x, R.x0 + R.r), R.x1 - R.r);
-    const cy = Math.min(Math.max(y, R.y0 + R.r), R.y1 - R.r);
-    return Math.hypot(x - cx, y - cy) <= R.r;
+  const raw = inflateSync(Buffer.concat(idat));
+  const ch = colorType === 6 ? 4 : 3; // RGBA oder RGB
+  const stride = w * ch;
+  const out = Buffer.alloc(w * h * 3); // immer RGB ausgeben
+  const prev = Buffer.alloc(stride);
+  let cur = Buffer.alloc(stride);
+  const paeth = (a, b, c) => {
+    const pp = a + b - c;
+    const pa = Math.abs(pp - a),
+      pb = Math.abs(pp - b),
+      pc = Math.abs(pp - c);
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+  };
+  let rp = 0;
+  for (let y = 0; y < h; y++) {
+    const f = raw[rp++];
+    for (let i = 0; i < stride; i++) {
+      const x = raw[rp++];
+      const a = i >= ch ? cur[i - ch] : 0;
+      const b = prev[i];
+      const c = i >= ch ? prev[i - ch] : 0;
+      let v = x;
+      if (f === 1) v = x + a;
+      else if (f === 2) v = x + b;
+      else if (f === 3) v = x + ((a + b) >> 1);
+      else if (f === 4) v = x + paeth(a, b, c);
+      cur[i] = v & 0xff;
+    }
+    for (let xx = 0; xx < w; xx++) {
+      out[(y * w + xx) * 3] = cur[xx * ch];
+      out[(y * w + xx) * 3 + 1] = cur[xx * ch + 1];
+      out[(y * w + xx) * 3 + 2] = cur[xx * ch + 2];
+    }
+    cur.copy(prev);
   }
-  return true;
+  return { w, h, rgb: out };
 }
 
-function distToSeg(px, py, ax, ay, bx, by) {
-  const dx = bx - ax,
-    dy = by - ay;
-  const len2 = dx * dx + dy * dy || 1;
-  let tt = ((px - ax) * dx + (py - ay) * dy) / len2;
-  tt = Math.max(0, Math.min(1, tt));
-  return Math.hypot(px - (ax + tt * dx), py - (ay + tt * dy));
-}
+const isWhite = (r, g, b) => r > 232 && g > 232 && b > 232;
 
-function onFlap(x, y) {
-  return (
-    distToSeg(x, y, ENV.x0 + 0.02, ENV.y0 + 0.02, FLAP_APEX[0], FLAP_APEX[1]) < FLAP_T ||
-    distToSeg(x, y, ENV.x1 - 0.02, ENV.y0 + 0.02, FLAP_APEX[0], FLAP_APEX[1]) < FLAP_T
-  );
-}
-
-function pointInPoly(x, y, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0],
-      yi = poly[i][1],
-      xj = poly[j][0],
-      yj = poly[j][1];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-function sampleAt(nx, ny) {
-  const bg = [lerp(TOP[0], BOT[0], ny), lerp(TOP[1], BOT[1], ny), lerp(TOP[2], BOT[2], ny)];
-  if (!inShield(nx, ny)) return bg;
-  // Blitz unten (Performance).
-  if (pointInPoly(nx, ny, BOLT_POLY)) return BOLT;
-  // Briefumschlag oben (Mail): blauer Körper, weiße Klappe.
-  if (inRoundRect(nx, ny, ENV)) return onFlap(nx, ny) ? WHITE : ENVCOL;
-  // Sonst weißes Schild (Sicherheit).
-  return WHITE;
-}
-
-function renderIcon(size) {
-  const ss = 2; // Supersampling
-  const buf = Buffer.alloc(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      let r = 0,
-        g = 0,
-        b = 0;
-      for (let sy = 0; sy < ss; sy++) {
-        for (let sx = 0; sx < ss; sx++) {
-          const nx = (x + (sx + 0.5) / ss) / size;
-          const ny = (y + (sy + 0.5) / ss) / size;
-          const c = sampleAt(nx, ny);
-          r += c[0];
-          g += c[1];
-          b += c[2];
-        }
-      }
-      const n = ss * ss;
-      const i = (y * size + x) * 4;
-      buf[i] = Math.round(r / n);
-      buf[i + 1] = Math.round(g / n);
-      buf[i + 2] = Math.round(b / n);
-      buf[i + 3] = 255; // App-Icons sind opak
+// — Quelle laden + Inhalts-Bounding-Box (ohne weißen Rand) —
+const src = decodePNG(readFileSync(join(DIR, 'icon-src.png')));
+let x0 = src.w,
+  y0 = src.h,
+  x1 = 0,
+  y1 = 0;
+for (let y = 0; y < src.h; y++) {
+  for (let x = 0; x < src.w; x++) {
+    const i = (y * src.w + x) * 3;
+    if (!isWhite(src.rgb[i], src.rgb[i + 1], src.rgb[i + 2])) {
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
     }
   }
+}
+// Hintergrund-Navy aus einem Pixel knapp innerhalb der oberen Kante (mittig) ableiten.
+const navyIdx = ((y0 + 8) * src.w + ((x0 + x1) >> 1)) * 3;
+const NAVY = [src.rgb[navyIdx], src.rgb[navyIdx + 1], src.rgb[navyIdx + 2]];
+const bw = x1 - x0 + 1;
+const bh = y1 - y0 + 1;
+
+function bilinear(fx, fy) {
+  const ix = Math.min(src.w - 1, Math.max(0, Math.floor(fx)));
+  const iy = Math.min(src.h - 1, Math.max(0, Math.floor(fy)));
+  const i = (iy * src.w + ix) * 3;
+  return [src.rgb[i], src.rgb[i + 1], src.rgb[i + 2]];
+}
+
+// Bounding-Box leicht beschneiden (Anti-Aliasing-Kante der Vorlage weg → randlos navy).
+const inset = Math.round(Math.min(bw, bh) * 0.022);
+const ix0 = x0 + inset,
+  iy0 = y0 + inset,
+  iw = bw - 2 * inset,
+  ih = bh - 2 * inset;
+
+function render(size) {
+  const buf = Buffer.alloc(size * size * 3);
+  for (let oy = 0; oy < size; oy++) {
+    for (let ox = 0; ox < size; ox++) {
+      const fx = ix0 + ((ox + 0.5) / size) * iw;
+      const fy = iy0 + ((oy + 0.5) / size) * ih;
+      const c = bilinear(fx, fy);
+      const i = (oy * size + ox) * 3;
+      buf[i] = c[0];
+      buf[i + 1] = c[1];
+      buf[i + 2] = c[2];
+    }
+  }
+  // Runde Ecken/Restränder entfernen: weiße Pixel von den 4 Ecken her bis zur Navy-Kante
+  // mit Navy fluten (Artwork-Weiß im Inneren bleibt unberührt).
+  floodCornersToNavy(buf, size);
   return buf;
 }
 
-// — PNG-Encoder (RGBA, Filter 0) —
+function floodCornersToNavy(buf, size) {
+  const seen = new Uint8Array(size * size);
+  const stack = [];
+  const push = (x, y) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return;
+    const k = y * size + x;
+    if (seen[k]) return;
+    seen[k] = 1;
+    const i = k * 3;
+    if (isWhite(buf[i], buf[i + 1], buf[i + 2])) {
+      buf[i] = NAVY[0];
+      buf[i + 1] = NAVY[1];
+      buf[i + 2] = NAVY[2];
+      stack.push(k);
+    }
+  };
+  for (const [cx, cy] of [
+    [0, 0],
+    [size - 1, 0],
+    [0, size - 1],
+    [size - 1, size - 1],
+  ])
+    push(cx, cy);
+  while (stack.length) {
+    const k = stack.pop();
+    const x = k % size,
+      y = (k / size) | 0;
+    push(x + 1, y);
+    push(x - 1, y);
+    push(x, y + 1);
+    push(x, y - 1);
+  }
+}
+
+// — PNG-Encoder (RGB, colorType 2 — ohne Alpha) —
 const CRC = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -148,9 +173,9 @@ const CRC = (() => {
   }
   return t;
 })();
-function crc32(buf) {
+function crc32(b) {
   let c = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) c = CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 function chunk(type, data) {
@@ -161,16 +186,16 @@ function chunk(type, data) {
   crc.writeUInt32BE(crc32(Buffer.concat([t, data])), 0);
   return Buffer.concat([len, t, data, crc]);
 }
-function encodePNG(rgba, size) {
+function encodePNG(rgb, size) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // RGBA
-  const raw = Buffer.alloc((size * 4 + 1) * size);
+  ihdr[8] = 8;
+  ihdr[9] = 2; // RGB
+  const raw = Buffer.alloc((size * 3 + 1) * size);
   for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0; // Filter: none
-    rgba.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4);
+    raw[y * (size * 3 + 1)] = 0;
+    rgb.copy(raw, y * (size * 3 + 1) + 1, y * size * 3, (y + 1) * size * 3);
   }
   const idat = deflateSync(raw, { level: 9 });
   return Buffer.concat([
@@ -181,10 +206,9 @@ function encodePNG(rgba, size) {
   ]);
 }
 
-const sizes = [1024, 192, 144, 96, 72, 48];
-for (const size of sizes) {
-  const png = encodePNG(renderIcon(size), size);
+for (const size of [1024, 192, 144, 96, 72, 48]) {
+  const png = encodePNG(render(size), size);
   writeFileSync(join(OUT, `icon-${size}.png`), png);
   console.log(`icon-${size}.png (${png.length} B)`);
 }
-console.log('Done →', OUT);
+console.log(`Navy=${NAVY}, bbox=${x0},${y0}..${x1},${y1} → ${OUT}`);
