@@ -21,6 +21,9 @@ final class NexusDatabase {
 
   private var db: OpaquePointer?
   private var isOpen = false
+  /// Serialisiert ALLE DB-Zugriffe (JS-Bridge-Queue vs. nativer BGTask). Das SQLite-Handle und
+  /// der Selbstheilungs-Reset (`db = nil`) dürfen nicht nebenläufig benutzt werden (Crash-Schutz).
+  private let queue = DispatchQueue(label: "de.itm.nexus.db")
 
   private static let schema = """
   CREATE TABLE IF NOT EXISTS messages (
@@ -58,6 +61,8 @@ final class NexusDatabase {
     email        TEXT,
     payload      TEXT NOT NULL
   );
+  CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(account_id);
+  CREATE INDEX IF NOT EXISTS idx_folders_account ON folders(account_id);
   CREATE TABLE IF NOT EXISTS sync_cursors (
     key    TEXT PRIMARY KEY,
     cursor TEXT NOT NULL
@@ -66,8 +71,20 @@ final class NexusDatabase {
     USING fts5(subject, preview, content='messages', content_rowid='rowid');
   """
 
+  /// Trigger + Rebuild zur Pflege des external-content-FTS5-Index. Separat (nicht über die
+  /// `;`-Aufteilung des Schemas), weil CREATE TRIGGER interne Semikolons enthält — jeder
+  /// String ist genau EIN Statement für `sqlite3_prepare_v2`.
+  private static let ftsMaintenance: [String] = [
+    "CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN INSERT INTO messages_fts(rowid, subject, preview) VALUES (new.rowid, new.subject, new.preview); END",
+    "CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN INSERT INTO messages_fts(messages_fts, rowid, subject, preview) VALUES('delete', old.rowid, old.subject, old.preview); END",
+    "CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN INSERT INTO messages_fts(messages_fts, rowid, subject, preview) VALUES('delete', old.rowid, old.subject, old.preview); INSERT INTO messages_fts(rowid, subject, preview) VALUES (new.rowid, new.subject, new.preview); END",
+    "INSERT INTO messages_fts(messages_fts) VALUES('rebuild')",
+  ]
+
   /// Öffnet/erstellt die verschlüsselte DB, setzt den Schlüssel und legt das Schema an.
-  func initialize() throws {
+  func initialize() throws { try queue.sync { try _initialize() } }
+
+  private func _initialize() throws {
     guard !isOpen else { return }
     let key = try Self.loadOrCreateMasterKey()
 
@@ -79,7 +96,7 @@ final class NexusDatabase {
     // „Konto entfernen" den Master-Key per Krypto-Shredding gelöscht hat), wird die nun
     // unbrauchbare Datei verworfen und frisch angelegt — statt den App-Start zu blockieren.
     if !openWithKey(path: path, key: key) {
-      for suffix in ["", "-wal", "-shm"] {
+      for suffix in ["", "-wal", "-shm", "-journal"] {
         try? FileManager.default.removeItem(atPath: path + suffix)
       }
       db = nil
@@ -88,7 +105,9 @@ final class NexusDatabase {
       }
     }
 
-    try splitStatements(Self.schema).forEach { try exec($0, params: []) }
+    try splitStatements(Self.schema).forEach { try _exec($0, params: []) }
+    // FTS5-Index per Trigger pflegen (external-content) + bestehende Zeilen einmalig einlesen.
+    try Self.ftsMaintenance.forEach { try _exec($0, params: []) }
     isOpen = true
   }
 
@@ -120,22 +139,33 @@ final class NexusDatabase {
     let received = (msg["receivedAt"] as? NSNumber)?.int64Value ?? 0
     let subject = msg["subject"] as? String ?? ""
     let preview = msg["preview"] as? String ?? ""
-    let payload = String(
-      decoding: (try? JSONSerialization.data(withJSONObject: msg)) ?? Data(), as: UTF8.self)
-    try exec(
-      """
-      INSERT INTO messages (id, account_id, folder_id, received_at, subject, preview, payload)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        folder_id = excluded.folder_id, received_at = excluded.received_at,
-        subject = excluded.subject, preview = excluded.preview, payload = excluded.payload
-      """,
-      params: [id, account, folder, received, subject, preview, payload])
+    // JSONSerialization kann eine NSException werfen (NaN/ungültiger Typ) — abfangen.
+    var payloadData = Data()
+    _ = NexusExceptionGuard.run {
+      payloadData = (try? JSONSerialization.data(withJSONObject: msg)) ?? Data()
+    }
+    let payload = String(decoding: payloadData, as: UTF8.self)
+    try queue.sync {
+      try _exec(
+        """
+        INSERT INTO messages (id, account_id, folder_id, received_at, subject, preview, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          folder_id = excluded.folder_id, received_at = excluded.received_at,
+          subject = excluded.subject, preview = excluded.preview, payload = excluded.payload
+        """,
+        params: [id, account, folder, received, subject, preview, payload])
+    }
   }
 
   /// Schreibendes Statement; liefert die Anzahl betroffener Zeilen.
   @discardableResult
   func exec(_ sql: String, params: [Any?]) throws -> Int {
+    try queue.sync { try _exec(sql, params: params) }
+  }
+
+  @discardableResult
+  private func _exec(_ sql: String, params: [Any?]) throws -> Int {
     let stmt = try prepare(sql, params: params)
     defer { sqlite3_finalize(stmt) }
     let rc = sqlite3_step(stmt)
@@ -147,6 +177,10 @@ final class NexusDatabase {
 
   /// Abfrage; liefert die Zeilen als [Spalte: Wert].
   func query(_ sql: String, params: [Any?]) throws -> [[String: Any]] {
+    try queue.sync { try _query(sql, params: params) }
+  }
+
+  private func _query(_ sql: String, params: [Any?]) throws -> [[String: Any]] {
     let stmt = try prepare(sql, params: params)
     defer { sqlite3_finalize(stmt) }
     let columns = Int(sqlite3_column_count(stmt))

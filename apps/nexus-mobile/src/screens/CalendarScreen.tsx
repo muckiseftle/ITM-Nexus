@@ -78,11 +78,20 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
     );
   }, [events, query]);
 
-  const evOn = useCallback(
-    (d0: number) =>
-      filtered.filter((e) => dStart(e.startAt) === d0).sort((a, b) => a.startAt - b.startAt),
-    [filtered],
-  );
+  // Termine EINMAL nach Tagesbeginn bucketen (statt 42× O(events)-Scan pro Monats-Render).
+  const byDay = useMemo(() => {
+    const m = new Map<number, CalendarEvent[]>();
+    for (const e of filtered) {
+      const d0 = dStart(e.startAt);
+      const arr = m.get(d0);
+      if (arr) arr.push(e);
+      else m.set(d0, [e]);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.startAt - b.startAt);
+    return m;
+  }, [filtered]);
+
+  const evOn = useCallback((d0: number): CalendarEvent[] => byDay.get(d0) ?? [], [byDay]);
 
   const eventChip = (e: CalendarEvent): React.JSX.Element => {
     const cc = evColor(e);
