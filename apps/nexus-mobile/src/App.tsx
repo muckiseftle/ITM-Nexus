@@ -15,15 +15,16 @@ import {
 } from '@nexus/domain';
 import { classifyError } from '@nexus/core-transport';
 import { space } from '@nexus/ui-kit';
-import {
-  APP_MODE,
-  DEMO_ACCOUNT_ID,
-  DEMO_INBOX_ID,
-  PUSH_TIMEOUT_MS,
-  SYNC_INTERVALS,
-} from './config';
+import { APP_MODE, DEMO_ACCOUNT_ID, DEMO_INBOX_ID, PUSH_TIMEOUT_MS } from './config';
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  saveSettings,
+  syncIntervalMs,
+  type AppSettings,
+} from './composition/settings';
 import { ThemeProvider, useTheme, type AppTheme } from './theme/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { type IconName } from './components/Icon';
@@ -119,12 +120,15 @@ function AppInner(): React.JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Wird nach jedem erfolgreichen Hintergrund-Sync erhöht → Screens laden lokal neu.
   const [syncTick, setSyncTick] = useState(0);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
     factory()
       .then(async (c) => {
         setContainer(c);
+        // Persistente Einstellungen laden (Sync-Intervall steuert den Vordergrund-Sync).
+        setSettings(await loadSettings(c.secureStore));
         if (APP_MODE === 'demo') {
           setAccount(toAccountId(DEMO_ACCOUNT_ID));
           setRestoring(false);
@@ -175,7 +179,9 @@ function AppInner(): React.JSX.Element {
 
     // SOFORT einmal synchronisieren (nicht erst nach dem Intervall) → Mails erscheinen zügig.
     void runSync();
-    const interval = setInterval(() => void runSync(), SYNC_INTERVALS.messages);
+    // Poll-Intervall aus den Einstellungen; `null` = Manuell → kein Timer (nur Push + Initial-Sync).
+    const periodMs = syncIntervalMs(settings.syncInterval);
+    const interval = periodMs !== null ? setInterval(() => void runSync(), periodMs) : undefined;
 
     void c.scheduleBackgroundSync?.();
 
@@ -197,9 +203,29 @@ function AppInner(): React.JSX.Element {
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (interval !== undefined) clearInterval(interval);
     };
-  }, [container, account]);
+  }, [container, account, settings.syncInterval]);
+
+  // Einstellungen ändern → sofort wirksam (State) und persistieren (SecureStore).
+  const updateSettings = useCallback(
+    (next: AppSettings) => {
+      setSettings(next);
+      if (container !== null) void saveSettings(container.secureStore, next);
+    },
+    [container],
+  );
+
+  // Passwort neu setzen (nach Server-seitiger Änderung): verifizieren + im Keychain aktualisieren.
+  // Nur im Live-Modus verfügbar; Demo zeigt die Zeile nicht.
+  const changePassword = useMemo(
+    () =>
+      APP_MODE === 'live' && container !== null
+        ? (newPassword: string): Promise<void> =>
+            container.setup.updatePassword(accountEmail, newPassword)
+        : undefined,
+    [container, accountEmail],
+  );
 
   const accountName = useMemo(() => deriveName(accountEmail), [accountEmail]);
   const folderName = useMemo(
@@ -346,8 +372,11 @@ function AppInner(): React.JSX.Element {
           <SettingsScreen
             accountName={accountName}
             accountEmail={accountEmail}
+            settings={settings}
+            onChangeSettings={updateSettings}
             onSignOut={signOut}
             onRemoveAccount={removeAccount}
+            {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
           />
         )}
       </View>

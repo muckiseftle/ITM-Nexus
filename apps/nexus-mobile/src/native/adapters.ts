@@ -229,6 +229,11 @@ export class NativeMailTransport implements MailTransport, PushTransport {
     await NexusNative.transportVerify(email);
   }
 
+  async updatePassword(email: string, secret: string): Promise<void> {
+    // Prüft das neue Passwort am Server (Reject bei 401/403) und übernimmt es in die Sitzung.
+    await NexusNative.transportUpdatePassword(email, secret);
+  }
+
   async syncMessages(
     accountId: AccountId,
     folderId: FolderId,

@@ -30,6 +30,8 @@ export interface NexusNativeModule {
   transportDiscover(email: string, credentialsJson: string): Promise<string>;
   /** Authentifizierter EWS-Roundtrip zur Anmeldeprüfung — rejectet bei 401/403/Serverfehler. */
   transportVerify(email: string): Promise<string>;
+  /** Setzt das Passwort neu + prüft es (rejectet bei 401/403). Persistenz erfolgt in JS. */
+  transportUpdatePassword(email: string, password: string): Promise<string>;
   /** Stellt die Sitzung aus dem Keychain wieder her (kein Netz). Liefert accountId oder null. */
   transportRestore(): Promise<string | null>;
   transportSyncMessages(

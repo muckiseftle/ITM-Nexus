@@ -94,6 +94,13 @@ export class FakeMailTransport implements MailTransport {
     return Promise.resolve();
   }
 
+  updatePassword(_email: string, _secret: string): Promise<void> {
+    if (this.config.failVerify === true) {
+      return Promise.reject(new AuthError('Anmeldung abgelehnt (HTTP 401)'));
+    }
+    return Promise.resolve();
+  }
+
   /** Zuletzt an `syncMessages` übergebener Cursor (für Delta-Sync-Assertions). */
   lastMessageSyncKey: string | undefined = undefined;
 

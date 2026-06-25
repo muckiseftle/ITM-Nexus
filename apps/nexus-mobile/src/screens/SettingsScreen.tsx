@@ -12,14 +12,22 @@ import {
 import { radius, space, typography } from '@nexus/ui-kit';
 import { APP_MODE, PINNING } from '../config';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
+import { BottomSheet, OptionSheet } from '../components/BottomSheet';
+import { INTERVAL_OPTS, WINDOW_OPTS, labelOf, type AppSettings } from '../composition/settings';
 
 interface Props {
   readonly accountName: string;
   readonly accountEmail: string;
+  /** Persistente App-Einstellungen (Sync-Intervall/-Zeitraum). */
+  readonly settings: AppSettings;
+  /** Einstellungen ändern (sofort wirksam + persistiert). */
+  readonly onChangeSettings: (next: AppSettings) => void;
   /** Abmelden: Zugangsdaten verwerfen, zurück zum Login (lokale Daten bleiben). */
   readonly onSignOut: () => void;
   /** Konto entfernen: Krypto-Shredding aller lokalen Daten + zurück zum Login. */
   readonly onRemoveAccount: () => void;
+  /** Passwort neu setzen (verifiziert + persistiert). Nur Live-Modus → sonst Zeile ausgeblendet. */
+  readonly onChangePassword?: (newPassword: string) => Promise<void>;
 }
 
 interface Shared {
@@ -28,32 +36,7 @@ interface Shared {
   readonly addr: string;
 }
 
-const WINDOW_OPTS = [
-  { key: '1w', label: '1 Woche' },
-  { key: '1m', label: '1 Monat' },
-  { key: '3m', label: '3 Monate' },
-  { key: '6m', label: '6 Monate' },
-  { key: 'all', label: 'Alle Nachrichten' },
-] as const;
-
-const INTERVAL_OPTS = [
-  { key: '1m', label: 'Alle 1 Minute' },
-  { key: '5m', label: 'Alle 5 Minuten' },
-  { key: '15m', label: 'Alle 15 Minuten' },
-  { key: 'manual', label: 'Manuell' },
-] as const;
-
-function nextKey<T extends { readonly key: string }>(opts: readonly T[], current: string): string {
-  const i = opts.findIndex((o) => o.key === current);
-  return opts[(i + 1) % opts.length]?.key ?? current;
-}
-
-function labelOf(
-  opts: readonly { readonly key: string; readonly label: string }[],
-  key: string,
-): string {
-  return opts.find((o) => o.key === key)?.label ?? key;
-}
+type Sheet = 'none' | 'interval' | 'window' | 'password';
 
 function initials(name: string): string {
   return name
@@ -71,8 +54,11 @@ function initials(name: string): string {
 export function SettingsScreen({
   accountName,
   accountEmail,
+  settings,
+  onChangeSettings,
   onSignOut,
   onRemoveAccount,
+  onChangePassword,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -104,9 +90,37 @@ export function SettingsScreen({
   const [background, setBackground] = useState(true);
   const [wifiOnly, setWifiOnly] = useState(false);
   const [appLock, setAppLock] = useState(true);
-  const [syncWindow, setSyncWindow] = useState<string>('1m');
-  const [syncInterval, setSyncInterval] = useState<string>('5m');
+  const [sheet, setSheet] = useState<Sheet>('none');
+  const [pw, setPw] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
   const [shared, setShared] = useState<readonly Shared[]>([]);
+
+  const openPasswordSheet = (): void => {
+    setPw('');
+    setPwError(null);
+    setSheet('password');
+  };
+
+  const submitPassword = async (): Promise<void> => {
+    if (onChangePassword === undefined) return;
+    if (pw.length === 0) {
+      setPwError('Bitte ein Passwort eingeben.');
+      return;
+    }
+    setPwBusy(true);
+    setPwError(null);
+    try {
+      await onChangePassword(pw);
+      setPwBusy(false);
+      setSheet('none');
+      setPw('');
+      Alert.alert('Passwort', 'Passwort erfolgreich aktualisiert.');
+    } catch {
+      setPwBusy(false);
+      setPwError('Anmeldung abgelehnt — bitte Passwort prüfen.');
+    }
+  };
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newAddr, setNewAddr] = useState('');
@@ -128,118 +142,174 @@ export function SettingsScreen({
 
   if (route === 'account') {
     return (
-      <ScrollView style={s.screen} contentContainerStyle={s.content}>
-        <Pressable style={s.back} onPress={() => setRoute('root')} hitSlop={8}>
-          <Text style={s.backText}>‹ Einstellungen</Text>
-        </Pressable>
+      <View style={s.screen}>
+        <ScrollView style={s.screen} contentContainerStyle={s.content}>
+          <Pressable style={s.back} onPress={() => setRoute('root')} hitSlop={8}>
+            <Text style={s.backText}>‹ Einstellungen</Text>
+          </Pressable>
 
-        <View style={s.hero}>
-          <View style={s.heroAva}>
-            <Text style={s.heroAvaText}>{initials(accountName)}</Text>
-          </View>
-          <View>
-            <Text style={s.heroName}>{accountName}</Text>
-            <Text style={s.itemSub}>{accountEmail}</Text>
-          </View>
-        </View>
-
-        <Text style={s.section}>Konto</Text>
-        <View style={s.card}>
-          <Row t={t}>
-            <View style={s.grow}>
-              <Text style={s.itemTitle}>Server</Text>
+          <View style={s.hero}>
+            <View style={s.heroAva}>
+              <Text style={s.heroAvaText}>{initials(accountName)}</Text>
             </View>
-            <Text style={s.itemValue}>{accountEmail.split('@')[1] ?? '—'}</Text>
-          </Row>
-          <Pressable onPress={() => setSyncWindow((v) => nextKey(WINDOW_OPTS, v))}>
+            <View>
+              <Text style={s.heroName}>{accountName}</Text>
+              <Text style={s.itemSub}>{accountEmail}</Text>
+            </View>
+          </View>
+
+          <Text style={s.section}>Konto</Text>
+          <View style={s.card}>
             <Row t={t}>
               <View style={s.grow}>
-                <Text style={s.itemTitle}>Sync-Zeitraum</Text>
-                <Text style={s.itemSub}>Wie weit zurück Mails geladen werden</Text>
+                <Text style={s.itemTitle}>Server</Text>
               </View>
-              <Text style={s.itemValue}>{labelOf(WINDOW_OPTS, syncWindow)}</Text>
-              <Text style={s.chev}>›</Text>
+              <Text style={s.itemValue}>{accountEmail.split('@')[1] ?? '—'}</Text>
             </Row>
-          </Pressable>
-          <Pressable onPress={() => setSyncInterval((v) => nextKey(INTERVAL_OPTS, v))}>
-            <Row t={t}>
-              <View style={s.grow}>
-                <Text style={s.itemTitle}>Aktualisierung</Text>
-              </View>
-              <Text style={s.itemValue}>{labelOf(INTERVAL_OPTS, syncInterval)}</Text>
-              <Text style={s.chev}>›</Text>
-            </Row>
-          </Pressable>
-        </View>
-
-        <Text style={s.section}>Freigegebene Postfächer</Text>
-        <View style={s.card}>
-          {shared.map((m) => (
-            <Row t={t} key={m.id}>
-              <View style={s.grow}>
-                <Text style={s.itemTitle}>{m.name}</Text>
-                <Text style={s.itemSub}>{m.addr} · Freigegeben</Text>
-              </View>
-              <Pressable
-                style={s.rm}
-                onPress={() => setShared((list) => list.filter((x) => x.id !== m.id))}
-              >
-                <Text style={s.rmText}>Entfernen</Text>
-              </Pressable>
-            </Row>
-          ))}
-          {adding ? (
-            <View style={s.addBlock}>
-              <TextInput
-                style={s.input}
-                placeholder="Name (optional)"
-                placeholderTextColor={t.c.textSecondary}
-                value={newName}
-                onChangeText={setNewName}
-              />
-              <TextInput
-                style={s.input}
-                placeholder="postfach@firma.de"
-                placeholderTextColor={t.c.textSecondary}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                value={newAddr}
-                onChangeText={setNewAddr}
-              />
-              <View style={s.formRow}>
-                <Pressable style={[s.action, s.actionPrimary]} onPress={addShared}>
-                  <Text style={s.actionPrimaryText}>Hinzufügen</Text>
-                </Pressable>
-                <Pressable style={s.action} onPress={() => setAdding(false)}>
-                  <Text style={s.actionText}>Abbrechen</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <Pressable onPress={() => setAdding(true)}>
+            <Pressable onPress={() => setSheet('window')}>
               <Row t={t}>
-                <Text style={s.addText}>＋ Freigegebenes Postfach hinzufügen</Text>
+                <View style={s.grow}>
+                  <Text style={s.itemTitle}>Sync-Zeitraum</Text>
+                  <Text style={s.itemSub}>Wie weit zurück Mails geladen werden</Text>
+                </View>
+                <Text style={s.itemValue}>{labelOf(WINDOW_OPTS, settings.syncWindow)}</Text>
+                <Text style={s.chev}>›</Text>
               </Row>
             </Pressable>
-          )}
-        </View>
+            <Pressable onPress={() => setSheet('interval')}>
+              <Row t={t}>
+                <View style={s.grow}>
+                  <Text style={s.itemTitle}>Aktualisierung</Text>
+                  <Text style={s.itemSub}>Wie oft im Vordergrund synchronisiert wird</Text>
+                </View>
+                <Text style={s.itemValue}>{labelOf(INTERVAL_OPTS, settings.syncInterval)}</Text>
+                <Text style={s.chev}>›</Text>
+              </Row>
+            </Pressable>
+            {onChangePassword !== undefined ? (
+              <Pressable onPress={openPasswordSheet}>
+                <Row t={t}>
+                  <View style={s.grow}>
+                    <Text style={s.itemTitle}>Passwort ändern</Text>
+                    <Text style={s.itemSub}>Nach Server-seitiger Änderung neu eingeben</Text>
+                  </View>
+                  <Text style={s.chev}>›</Text>
+                </Row>
+              </Pressable>
+            ) : null}
+          </View>
 
-        <View style={s.spacer} />
-        <View style={s.card}>
-          <Pressable onPress={confirmSignOut}>
-            <Row t={t}>
-              <Text style={s.dangerText}>Abmelden</Text>
-            </Row>
+          <Text style={s.section}>Freigegebene Postfächer</Text>
+          <View style={s.card}>
+            {shared.map((m) => (
+              <Row t={t} key={m.id}>
+                <View style={s.grow}>
+                  <Text style={s.itemTitle}>{m.name}</Text>
+                  <Text style={s.itemSub}>{m.addr} · Freigegeben</Text>
+                </View>
+                <Pressable
+                  style={s.rm}
+                  onPress={() => setShared((list) => list.filter((x) => x.id !== m.id))}
+                >
+                  <Text style={s.rmText}>Entfernen</Text>
+                </Pressable>
+              </Row>
+            ))}
+            {adding ? (
+              <View style={s.addBlock}>
+                <TextInput
+                  style={s.input}
+                  placeholder="Name (optional)"
+                  placeholderTextColor={t.c.textSecondary}
+                  value={newName}
+                  onChangeText={setNewName}
+                />
+                <TextInput
+                  style={s.input}
+                  placeholder="postfach@firma.de"
+                  placeholderTextColor={t.c.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  value={newAddr}
+                  onChangeText={setNewAddr}
+                />
+                <View style={s.formRow}>
+                  <Pressable style={[s.action, s.actionPrimary]} onPress={addShared}>
+                    <Text style={s.actionPrimaryText}>Hinzufügen</Text>
+                  </Pressable>
+                  <Pressable style={s.action} onPress={() => setAdding(false)}>
+                    <Text style={s.actionText}>Abbrechen</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable onPress={() => setAdding(true)}>
+                <Row t={t}>
+                  <Text style={s.addText}>＋ Freigegebenes Postfach hinzufügen</Text>
+                </Row>
+              </Pressable>
+            )}
+          </View>
+
+          <View style={s.spacer} />
+          <View style={s.card}>
+            <Pressable onPress={confirmSignOut}>
+              <Row t={t}>
+                <Text style={s.dangerText}>Abmelden</Text>
+              </Row>
+            </Pressable>
+            <Pressable onPress={confirmRemove}>
+              <Row t={t}>
+                <Text style={s.dangerText}>Konto entfernen</Text>
+              </Row>
+            </Pressable>
+          </View>
+          <View style={s.spacer} />
+        </ScrollView>
+
+        <OptionSheet
+          visible={sheet === 'window'}
+          onClose={() => setSheet('none')}
+          title="Sync-Zeitraum"
+          options={WINDOW_OPTS}
+          selected={settings.syncWindow}
+          onSelect={(key) => onChangeSettings({ ...settings, syncWindow: key })}
+        />
+        <OptionSheet
+          visible={sheet === 'interval'}
+          onClose={() => setSheet('none')}
+          title="Aktualisierung"
+          options={INTERVAL_OPTS}
+          selected={settings.syncInterval}
+          onSelect={(key) => onChangeSettings({ ...settings, syncInterval: key })}
+        />
+        <BottomSheet
+          visible={sheet === 'password'}
+          onClose={() => setSheet('none')}
+          title="Passwort ändern"
+        >
+          <Text style={s.sheetHint}>Neues Passwort für {accountEmail}</Text>
+          <TextInput
+            style={s.input}
+            placeholder="Neues Passwort"
+            placeholderTextColor={t.c.textSecondary}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={pw}
+            onChangeText={setPw}
+          />
+          {pwError !== null ? <Text style={s.sheetError}>{pwError}</Text> : null}
+          <Pressable
+            style={[s.pillBtn, pwBusy ? s.pillBtnDisabled : null]}
+            disabled={pwBusy}
+            onPress={() => void submitPassword()}
+          >
+            <Text style={s.pillBtnText}>{pwBusy ? 'Prüfe …' : 'Passwort speichern'}</Text>
           </Pressable>
-          <Pressable onPress={confirmRemove}>
-            <Row t={t}>
-              <Text style={s.dangerText}>Konto entfernen</Text>
-            </Row>
-          </Pressable>
-        </View>
-        <View style={s.spacer} />
-      </ScrollView>
+        </BottomSheet>
+      </View>
     );
   }
 
@@ -376,14 +446,23 @@ function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     action: {
       backgroundColor: t.c.bgElevated,
-      borderRadius: radius.sm,
+      borderRadius: radius.pill,
       flex: 1,
       padding: space.sm,
     },
     actionPrimary: { backgroundColor: t.c.brandPrimary },
     actionPrimaryText: { color: t.onBrand, fontWeight: '700', textAlign: 'center' },
     actionText: { color: t.c.textPrimary, fontWeight: '600', textAlign: 'center' },
-    activeTag: { color: t.c.accent, fontSize: 11, fontWeight: '700' },
+    activeTag: {
+      backgroundColor: t.c.accent + '1A',
+      borderRadius: radius.pill,
+      color: t.c.accent,
+      fontSize: 11,
+      fontWeight: '700',
+      overflow: 'hidden',
+      paddingHorizontal: space.sm,
+      paddingVertical: 3,
+    },
     addBlock: { padding: space.md },
     addText: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600' },
     back: { paddingVertical: space.xs },
@@ -445,13 +524,40 @@ function makeStyles(t: AppTheme) {
       width: 40,
     },
     miniAvaText: { color: t.onBrand, fontSize: typography.caption.size, fontWeight: '700' },
-    pillOff: { color: t.c.textSecondary, fontSize: typography.caption.size, fontWeight: '700' },
-    pillOn: { color: t.c.success, fontSize: typography.caption.size, fontWeight: '700' },
+    pillBtn: {
+      alignItems: 'center',
+      backgroundColor: t.c.brandPrimary,
+      borderRadius: radius.pill,
+      marginTop: space.sm,
+      paddingVertical: 14,
+    },
+    pillBtnDisabled: { opacity: 0.6 },
+    pillBtnText: { color: t.onBrand, fontSize: typography.body.size, fontWeight: '700' },
+    pillOff: {
+      backgroundColor: t.c.textSecondary + '1A',
+      borderRadius: radius.pill,
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      fontWeight: '700',
+      overflow: 'hidden',
+      paddingHorizontal: space.sm,
+      paddingVertical: 3,
+    },
+    pillOn: {
+      backgroundColor: t.c.success + '1A',
+      borderRadius: radius.pill,
+      color: t.c.success,
+      fontSize: typography.caption.size,
+      fontWeight: '700',
+      overflow: 'hidden',
+      paddingHorizontal: space.sm,
+      paddingVertical: 3,
+    },
     rm: {
       borderColor: '#E6B9B9',
-      borderRadius: radius.sm,
+      borderRadius: radius.pill,
       borderWidth: 1,
-      paddingHorizontal: space.sm,
+      paddingHorizontal: space.md,
       paddingVertical: 6,
     },
     rmText: { color: t.c.danger, fontSize: typography.caption.size, fontWeight: '600' },
@@ -465,6 +571,12 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: space.md,
       paddingTop: space.lg,
       textTransform: 'uppercase',
+    },
+    sheetError: { color: t.c.danger, fontSize: typography.caption.size, marginTop: space.xxs },
+    sheetHint: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginBottom: space.xs,
     },
     spacer: { height: space.lg },
   });

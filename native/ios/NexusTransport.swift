@@ -492,6 +492,21 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     return try Self.json(["verified": true])
   }
 
+  /// Setzt das Passwort der laufenden Sitzung neu und prüft es mit einem authentifizierten
+  /// Roundtrip. Endpoint/Benutzer werden — falls noch nicht im Speicher — aus dem Keychain
+  /// wiederhergestellt. Wirft AUTH bei falschem Passwort (post() ⇒ 401/403). Die Persistenz
+  /// des neuen Secrets im Keychain übernimmt die JS-Schicht (AccountSetupService).
+  func updatePassword(email: String, newPassword: String) async throws -> String {
+    if ewsUrl == nil { _ = try restoreSession() }
+    guard let user = username, ewsUrl != nil else {
+      throw NexusError.transport("Kein Konto geladen — bitte neu anmelden.")
+    }
+    password = newPassword
+    basicAuthHeader = Self.basicAuth(user: user, password: newPassword)
+    _ = try await post(EwsSoap.findFolders())
+    return try Self.json(["verified": true])
+  }
+
   func searchServer(accountId: String, query: String) async throws -> String {
     let xml = try await post(EwsSoap.findItem(folderId: "inbox", query: query))
     let hits = EwsSoap.extractItemIds(xml).enumerated().map { (i, id) -> [String: Any] in

@@ -88,6 +88,17 @@ export class AccountSetupService {
     return this.completeSetup(email, credentials, discovered);
   }
 
+  /**
+   * Passwort eines bereits eingerichteten Kontos neu setzen (nach serverseitiger Änderung):
+   * erst gegen den Server prüfen (authentifizierter Roundtrip), dann — nur bei Erfolg — das
+   * Secret im {@link SecureStore} aktualisieren. Schlägt die Prüfung fehl, bleibt das alte
+   * Secret unverändert (kein „halber" Wechsel).
+   */
+  async updatePassword(email: string, newSecret: string): Promise<void> {
+    await this.transport.updatePassword(email, newSecret);
+    await this.secureStore.set(secretKey(email), newSecret);
+  }
+
   /** Sicheres Vergessen eines Kontos (Teil der Datenlöschungs-Strategie). */
   async forget(email: string): Promise<void> {
     await this.secureStore.delete(secretKey(email));

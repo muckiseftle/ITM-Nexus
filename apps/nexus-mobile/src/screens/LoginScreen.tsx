@@ -361,7 +361,7 @@ function makeStyles(t: AppTheme) {
     button: {
       alignItems: 'center',
       backgroundColor: t.c.brandPrimary,
-      borderRadius: radius.md,
+      borderRadius: radius.pill,
       marginTop: space.sm,
       paddingVertical: space.md,
     },

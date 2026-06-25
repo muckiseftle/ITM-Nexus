@@ -103,6 +103,14 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportUpdatePassword:password:resolver:rejecter:)
+  func transportUpdatePassword(_ email: String, password: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.updatePassword(email: email, newPassword: password)) }
+      catch { reject("transport_update_password", "\(error)", error) }
+    }
+  }
+
   @objc(transportRestore:rejecter:)
   func transportRestore(_ resolve: RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     // Stellt Endpoint + Auth aus dem Keychain wieder her (kein Netz). Liefert die accountId

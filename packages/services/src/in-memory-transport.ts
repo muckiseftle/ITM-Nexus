@@ -58,6 +58,11 @@ export class InMemoryMailTransport implements MailTransport {
     return Promise.resolve();
   }
 
+  /** Demo-Transport: Passwortwechsel ohne Server — gilt immer als erfolgreich. */
+  updatePassword(_email: string, _secret: string): Promise<void> {
+    return Promise.resolve();
+  }
+
   loadAccount(accountId: AccountId): Promise<Account> {
     return Promise.resolve({
       id: accountId,

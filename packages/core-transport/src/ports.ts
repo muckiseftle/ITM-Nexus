@@ -40,6 +40,12 @@ export interface MailTransport {
    * und Auth-Header). Ohne diesen Schritt wäre eine „Anmeldung" nur eine Endpunkt-Erkennung.
    */
   verifyCredentials(email: string): Promise<void>;
+  /**
+   * Setzt das Konto-Passwort neu (nach serverseitiger Änderung): prüft das neue Secret mit
+   * einem authentifizierten Roundtrip und übernimmt es in die laufende Sitzung. Wirft bei
+   * abgelehnter Anmeldung. Die Persistenz im SecureStore übernimmt der Aufrufer.
+   */
+  updatePassword(email: string, secret: string): Promise<void>;
   loadAccount(accountId: AccountId): Promise<Account>;
 
   syncFolders(accountId: AccountId, syncKey?: string): Promise<SyncDelta<MailFolder>>;
