@@ -87,7 +87,9 @@ export function normalizeEwsUrl(input: string): string | undefined {
   if (value.length === 0) return undefined;
   if (/\s/.test(value)) return undefined;
 
-  // Schema ergänzen (Standard: https).
+  // Schema ergänzen bzw. auf https erzwingen — EWS ist HTTPS-only; ein manuell getipptes
+  // http:// würde sonst den Basic-Auth-Header im Klartext übertragen (Security).
+  value = value.replace(/^http:\/\//i, 'https://');
   if (!/^https?:\/\//i.test(value)) {
     value = `https://${value}`;
   }

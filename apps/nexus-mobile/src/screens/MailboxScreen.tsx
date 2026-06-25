@@ -4,6 +4,7 @@ import {
   hasFlag,
   isUnread,
   MessageFlag,
+  toFolderId,
   type AccountId,
   type FolderId,
   type MailMessage,
@@ -11,6 +12,7 @@ import {
 } from '@nexus/domain';
 import { classifyError } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
+import { DEMO_INBOX_ID } from '../config';
 import type { AppContainer } from '../composition/container';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { GLYPH, IconButton } from '../components/Icon';
@@ -80,9 +82,11 @@ export function MailboxScreen({
     void load();
   }, [load, syncSignal]);
 
-  // Beim Öffnen/Ordnerwechsel einmal vom Server holen (damit der Ordner sofort befüllt wird).
+  // Beim Öffnen/Ordnerwechsel einmal vom Server holen. Die Inbox synct bereits App.runDue
+  // (cursor-aware) → hier nur Nicht-Inbox-Ordner aktiv holen (vermeidet Inbox-Doppel-Sync).
+  const inboxId = useMemo(() => toFolderId(DEMO_INBOX_ID), []);
   useEffect(() => {
-    void sync();
+    if (folderId !== inboxId) void sync();
     // Nur an Konto/Ordner koppeln — nicht an jede sync-Neubildung (sonst Sync-Schleife).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, folderId]);
@@ -97,6 +101,13 @@ export function MailboxScreen({
         (m.from.displayName ?? m.from.address).toLowerCase().includes(needle),
     );
   }, [messages, query]);
+
+  const onOpen = useCallback((id: MessageId) => onOpenMessage(id), [onOpenMessage]);
+  const keyExtractor = useCallback((m: MailMessage) => m.id, []);
+  const renderItem = useCallback(
+    ({ item }: { item: MailMessage }) => <MessageRow item={item} s={s} onOpen={onOpen} />,
+    [s, onOpen],
+  );
 
   return (
     <View style={s.screen}>
@@ -115,7 +126,7 @@ export function MailboxScreen({
       ) : null}
       <FlatList
         data={filtered}
-        keyExtractor={(m) => m.id}
+        keyExtractor={keyExtractor}
         contentContainerStyle={filtered.length === 0 ? s.emptyWrap : undefined}
         refreshControl={
           <RefreshControl
@@ -125,32 +136,50 @@ export function MailboxScreen({
           />
         }
         ListEmptyComponent={<Text style={s.empty}>Keine Nachrichten.</Text>}
-        renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [s.row, pressed ? s.rowPressed : null]}
-            onPress={() => {
-              onOpenMessage(item.id);
-            }}
-          >
-            <View style={[s.dot, { opacity: isUnread(item) ? 1 : 0 }]} />
-            <View style={s.rowBody}>
-              <Text numberOfLines={1} style={[s.sender, isUnread(item) ? s.unread : null]}>
-                {item.from.displayName ?? item.from.address}
-              </Text>
-              <Text numberOfLines={1} style={s.subject}>
-                {item.subject}
-              </Text>
-              <Text numberOfLines={1} style={s.preview}>
-                {item.preview}
-              </Text>
-            </View>
-            {hasFlag(item, MessageFlag.Flagged) ? <Text style={s.flag}>⚑</Text> : null}
-          </Pressable>
-        )}
+        renderItem={renderItem}
+        removeClippedSubviews
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={11}
       />
     </View>
   );
 }
+
+type Styles = ReturnType<typeof makeStyles>;
+
+/** Memoisierte Listenzeile — verhindert das Neu-Rendern aller Zeilen bei jedem syncTick. */
+const MessageRow = React.memo(function MessageRow({
+  item,
+  s,
+  onOpen,
+}: {
+  readonly item: MailMessage;
+  readonly s: Styles;
+  readonly onOpen: (id: MessageId) => void;
+}): React.JSX.Element {
+  const unread = isUnread(item);
+  return (
+    <Pressable
+      style={({ pressed }) => [s.row, pressed ? s.rowPressed : null]}
+      onPress={() => onOpen(item.id)}
+    >
+      <View style={[s.dot, { opacity: unread ? 1 : 0 }]} />
+      <View style={s.rowBody}>
+        <Text numberOfLines={1} style={[s.sender, unread ? s.unread : null]}>
+          {item.from.displayName ?? item.from.address}
+        </Text>
+        <Text numberOfLines={1} style={s.subject}>
+          {item.subject}
+        </Text>
+        <Text numberOfLines={1} style={s.preview}>
+          {item.preview}
+        </Text>
+      </View>
+      {hasFlag(item, MessageFlag.Flagged) ? <Text style={s.flag}>⚑</Text> : null}
+    </Pressable>
+  );
+});
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({

@@ -49,6 +49,11 @@ export class AccountSetupService {
     credentials: Credentials,
     discovered: AutodiscoverResult,
   ): Promise<AutodiscoverResult> {
+    // Ohne EWS-Endpunkt kann der native Hintergrund-Task die Sitzung später nicht
+    // wiederherstellen (stiller Logout beim Kaltstart) — daher gar nicht erst speichern.
+    if (discovered.ewsUrl === undefined || discovered.ewsUrl.length === 0) {
+      throw new Error('AUTODISCOVER: Kein EWS-Endpunkt ermittelt — Server manuell angeben.');
+    }
     await this.transport.verifyCredentials(email);
 
     // Persistenz atomar behandeln: schlägt ein Teilschritt fehl, alles zurücknehmen, damit

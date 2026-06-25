@@ -71,6 +71,12 @@ describe('normalizeEwsUrl', () => {
   it('liefert undefined bei leerer Eingabe', () => {
     expect(normalizeEwsUrl('   ')).toBeUndefined();
   });
+  it('erzwingt https (EWS ist HTTPS-only — kein Klartext-Basic-Auth)', () => {
+    expect(normalizeEwsUrl('http://mail.firma.de')).toBe('https://mail.firma.de/EWS/Exchange.asmx');
+    expect(normalizeEwsUrl('http://mail.firma.de/EWS/Exchange.asmx')).toBe(
+      'https://mail.firma.de/EWS/Exchange.asmx',
+    );
+  });
   it('akzeptiert Hostnamen mit Bindestrich (Hermes-URL-Bug umgangen)', () => {
     expect(normalizeEwsUrl('mail.itm-technologies.de')).toBe(
       'https://mail.itm-technologies.de/EWS/Exchange.asmx',
