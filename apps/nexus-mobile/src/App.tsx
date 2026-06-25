@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   buildComposePrefill,
   createMailAddress,
@@ -283,6 +291,11 @@ function AppInner(): React.JSX.Element {
 
   return (
     <SafeAreaView style={s.root}>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle={t.mode === 'dark' ? 'light-content' : 'dark-content'}
+      />
       <View style={s.body}>
         {tab === 'mail' ? (
           mailRoute.name === 'message' ? (
@@ -358,7 +371,7 @@ function AppInner(): React.JSX.Element {
                 setTab(tabDef.key);
               }}
             >
-              <Icon name={tabDef.icon} size={24} color={tint} />
+              <Icon name={tabDef.icon} size={25} color={tint} />
               <Text style={[s.tabText, { color: tint }, active ? s.tabActive : null]}>
                 {tabDef.label}
               </Text>
@@ -395,14 +408,15 @@ function makeStyles(t: AppTheme) {
     },
     error: { color: t.c.danger, padding: space.lg, textAlign: 'center' },
     root: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    tab: { alignItems: 'center', flex: 1, gap: 2, paddingVertical: space.xs },
+    tab: { alignItems: 'center', flex: 1, gap: 4, paddingTop: space.xs, paddingBottom: space.xxs },
     tabActive: { fontWeight: '700' },
     tabBar: {
       backgroundColor: t.c.bgCanvas,
       borderTopColor: t.border,
       borderTopWidth: StyleSheet.hairlineWidth,
       flexDirection: 'row',
+      paddingTop: space.xxs,
     },
-    tabText: { fontSize: 10 },
+    tabText: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2 },
   });
 }

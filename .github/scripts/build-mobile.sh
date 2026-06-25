@@ -36,6 +36,27 @@ cp "$ROOT/apps/nexus-mobile/index.js" ./index.js
 cp "$ROOT/apps/nexus-mobile/app.json" ./app.json
 echo "::endgroup::"
 
+echo "::group::App-Icon einspielen"
+ICONS="$ROOT/apps/nexus-mobile/assets"
+# iOS: Asset-Catalog-AppIcon ersetzen (einzelnes 1024er-Icon, Xcode erzeugt die Größen).
+if [ -d "ios/NEXUS/Images.xcassets" ]; then
+  rm -rf "ios/NEXUS/Images.xcassets/AppIcon.appiconset"
+  cp -R "$ICONS/ios/AppIcon.appiconset" "ios/NEXUS/Images.xcassets/AppIcon.appiconset"
+fi
+# Android: Mipmaps je Dichte ersetzen + adaptive XML entfernen (sonst Standard-Robot-Icon).
+if [ -d "android/app/src/main/res" ]; then
+  ARES="android/app/src/main/res"
+  # Portabel (macOS-bash 3.2 hat kein declare -A): Dichte:Pixel-Paare.
+  for pair in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
+    d="${pair%%:*}"; px="${pair##*:}"
+    mkdir -p "$ARES/mipmap-$d"
+    cp "$ICONS/icon/icon-$px.png" "$ARES/mipmap-$d/ic_launcher.png"
+    cp "$ICONS/icon/icon-$px.png" "$ARES/mipmap-$d/ic_launcher_round.png"
+  done
+  rm -f "$ARES"/mipmap-anydpi-v26/ic_launcher*.xml
+fi
+echo "::endgroup::"
+
 echo "::group::Laufzeit-Abhängigkeiten installieren"
 # Die Demo-App nutzt nur react/react-native (Navigation ist schlank in App.tsx) — daher
 # keine zusätzlichen nativen Abhängigkeiten nötig.
