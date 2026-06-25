@@ -26,6 +26,8 @@ interface Props {
   readonly onOpenDrawer: () => void;
   /** Wird bei abgelehnter Anmeldung (401/403) während eines Syncs aufgerufen. */
   readonly onAuthExpired: () => void;
+  /** Zähler, der sich nach jedem Hintergrund-Sync erhöht → lokal neu laden. */
+  readonly syncSignal: number;
 }
 
 export function MailboxScreen({
@@ -37,6 +39,7 @@ export function MailboxScreen({
   onCompose,
   onOpenDrawer,
   onAuthExpired,
+  syncSignal,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -72,9 +75,17 @@ export function MailboxScreen({
     }
   }, [container, account, folderId, load, onAuthExpired]);
 
+  // Lokal laden: beim Öffnen/Ordnerwechsel UND nach jedem Hintergrund-Sync (syncSignal).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, syncSignal]);
+
+  // Beim Öffnen/Ordnerwechsel einmal vom Server holen (damit der Ordner sofort befüllt wird).
+  useEffect(() => {
+    void sync();
+    // Nur an Konto/Ordner koppeln — nicht an jede sync-Neubildung (sonst Sync-Schleife).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, folderId]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

@@ -106,6 +106,9 @@ function AppInner(): React.JSX.Element {
 
   const [container, setContainer] = useState<AppContainer | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Solange wir im Live-Modus eine evtl. vorhandene Sitzung wiederherstellen, KEIN Login
+  // zeigen (sonst blitzt das Anmelde-Fenster kurz auf, bevor die Mailseite erscheint).
+  const [restoring, setRestoring] = useState<boolean>(APP_MODE !== 'demo');
   const [account, setAccount] = useState<AccountId | null>(null);
   const [accountEmail, setAccountEmail] = useState<string>(DEMO_EMAIL);
   const [tab, setTab] = useState<Tab>('mail');
@@ -113,6 +116,8 @@ function AppInner(): React.JSX.Element {
   const [currentFolder, setCurrentFolder] = useState<FolderId>(toFolderId(DEMO_INBOX_ID));
   const [folders, setFolders] = useState<readonly MailFolder[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Wird nach jedem erfolgreichen Hintergrund-Sync erhöht → Screens laden lokal neu.
+  const [syncTick, setSyncTick] = useState(0);
 
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
@@ -121,6 +126,7 @@ function AppInner(): React.JSX.Element {
         setContainer(c);
         if (APP_MODE === 'demo') {
           setAccount(toAccountId(DEMO_ACCOUNT_ID));
+          setRestoring(false);
           return;
         }
         // Live: bestehende Sitzung aus dem Keychain wiederherstellen → kein erneuter Login
@@ -133,10 +139,13 @@ function AppInner(): React.JSX.Element {
           }
         } catch {
           /* kein Restore möglich → Login-Screen */
+        } finally {
+          setRestoring(false);
         }
       })
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : 'Initialisierung fehlgeschlagen');
+        setRestoring(false);
       });
   }, []);
 
@@ -149,23 +158,35 @@ function AppInner(): React.JSX.Element {
   // Hintergrund-Sync (Vordergrund-Intervall) + DirectPush-Long-Poll, sobald ein Konto offen ist.
   useEffect(() => {
     if (container === null || account === null) return;
+    const c = container;
+    const acc = account;
     let cancelled = false;
 
-    const interval = setInterval(() => {
-      // Fehler im Hintergrund-Sync NIE als unbehandelte Rejection durchschlagen lassen.
-      container.backgroundSync.runDue(account).catch((e: unknown) => {
+    // Ein Sync-Durchlauf; signalisiert den Screens per syncTick, lokal neu zu laden.
+    const runSync = async (): Promise<void> => {
+      try {
+        await c.backgroundSync.runDue(acc);
+        if (!cancelled) setSyncTick((x) => x + 1);
+      } catch (e: unknown) {
         if (classifyError(e).kind === 'auth') authExpiredRef.current();
-      });
-    }, SYNC_INTERVALS.messages);
+      }
+    };
 
-    void container.scheduleBackgroundSync?.();
+    // SOFORT einmal synchronisieren (nicht erst nach dem Intervall) → Mails erscheinen zügig.
+    void runSync();
+    const interval = setInterval(() => void runSync(), SYNC_INTERVALS.messages);
+
+    void c.scheduleBackgroundSync?.();
 
     const pushLoop = async (): Promise<void> => {
       const inbox = toFolderId(DEMO_INBOX_ID);
-      while (!cancelled && container.push !== undefined) {
+      while (!cancelled && c.push !== undefined) {
         try {
-          const result = await container.push.ping(account, [inbox], PUSH_TIMEOUT_MS);
-          if (!cancelled) await container.backgroundSync.applyPing(account, result);
+          const result = await c.push.ping(acc, [inbox], PUSH_TIMEOUT_MS);
+          if (!cancelled) {
+            await c.backgroundSync.applyPing(acc, result);
+            setSyncTick((x) => x + 1);
+          }
         } catch {
           await new Promise((r) => setTimeout(r, 5000));
         }
@@ -236,7 +257,7 @@ function AppInner(): React.JSX.Element {
     );
   }
 
-  if (container === null) {
+  if (container === null || restoring) {
     return (
       <SafeAreaView style={s.centered}>
         <ActivityIndicator color={t.c.brandPrimary} />
@@ -299,6 +320,7 @@ function AppInner(): React.JSX.Element {
               account={account}
               folderId={currentFolder}
               folderTitle={folderName}
+              syncSignal={syncTick}
               onOpenMessage={openMessage}
               onAuthExpired={handleAuthExpired}
               onOpenDrawer={() => {

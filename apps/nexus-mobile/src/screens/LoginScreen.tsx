@@ -6,6 +6,7 @@ import {
   domainFromEmail,
   normalizeEwsUrl,
   parseLogin,
+  type AutodiscoverResult,
   type Credentials,
   type ErrorInfo,
 } from '@nexus/core-transport';
@@ -42,12 +43,31 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('');
   const [resolvedServer, setResolvedServer] = useState<string | null>(null);
+  const [discovered, setDiscovered] = useState<AutodiscoverResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
 
   const fail = (title: string, detail: string, technical: string): void => {
     setError({ kind: 'unknown', title, detail, technical });
+  };
+
+  // Eine Eingabeänderung verwirft eine zuvor ermittelte Server-Adresse → erneut „Server suchen".
+  const resetDiscovery = (): void => {
+    setDiscovered(null);
+    setResolvedServer(null);
+  };
+  const onChangePassword = (v: string): void => {
+    setPassword(v);
+    resetDiscovery();
+  };
+  const onChangeUsername = (v: string): void => {
+    setUsername(v);
+    resetDiscovery();
+  };
+  const onChangeServer = (v: string): void => {
+    setServerUrl(v);
+    resetDiscovery();
   };
 
   /** Üblicher Standard-Hostname für die manuelle Eingabe (editierbar vorbefüllt). */
@@ -68,16 +88,13 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
     setStep('credentials');
   };
 
-  // Baut die Credentials und führt Autodiscover + echte Anmeldeprüfung aus.
-  const attempt = async (withManualServer: boolean): Promise<void> => {
-    if (busy) return; // Doppel-Submit verhindern (z. B. schnelles Doppeltippen).
-    const trimmedEmail = email.trim();
+  // Baut die Credentials aus den Eingaben; meldet Fehler via fail() und liefert dann null.
+  const buildCredentials = (withManualServer: boolean): Credentials | null => {
     if (password.length === 0) {
       fail('Passwort fehlt', 'Bitte dein Passwort eingeben.', 'leeres Passwort');
-      return;
+      return null;
     }
-
-    const loginName = username.trim().length > 0 ? username.trim() : trimmedEmail;
+    const loginName = username.trim().length > 0 ? username.trim() : email.trim();
     const login = parseLogin(loginName);
     const scheme = login.form === 'downlevel' ? 'ntlm' : 'basic';
 
@@ -90,28 +107,31 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
           'Bitte eine gültige EWS-/Server-URL eingeben (z. B. mail.firma.de).',
           serverUrl,
         );
-        return;
+        return null;
       }
     }
-
-    const credentials: Credentials = {
+    return {
       username: loginName,
       secret: password,
       scheme,
       ...(login.form === 'downlevel' && login.domain !== undefined ? { domain: login.domain } : {}),
       ...(manualEws !== undefined ? { manual: { ewsUrl: manualEws } } : {}),
     };
+  };
+
+  // Phase 1: Endpunkt ermitteln und die gefundene Server-URL ANZEIGEN (noch kein Login).
+  const runDiscover = async (withManualServer: boolean): Promise<void> => {
+    if (busy) return;
+    const credentials = buildCredentials(withManualServer);
+    if (credentials === null) return;
 
     setBusy(true);
     setError(null);
     setShowTechnical(false);
     try {
-      // Schritt 1: Endpunkt ermitteln und die gefundene Server-URL sichtbar machen.
-      const discovered = await container.setup.discover(trimmedEmail, credentials);
-      setResolvedServer(discovered.ewsUrl ?? manualEws ?? null);
-      // Schritt 2: echte Anmeldeprüfung + Speichern (nur bei Erfolg).
-      await container.setup.completeSetup(trimmedEmail, credentials, discovered);
-      onLoggedIn(toAccountId(trimmedEmail.toLowerCase()), trimmedEmail);
+      const result = await container.setup.discover(email.trim(), credentials);
+      setDiscovered(result);
+      setResolvedServer(result.ewsUrl ?? credentials.manual?.ewsUrl ?? null);
     } catch (e: unknown) {
       const info = classifyError(e);
       setError(info);
@@ -119,7 +139,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
       // einen sinnvollen Standard-Host vorbefüllen, den der Nutzer prüfen/anpassen kann.
       if (info.kind === 'autodiscover' && step !== 'manual') {
         if (serverUrl.trim().length === 0) {
-          const host = defaultServerHost(trimmedEmail);
+          const host = defaultServerHost(email.trim());
           if (host !== undefined) setServerUrl(host);
         }
         setStep('manual');
@@ -127,6 +147,32 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
     } finally {
       setBusy(false);
     }
+  };
+
+  // Phase 2: echte Anmeldeprüfung gegen den ermittelten Endpunkt + Speichern (nur bei Erfolg).
+  const confirmLogin = async (withManualServer: boolean): Promise<void> => {
+    if (busy || discovered === null) return;
+    const credentials = buildCredentials(withManualServer);
+    if (credentials === null) return;
+    const trimmedEmail = email.trim();
+
+    setBusy(true);
+    setError(null);
+    try {
+      await container.setup.completeSetup(trimmedEmail, credentials, discovered);
+      onLoggedIn(toAccountId(trimmedEmail.toLowerCase()), trimmedEmail);
+    } catch (e: unknown) {
+      setError(classifyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Primäraktion eines Anmelde-Schritts: erst „Server suchen", nach Erfolg „Anmelden".
+  const primaryLabel = discovered !== null ? 'Anmelden' : 'Server suchen';
+  const onPrimary = (withManualServer: boolean): void => {
+    if (discovered !== null) void confirmLogin(withManualServer);
+    else void runDiscover(withManualServer);
   };
 
   const serverInfo =
@@ -202,7 +248,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
             secureTextEntry
             autoFocus
             value={password}
-            onChangeText={setPassword}
+            onChangeText={onChangePassword}
           />
           <TextInput
             style={s.input}
@@ -211,19 +257,19 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
             autoCapitalize="none"
             autoCorrect={false}
             value={username}
-            onChangeText={setUsername}
+            onChangeText={onChangeUsername}
           />
           {serverInfo}
           {errorBox}
           <Pressable
             style={[s.button, busy ? s.buttonDisabled : null]}
             disabled={busy}
-            onPress={() => void attempt(false)}
+            onPress={() => onPrimary(false)}
           >
             {busy ? (
               <ActivityIndicator color={t.onBrand} />
             ) : (
-              <Text style={s.buttonText}>Anmelden</Text>
+              <Text style={s.buttonText}>{primaryLabel}</Text>
             )}
           </Pressable>
           <Pressable onPress={() => setStep('manual')} hitSlop={6}>
@@ -252,7 +298,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
             autoFocus
             keyboardType="url"
             value={serverUrl}
-            onChangeText={setServerUrl}
+            onChangeText={onChangeServer}
           />
           <TextInput
             style={s.input}
@@ -260,7 +306,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
             placeholderTextColor={t.c.textSecondary}
             secureTextEntry
             value={password}
-            onChangeText={setPassword}
+            onChangeText={onChangePassword}
           />
           <TextInput
             style={s.input}
@@ -269,7 +315,7 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
             autoCapitalize="none"
             autoCorrect={false}
             value={username}
-            onChangeText={setUsername}
+            onChangeText={onChangeUsername}
           />
           <Text style={s.advancedHint}>
             Nutze diesen Schritt nur, wenn Autodiscover im Firmennetz nicht freigegeben ist.
@@ -279,12 +325,12 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
           <Pressable
             style={[s.button, busy ? s.buttonDisabled : null]}
             disabled={busy}
-            onPress={() => void attempt(true)}
+            onPress={() => onPrimary(true)}
           >
             {busy ? (
               <ActivityIndicator color={t.onBrand} />
             ) : (
-              <Text style={s.buttonText}>Anmelden</Text>
+              <Text style={s.buttonText}>{primaryLabel}</Text>
             )}
           </Pressable>
         </>
