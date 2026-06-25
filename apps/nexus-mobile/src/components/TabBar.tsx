@@ -99,26 +99,20 @@ export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>): 
 }
 
 function makeStyles(t: AppTheme) {
-  const dark = t.mode === 'dark';
   return StyleSheet.create({
     island: {
-      // WICHTIG: KEIN borderWidth hier. Ein Rahmen + Hintergrund + borderRadius zwingt RN
-      // (New Architecture) dazu, die Insel als gefülltes/gestricheltes Bild zu rendern
-      // (RCTGetBorderImage → CGContextFillRect → ColorSync), was auf iOS 26 beim ersten Mount
-      // abstürzt. Reiner borderRadius + backgroundColor nutzt layer.cornerRadius (sicher).
-      // Abgrenzung erfolgt über den Schatten (CALayer-Schatten, separater, sicherer Pfad).
+      // WICHTIG: nur borderRadius + backgroundColor (wie die bewährten Karten). KEIN Rahmen
+      // und KEIN Schatten: beide zwingen RN (New Architecture) auf iOS 26, die abgerundete
+      // Fläche per UIGraphicsImageRenderer/RCTGetBorderImage zu rasterisieren — das stürzt
+      // beim ersten Mount ab (CoreGraphics aa_render/ColorSync, SIGSEGV). Reiner cornerRadius
+      // ist sicher. Der „schwebende" Eindruck entsteht über Rundung + Ränder + erhöhte Fläche.
       alignItems: 'center',
       backgroundColor: t.c.bgElevated,
       borderRadius: 28,
-      elevation: 12,
       flexDirection: 'row',
       height: 62,
       paddingHorizontal: PAD,
       paddingVertical: PAD,
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: dark ? 0.45 : 0.12,
-      shadowRadius: 16,
     },
     label: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2, marginTop: 3 },
     labelActive: { fontWeight: '700' },

@@ -144,6 +144,9 @@ function makeStyles(t: AppTheme) {
     optSub: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: 2 },
     scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000066' },
     sheet: {
+      // Nur Rundung + Hintergrund (kein Schatten): ein Schatten auf einer abgerundeten Fläche
+      // zwingt RN/iOS 26 in den abstürzenden Rasterisierungs-Pfad (RCTGetBorderImage/
+      // UIGraphicsImageRenderer). Der abgedunkelte Scrim sorgt für die Abgrenzung.
       backgroundColor: t.c.bgCanvas,
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
@@ -154,10 +157,6 @@ function makeStyles(t: AppTheme) {
       paddingTop: space.sm,
       position: 'absolute',
       right: 0,
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.18,
-      shadowRadius: 20,
     },
     title: {
       color: t.c.textPrimary,
