@@ -102,11 +102,13 @@ function makeStyles(t: AppTheme) {
   const dark = t.mode === 'dark';
   return StyleSheet.create({
     island: {
+      // WICHTIG: KEIN borderWidth hier. Ein Rahmen + Hintergrund + borderRadius zwingt RN
+      // (New Architecture) dazu, die Insel als gefülltes/gestricheltes Bild zu rendern
+      // (RCTGetBorderImage → CGContextFillRect → ColorSync), was auf iOS 26 beim ersten Mount
+      // abstürzt. Reiner borderRadius + backgroundColor nutzt layer.cornerRadius (sicher).
+      // Abgrenzung erfolgt über den Schatten (CALayer-Schatten, separater, sicherer Pfad).
       alignItems: 'center',
       backgroundColor: t.c.bgElevated,
-      borderColor: t.border,
-      // Im Dunkelmodus eine Hairline zur Abgrenzung (Schatten dort kaum sichtbar).
-      borderWidth: dark ? StyleSheet.hairlineWidth : 0,
       borderRadius: 28,
       elevation: 12,
       flexDirection: 'row',
@@ -115,7 +117,7 @@ function makeStyles(t: AppTheme) {
       paddingVertical: PAD,
       shadowColor: '#000000',
       shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: dark ? 0.4 : 0.12,
+      shadowOpacity: dark ? 0.45 : 0.12,
       shadowRadius: 16,
     },
     label: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2, marginTop: 3 },
