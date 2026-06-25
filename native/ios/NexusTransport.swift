@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Exchange-Transport (EWS) mit Autodiscover, TLS, Certificate Pinning und Auth
 /// (Basic + NTLM). Ergebnisse als JSON über die Bridge. NTLM wird vom System über die
@@ -308,6 +309,52 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       "id": attachmentId, "name": a.name, "contentType": a.contentType,
       "sizeBytes": a.size, "base64": a.base64,
     ])
+  }
+
+  /// Lädt einen Anhang, dekodiert ihn NATIV in eine Datei (sandboxed, kein Base64 im JS-Heap
+  /// → kleinerer Speicher-Footprint) und öffnet das System-Teilen-Blatt (H9). So lassen sich
+  /// Anhänge tatsächlich ansehen/speichern/weitergeben, statt nur eine Meldung anzuzeigen.
+  func presentAttachment(accountId: String, attachmentId: String) async throws {
+    let xml = try await post(EwsSoap.getAttachment(id: attachmentId))
+    let a = EwsSoap.parseAttachmentContent(xml)
+    guard let data = Data(base64Encoded: a.base64) else {
+      throw NexusError.transport("Anhang konnte nicht dekodiert werden")
+    }
+    // Frisch geleertes, app-privates Temp-Verzeichnis (iOS verschlüsselt at-rest) — vermeidet
+    // das Anhäufen entschlüsselter Anhänge auf der Platte.
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "nexus-attachments", isDirectory: true)
+    try? FileManager.default.removeItem(at: dir)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let name = a.name.isEmpty ? "Anhang" : a.name
+    let fileURL = dir.appendingPathComponent(Self.sanitizeFilename(name))
+    try data.write(to: fileURL, options: .atomic)
+    await Self.presentShareSheet(fileURL: fileURL)
+  }
+
+  /// Entfernt Pfadtrenner/Steuerzeichen aus einem Anhangsnamen (Schutz vor Pfad-Traversal).
+  private static func sanitizeFilename(_ name: String) -> String {
+    let illegal = CharacterSet(charactersIn: "/\\:\0").union(.controlCharacters)
+    let cleaned = name.components(separatedBy: illegal).joined(separator: "_")
+    return cleaned.isEmpty ? "Anhang" : cleaned
+  }
+
+  /// Präsentiert das UIActivityViewController-Teilen-Blatt für `fileURL` (immer auf dem Main-Thread).
+  @MainActor
+  private static func presentShareSheet(fileURL: URL) {
+    let vc = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.first?.windows.first
+    var top = window?.rootViewController
+    while let presented = top?.presentedViewController { top = presented }
+    guard let root = top else { return }
+    // iPad: Popover verankern, sonst stürzt die Präsentation ab.
+    if let pop = vc.popoverPresentationController {
+      pop.sourceView = root.view
+      pop.sourceRect = CGRect(x: root.view.bounds.midX, y: root.view.bounds.midY, width: 0, height: 0)
+      pop.permittedArrowDirections = []
+    }
+    root.present(vc, animated: true)
   }
 
   func applyOperation(operationJson: String) async throws {

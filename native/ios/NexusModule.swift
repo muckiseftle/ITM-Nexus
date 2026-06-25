@@ -216,4 +216,12 @@ final class NexusModule: NSObject {
       catch { reject("transport_attachment", "\(error)", error) }
     }
   }
+
+  @objc(transportPresentAttachment:attachmentId:resolver:rejecter:)
+  func transportPresentAttachment(_ accountId: String, attachmentId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { try await NexusTransport.shared.presentAttachment(accountId: accountId, attachmentId: attachmentId); resolve(nil) }
+      catch { reject("transport_present_attachment", "\(error)", error) }
+    }
+  }
 }

@@ -85,6 +85,12 @@ export function MessageScreen({
 
   const onDownload = async (a: Attachment): Promise<void> => {
     try {
+      // Live-Modus (H9): Anhang nativ in eine Datei laden und das System-Teilen-Blatt öffnen
+      // (kein Base64 im JS-Heap). Demo-Modus: Anhang abrufen und kurze Meldung anzeigen.
+      if (container.openAttachment !== undefined) {
+        await container.openAttachment(account, a.id);
+        return;
+      }
       const content = await container.transport.getAttachment(account, a.id);
       Alert.alert(
         content.name,

@@ -55,6 +55,8 @@ export interface NexusNativeModule {
 
   // — Anhänge (EWS GetAttachment) — Rückgabe ist JSON-String —
   transportGetAttachment(accountId: string, attachmentId: string): Promise<string>;
+  /** Lädt + dekodiert den Anhang nativ in eine Datei und öffnet das System-Teilen-Blatt (H9). */
+  transportPresentAttachment(accountId: string, attachmentId: string): Promise<void>;
 }
 
 function resolveNative(): NexusNativeModule {

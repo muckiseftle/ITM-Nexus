@@ -20,7 +20,7 @@ import {
   SearchService,
   SyncService,
 } from '@nexus/services';
-import { toFolderId } from '@nexus/domain';
+import { toFolderId, type AccountId } from '@nexus/domain';
 import { NexusNative } from '../native/NexusNative';
 import {
   configurePinning,
@@ -63,6 +63,12 @@ export interface AppContainer {
    * Anmeldeprüfung — Offline-First). Liefert die accountId (E-Mail) oder null. Nur Live-Modus.
    */
   readonly restoreSession?: () => Promise<string | null>;
+  /**
+   * Lädt einen Anhang, dekodiert ihn nativ in eine Datei und öffnet das System-Teilen-Blatt
+   * (kein Base64 im JS-Heap, H9). Nur Live-Modus — im Demo-Modus fällt die UI auf eine Meldung
+   * zurück.
+   */
+  readonly openAttachment?: (accountId: AccountId, attachmentId: string) => Promise<void>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -137,6 +143,8 @@ export async function createContainer(): Promise<AppContainer> {
       await NexusNative.transportScheduleBackgroundSync();
     },
     restoreSession: () => NexusNative.transportRestore(),
+    openAttachment: (accountId, attachmentId) =>
+      NexusNative.transportPresentAttachment(accountId, attachmentId),
   };
 }
 
