@@ -295,14 +295,23 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    accountEmail: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size, fontWeight: '600' },
+    accountEmail: {
+      color: t.c.textPrimary,
+      flex: 1,
+      fontSize: typography.body.size,
+      fontWeight: '600',
+    },
     accountRow: {
       alignItems: 'center',
       flexDirection: 'row',
       justifyContent: 'space-between',
       marginBottom: space.sm,
     },
-    advancedHint: { color: t.c.textSecondary, fontSize: typography.caption.size, marginBottom: space.sm },
+    advancedHint: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginBottom: space.sm,
+    },
     button: {
       alignItems: 'center',
       backgroundColor: t.c.brandPrimary,
@@ -313,7 +322,12 @@ function makeStyles(t: AppTheme) {
     buttonDisabled: { opacity: 0.6 },
     buttonText: { color: t.onBrand, fontSize: typography.body.size, fontWeight: '600' },
     changeLink: { color: t.c.brandPrimary, fontSize: typography.caption.size, fontWeight: '600' },
-    container: { backgroundColor: t.c.bgCanvas, flex: 1, justifyContent: 'center', padding: space.lg },
+    container: {
+      backgroundColor: t.c.bgCanvas,
+      flex: 1,
+      justifyContent: 'center',
+      padding: space.lg,
+    },
     errorBox: {
       backgroundColor: t.c.danger + '14',
       borderColor: t.c.danger,
@@ -325,10 +339,23 @@ function makeStyles(t: AppTheme) {
     },
     errorDetail: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
     errorHint: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
-    errorTechnical: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
+    errorTechnical: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginTop: space.xs,
+    },
     errorTitle: { color: t.c.danger, fontSize: typography.body.size, fontWeight: '700' },
-    errorToggle: { color: t.c.brandPrimary, fontSize: typography.caption.size, marginTop: space.xs },
-    hint: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.md, textAlign: 'center' },
+    errorToggle: {
+      color: t.c.brandPrimary,
+      fontSize: typography.caption.size,
+      marginTop: space.xs,
+    },
+    hint: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginTop: space.md,
+      textAlign: 'center',
+    },
     input: {
       backgroundColor: t.c.bgElevated,
       borderRadius: radius.md,

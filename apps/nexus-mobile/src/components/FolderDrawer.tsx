@@ -84,7 +84,11 @@ export function FolderDrawer({
               return (
                 <Pressable
                   key={f.id}
-                  style={({ pressed }) => [s.frow, active ? s.frowActive : null, pressed ? s.frowPressed : null]}
+                  style={({ pressed }) => [
+                    s.frow,
+                    active ? s.frowActive : null,
+                    pressed ? s.frowPressed : null,
+                  ]}
                   onPress={() => {
                     onSelectFolder(f.id);
                   }}

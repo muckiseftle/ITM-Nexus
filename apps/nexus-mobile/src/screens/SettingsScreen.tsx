@@ -1,5 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { radius, space, typography } from '@nexus/ui-kit';
 import { APP_MODE, PINNING } from '../config';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
@@ -39,7 +48,10 @@ function nextKey<T extends { readonly key: string }>(opts: readonly T[], current
   return opts[(i + 1) % opts.length]?.key ?? current;
 }
 
-function labelOf(opts: readonly { readonly key: string; readonly label: string }[], key: string): string {
+function labelOf(
+  opts: readonly { readonly key: string; readonly label: string }[],
+  key: string,
+): string {
   return opts.find((o) => o.key === key)?.label ?? key;
 }
 
@@ -259,9 +271,26 @@ export function SettingsScreen({
 
       <Text style={s.section}>App</Text>
       <View style={s.card}>
-        <ToggleRow t={t} title="Push (DirectPush)" sub="Neue Mails sofort, ohne Abfrage-Intervall" value={push} onValueChange={setPush} />
-        <ToggleRow t={t} title="Hintergrund-Aktualisierung" sub="Sync auch bei geschlossener App" value={background} onValueChange={setBackground} />
-        <ToggleRow t={t} title="Nur über WLAN synchronisieren" value={wifiOnly} onValueChange={setWifiOnly} />
+        <ToggleRow
+          t={t}
+          title="Push (DirectPush)"
+          sub="Neue Mails sofort, ohne Abfrage-Intervall"
+          value={push}
+          onValueChange={setPush}
+        />
+        <ToggleRow
+          t={t}
+          title="Hintergrund-Aktualisierung"
+          sub="Sync auch bei geschlossener App"
+          value={background}
+          onValueChange={setBackground}
+        />
+        <ToggleRow
+          t={t}
+          title="Nur über WLAN synchronisieren"
+          value={wifiOnly}
+          onValueChange={setWifiOnly}
+        />
       </View>
 
       <Text style={s.section}>Sicherheit</Text>
@@ -272,12 +301,16 @@ export function SettingsScreen({
             <Text style={s.itemTitle}>Zertifikat-Pinning</Text>
             <Text style={s.itemSub}>Nur vertraute Server (fail-closed)</Text>
           </View>
-          <Text style={pinningActive ? s.pillOn : s.pillOff}>{pinningActive ? 'Aktiv' : 'Inaktiv'}</Text>
+          <Text style={pinningActive ? s.pillOn : s.pillOff}>
+            {pinningActive ? 'Aktiv' : 'Inaktiv'}
+          </Text>
         </Row>
         <Row t={t}>
           <View style={s.grow}>
             <Text style={s.itemTitle}>Lokale Verschlüsselung</Text>
-            <Text style={s.itemSub}>{APP_MODE === 'live' ? 'SQLCipher AES-256' : 'Demo (In-Memory)'}</Text>
+            <Text style={s.itemSub}>
+              {APP_MODE === 'live' ? 'SQLCipher AES-256' : 'Demo (In-Memory)'}
+            </Text>
           </View>
           <Text style={APP_MODE === 'live' ? s.pillOn : s.pillOff}>
             {APP_MODE === 'live' ? 'Aktiv' : 'Demo'}
@@ -299,7 +332,13 @@ export function SettingsScreen({
   );
 }
 
-function Row({ t, children }: { readonly t: AppTheme; readonly children: React.ReactNode }): React.JSX.Element {
+function Row({
+  t,
+  children,
+}: {
+  readonly t: AppTheme;
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
   const s = useMemo(() => makeStyles(t), [t]);
   return <View style={s.item}>{children}</View>;
 }
@@ -335,7 +374,12 @@ function ToggleRow({
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    action: { backgroundColor: t.c.bgElevated, borderRadius: radius.sm, flex: 1, padding: space.sm },
+    action: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.sm,
+      flex: 1,
+      padding: space.sm,
+    },
     actionPrimary: { backgroundColor: t.c.brandPrimary },
     actionPrimaryText: { color: t.onBrand, fontWeight: '700', textAlign: 'center' },
     actionText: { color: t.c.textPrimary, fontWeight: '600', textAlign: 'center' },

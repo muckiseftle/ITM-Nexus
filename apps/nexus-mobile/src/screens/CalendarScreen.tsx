@@ -79,7 +79,8 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
   }, [events, query]);
 
   const evOn = useCallback(
-    (d0: number) => filtered.filter((e) => dStart(e.startAt) === d0).sort((a, b) => a.startAt - b.startAt),
+    (d0: number) =>
+      filtered.filter((e) => dStart(e.startAt) === d0).sort((a, b) => a.startAt - b.startAt),
     [filtered],
   );
 
@@ -155,9 +156,17 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
     return (
       <>
         <View style={s.dayNav}>
-          <IconButton glyph={GLYPH.chevL} color={t.c.textPrimary} onPress={() => setSelected((d) => d - DAY)} />
+          <IconButton
+            glyph={GLYPH.chevL}
+            color={t.c.textPrimary}
+            onPress={() => setSelected((d) => d - DAY)}
+          />
           <Text style={s.dayNavTitle}>{longDay(selected)}</Text>
-          <IconButton glyph={GLYPH.chevR} color={t.c.textPrimary} onPress={() => setSelected((d) => d + DAY)} />
+          <IconButton
+            glyph={GLYPH.chevR}
+            color={t.c.textPrimary}
+            onPress={() => setSelected((d) => d + DAY)}
+          />
         </View>
         {allDay.map((e) => (
           <View key={e.id} style={[s.allDay, { backgroundColor: evColor(e) }]}>
@@ -177,7 +186,10 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
                 return (
                   <View
                     key={e.id}
-                    style={[s.block, { top, height, backgroundColor: cc + '1F', borderLeftColor: cc }]}
+                    style={[
+                      s.block,
+                      { top, height, backgroundColor: cc + '1F', borderLeftColor: cc },
+                    ]}
                   >
                     <Text numberOfLines={1} style={[s.blockTitle, { color: cc }]}>
                       {e.subject}
@@ -204,9 +216,13 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
       const isSel = d0 === selected;
       cells.push(
         <Pressable key={d0} style={s.wd} onPress={() => setSelected(d0)}>
-          <Text style={s.wdn}>{new Date(d0).toLocaleDateString('de-DE', { weekday: 'short' })}</Text>
+          <Text style={s.wdn}>
+            {new Date(d0).toLocaleDateString('de-DE', { weekday: 'short' })}
+          </Text>
           <View style={[s.wdd, isToday ? s.wddToday : null, isSel && !isToday ? s.wddSel : null]}>
-            <Text style={[s.wddText, isToday ? s.wddTextToday : null]}>{new Date(d0).getDate()}</Text>
+            <Text style={[s.wddText, isToday ? s.wddTextToday : null]}>
+              {new Date(d0).getDate()}
+            </Text>
           </View>
           <View style={s.dots}>
             {evOn(d0)
@@ -245,8 +261,12 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
         const evs = evOn(d0);
         cells.push(
           <Pressable key={d0} style={s.mcell} onPress={() => setSelected(d0)}>
-            <View style={[s.mnum, isToday ? s.mnumToday : null, isSel && !isToday ? s.mnumSel : null]}>
-              <Text style={[s.mnumText, isToday ? s.mnumTextToday : null, !inMonth ? s.mnumDim : null]}>
+            <View
+              style={[s.mnum, isToday ? s.mnumToday : null, isSel && !isToday ? s.mnumSel : null]}
+            >
+              <Text
+                style={[s.mnumText, isToday ? s.mnumTextToday : null, !inMonth ? s.mnumDim : null]}
+              >
                 {dt.getDate()}
               </Text>
             </View>
@@ -350,37 +370,122 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    allDay: { borderRadius: 6, marginHorizontal: space.md, marginBottom: 4, paddingHorizontal: space.sm, paddingVertical: 5 },
+    allDay: {
+      borderRadius: 6,
+      marginHorizontal: space.md,
+      marginBottom: 4,
+      paddingHorizontal: space.sm,
+      paddingVertical: 5,
+    },
     allDayText: { color: t.onBrand, fontSize: typography.caption.size, fontWeight: '600' },
-    block: { borderLeftWidth: 3, borderRadius: 6, left: 0, overflow: 'hidden', paddingHorizontal: space.xs, paddingVertical: 4, position: 'absolute', right: 4 },
+    block: {
+      borderLeftWidth: 3,
+      borderRadius: 6,
+      left: 0,
+      overflow: 'hidden',
+      paddingHorizontal: space.xs,
+      paddingVertical: 4,
+      position: 'absolute',
+      right: 4,
+    },
     blockMeta: { color: t.c.textSecondary, fontSize: 11 },
     blockTitle: { fontSize: typography.caption.size, fontWeight: '700' },
     blocks: { bottom: 0, left: 52, position: 'absolute', right: 0, top: 0 },
     cdot: { borderRadius: 3, height: 6, width: 6 },
-    chip: { alignItems: 'center', borderRadius: 5, flexDirection: 'row', gap: 3, marginBottom: 2, marginHorizontal: 1, paddingHorizontal: 3, paddingVertical: 1 },
+    chip: {
+      alignItems: 'center',
+      borderRadius: 5,
+      flexDirection: 'row',
+      gap: 3,
+      marginBottom: 2,
+      marginHorizontal: 1,
+      paddingHorizontal: 3,
+      paddingVertical: 1,
+    },
     chipText: { color: t.c.textPrimary, fontSize: 9.5 },
     cmore: { color: t.c.textSecondary, fontSize: 9, paddingLeft: 5 },
     content: { paddingBottom: space.xl },
     d: { borderRadius: 3, height: 5, width: 5 },
-    dayH: { color: t.c.textSecondary, fontSize: typography.caption.size, fontWeight: '700', letterSpacing: 0.3, paddingBottom: space.xxs, paddingHorizontal: space.md, paddingTop: space.md, textTransform: 'uppercase' },
+    dayH: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+      paddingBottom: space.xxs,
+      paddingHorizontal: space.md,
+      paddingTop: space.md,
+      textTransform: 'uppercase',
+    },
     dayHToday: { color: t.c.brandPrimary },
-    dayNav: { alignItems: 'center', flexDirection: 'row', gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs },
+    dayNav: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: space.xs,
+      paddingHorizontal: space.sm,
+      paddingVertical: space.xs,
+    },
     dayNavTitle: { color: t.c.textPrimary, flex: 1, fontWeight: '700', textAlign: 'center' },
     dots: { flexDirection: 'row', gap: 3, justifyContent: 'center', marginTop: 3, minHeight: 6 },
     edot: { borderRadius: 5, height: 10, width: 10 },
-    empty: { color: t.c.textSecondary, fontSize: typography.body.size, padding: space.lg, textAlign: 'center' },
+    empty: {
+      color: t.c.textSecondary,
+      fontSize: typography.body.size,
+      padding: space.lg,
+      textAlign: 'center',
+    },
     evBody: { flex: 1, minWidth: 0 },
     evMeta: { color: t.c.textSecondary, fontSize: typography.caption.size },
     evTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
-    evc: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', gap: 10, marginHorizontal: space.md, marginVertical: 4, paddingHorizontal: space.sm, paddingVertical: 10 },
-    hourLbl: { backgroundColor: t.c.bgCanvas, color: t.c.textSecondary, fontSize: 11, left: 0, paddingRight: 6, position: 'absolute', top: -8 },
-    hourRow: { borderTopColor: t.border, borderTopWidth: StyleSheet.hairlineWidth, position: 'relative' },
+    evc: {
+      alignItems: 'center',
+      borderRadius: 12,
+      flexDirection: 'row',
+      gap: 10,
+      marginHorizontal: space.md,
+      marginVertical: 4,
+      paddingHorizontal: space.sm,
+      paddingVertical: 10,
+    },
+    hourLbl: {
+      backgroundColor: t.c.bgCanvas,
+      color: t.c.textSecondary,
+      fontSize: 11,
+      left: 0,
+      paddingRight: 6,
+      position: 'absolute',
+      top: -8,
+    },
+    hourRow: {
+      borderTopColor: t.border,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      position: 'relative',
+    },
     mcal: { paddingBottom: space.sm, paddingHorizontal: space.md },
-    mcell: { borderRadius: 10, flex: 1, minHeight: 76, overflow: 'hidden', paddingHorizontal: 1, paddingTop: 3 },
+    mcell: {
+      borderRadius: 10,
+      flex: 1,
+      minHeight: 76,
+      overflow: 'hidden',
+      paddingHorizontal: 1,
+      paddingTop: 3,
+    },
     mh: { color: t.c.textSecondary, flex: 1, fontSize: 11, textAlign: 'center' },
     mhWe: { opacity: 0.55 },
-    mhead: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: space.md, paddingVertical: 2 },
-    mnum: { alignSelf: 'center', alignItems: 'center', borderRadius: 13, height: 26, justifyContent: 'center', marginBottom: 3, width: 26 },
+    mhead: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      paddingHorizontal: space.md,
+      paddingVertical: 2,
+    },
+    mnum: {
+      alignSelf: 'center',
+      alignItems: 'center',
+      borderRadius: 13,
+      height: 26,
+      justifyContent: 'center',
+      marginBottom: 3,
+      width: 26,
+    },
     mnumDim: { opacity: 0.38 },
     mnumSel: { backgroundColor: t.c.bgElevated },
     mnumText: { color: t.c.textPrimary, fontSize: typography.caption.size },
@@ -389,21 +494,51 @@ function makeStyles(t: AppTheme) {
     mrow: { flex: 1, flexDirection: 'row', gap: 2 },
     mweek: { alignItems: 'flex-start', flexDirection: 'row' },
     screen: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    seg: { backgroundColor: t.c.bgElevated, borderRadius: radius.sm, flexDirection: 'row', gap: 4, marginBottom: space.xs, marginHorizontal: space.md, padding: 3 },
+    seg: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.sm,
+      flexDirection: 'row',
+      gap: 4,
+      marginBottom: space.xs,
+      marginHorizontal: space.md,
+      padding: 3,
+    },
     segBtn: { borderRadius: 6, flex: 1, paddingVertical: 7 },
     segBtnActive: { backgroundColor: t.mode === 'dark' ? '#2A313B' : '#FFFFFF' },
-    segText: { color: t.c.textSecondary, fontSize: typography.caption.size, fontWeight: '600', textAlign: 'center' },
+    segText: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
     segTextActive: { color: t.c.textPrimary },
     timeline: { marginBottom: space.lg, marginHorizontal: space.md, position: 'relative' },
-    todayBtn: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600', paddingHorizontal: space.xs },
+    todayBtn: {
+      color: t.c.brandPrimary,
+      fontSize: typography.body.size,
+      fontWeight: '600',
+      paddingHorizontal: space.xs,
+    },
     wd: { flex: 1, paddingBottom: 8, paddingTop: 6 },
-    wdd: { alignItems: 'center', alignSelf: 'center', borderRadius: 16, height: 32, justifyContent: 'center', marginTop: 2, width: 32 },
+    wdd: {
+      alignItems: 'center',
+      alignSelf: 'center',
+      borderRadius: 16,
+      height: 32,
+      justifyContent: 'center',
+      marginTop: 2,
+      width: 32,
+    },
     wddSel: { borderColor: t.c.brandPrimary, borderWidth: 2 },
     wddText: { color: t.c.textPrimary, fontWeight: '600' },
     wddTextToday: { color: t.onBrand },
     wddToday: { backgroundColor: t.c.brandPrimary },
     wdn: { color: t.c.textSecondary, fontSize: 11, textAlign: 'center' },
-    weekStrip: { borderBottomColor: t.border, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row' },
+    weekStrip: {
+      borderBottomColor: t.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+    },
     wnum: { color: t.c.textSecondary, fontSize: 10, paddingTop: 8, textAlign: 'center', width: 18 },
   });
 }

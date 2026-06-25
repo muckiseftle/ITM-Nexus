@@ -60,10 +60,46 @@ function CalendarIcon({ size, color }: { readonly size: number; readonly color: 
   const h = size * 0.78;
   return (
     <View style={[styles.box, { width: size, height: size }]}>
-      <View style={{ width: 2, height: size * 0.16, backgroundColor: color, position: 'absolute', top: size * 0.04, left: size * 0.32 }} />
-      <View style={{ width: 2, height: size * 0.16, backgroundColor: color, position: 'absolute', top: size * 0.04, left: size * 0.66 }} />
-      <View style={{ width: w, height: h, borderWidth: 2, borderColor: color, borderRadius: 4, marginTop: size * 0.12 }}>
-        <View style={{ position: 'absolute', top: size * 0.18, left: -2, right: -2, height: 2, backgroundColor: color }} />
+      <View
+        style={{
+          width: 2,
+          height: size * 0.16,
+          backgroundColor: color,
+          position: 'absolute',
+          top: size * 0.04,
+          left: size * 0.32,
+        }}
+      />
+      <View
+        style={{
+          width: 2,
+          height: size * 0.16,
+          backgroundColor: color,
+          position: 'absolute',
+          top: size * 0.04,
+          left: size * 0.66,
+        }}
+      />
+      <View
+        style={{
+          width: w,
+          height: h,
+          borderWidth: 2,
+          borderColor: color,
+          borderRadius: 4,
+          marginTop: size * 0.12,
+        }}
+      >
+        <View
+          style={{
+            position: 'absolute',
+            top: size * 0.18,
+            left: -2,
+            right: -2,
+            height: 2,
+            backgroundColor: color,
+          }}
+        />
       </View>
     </View>
   );
@@ -101,7 +137,13 @@ function ContactsIcon({ size, color }: { readonly size: number; readonly color: 
 
 function MoreIcon({ size, color }: { readonly size: number; readonly color: string }) {
   const d = Math.max(4, size * 0.2);
-  const dot = { width: d, height: d, borderRadius: d / 2, backgroundColor: color, marginHorizontal: d * 0.35 };
+  const dot = {
+    width: d,
+    height: d,
+    borderRadius: d / 2,
+    backgroundColor: color,
+    marginHorizontal: d * 0.35,
+  };
   return (
     <View style={[styles.box, styles.row, { width: size, height: size }]}>
       <View style={dot} />
@@ -124,7 +166,11 @@ export function IconButton({
   readonly size?: number;
 }): React.JSX.Element {
   return (
-    <Pressable hitSlop={6} onPress={onPress} style={({ pressed }) => [styles.iconBtn, pressed ? styles.iconBtnPressed : null]}>
+    <Pressable
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => [styles.iconBtn, pressed ? styles.iconBtnPressed : null]}
+    >
       <View>
         <GlyphText glyph={glyph} color={color} size={size} />
       </View>
@@ -133,7 +179,15 @@ export function IconButton({
 }
 
 // Zuverlässig monochrome Text-Glyphen (kein Emoji-Fallback) für sekundäre Symbole.
-function GlyphText({ glyph, color, size }: { readonly glyph: string; readonly color: string; readonly size: number }) {
+function GlyphText({
+  glyph,
+  color,
+  size,
+}: {
+  readonly glyph: string;
+  readonly color: string;
+  readonly size: number;
+}) {
   return <Text style={{ color, fontSize: size, lineHeight: size + 2 }}>{glyph}</Text>;
 }
 
@@ -149,7 +203,13 @@ export const GLYPH = {
 
 const styles = StyleSheet.create({
   box: { alignItems: 'center', justifyContent: 'center' },
-  iconBtn: { alignItems: 'center', borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
+  iconBtn: {
+    alignItems: 'center',
+    borderRadius: 999,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
   iconBtnPressed: { opacity: 0.5 },
   row: { flexDirection: 'row' },
 });

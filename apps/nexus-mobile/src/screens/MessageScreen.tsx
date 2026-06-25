@@ -86,7 +86,10 @@ export function MessageScreen({
   const onDownload = async (a: Attachment): Promise<void> => {
     try {
       const content = await container.transport.getAttachment(account, a.id);
-      Alert.alert(content.name, `${content.contentType} · ${formatSize(content.sizeBytes)} geladen.`);
+      Alert.alert(
+        content.name,
+        `${content.contentType} · ${formatSize(content.sizeBytes)} geladen.`,
+      );
     } catch {
       Alert.alert('Anhang', 'Konnte nicht geladen werden.');
     }
@@ -129,7 +132,11 @@ export function MessageScreen({
             <Action t={t} label="Antworten" onPress={() => onCompose('reply', message)} primary />
             <Action t={t} label="Allen antw." onPress={() => onCompose('replyAll', message)} />
             <Action t={t} label="Weiterleiten" onPress={() => onCompose('forward', message)} />
-            <Action t={t} label={isUnread(message) ? 'Gelesen' : 'Ungelesen'} onPress={() => void onToggleRead()} />
+            <Action
+              t={t}
+              label={isUnread(message) ? 'Gelesen' : 'Ungelesen'}
+              onPress={() => void onToggleRead()}
+            />
             <Action
               t={t}
               label={hasFlag(message, MessageFlag.Flagged) ? 'Entmarkieren' : 'Markieren'}
@@ -205,7 +212,11 @@ function makeStyles(t: AppTheme) {
       marginBottom: space.xs,
     },
     attachIcon: { fontSize: typography.body.size, marginRight: space.sm },
-    attachMeta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginLeft: space.sm },
+    attachMeta: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginLeft: space.sm,
+    },
     attachName: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
     attachRow: {
       alignItems: 'center',
@@ -218,7 +229,12 @@ function makeStyles(t: AppTheme) {
     attachWrap: { marginTop: space.lg },
     back: { paddingHorizontal: space.md, paddingVertical: space.sm },
     backText: { color: t.c.brandPrimary, fontSize: typography.body.size },
-    body: { color: t.c.textPrimary, fontSize: typography.body.size, lineHeight: 22, marginTop: space.md },
+    body: {
+      color: t.c.textPrimary,
+      fontSize: typography.body.size,
+      lineHeight: 22,
+      marginTop: space.md,
+    },
     categories: { color: t.c.accent, fontSize: typography.caption.size, marginTop: space.xs },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
     content: { padding: space.md },

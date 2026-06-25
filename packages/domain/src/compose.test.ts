@@ -56,7 +56,9 @@ describe('Adress-Formatierung & -Parsing', () => {
   it('formatiert mit und ohne Anzeigenamen', () => {
     expect(formatAddress({ address: 'a@b.de' })).toBe('a@b.de');
     expect(formatAddress({ address: 'a@b.de', displayName: 'Anna' })).toBe('Anna <a@b.de>');
-    expect(formatAddressList([{ address: 'a@b.de' }, { address: 'c@d.de' }])).toBe('a@b.de, c@d.de');
+    expect(formatAddressList([{ address: 'a@b.de' }, { address: 'c@d.de' }])).toBe(
+      'a@b.de, c@d.de',
+    );
   });
 
   it('zerlegt Komma-/Semikolon-Listen inkl. „Name <adresse>"', () => {
@@ -83,8 +85,12 @@ describe('htmlToPlainText / messageBodyToText', () => {
     expect(htmlToPlainText('<p>Hallo</p><br/><b>Welt</b>')).toBe('Hallo\n\nWelt');
   });
   it('nutzt HTML-Reduktion nur bei HTML-Body', () => {
-    expect(messageBodyToText(message({ body: { type: BodyType.Html, content: '<p>Hi</p>' } }))).toBe('Hi');
-    expect(messageBodyToText(message({ body: { type: BodyType.Text, content: 'Plain' } }))).toBe('Plain');
+    expect(
+      messageBodyToText(message({ body: { type: BodyType.Html, content: '<p>Hi</p>' } })),
+    ).toBe('Hi');
+    expect(messageBodyToText(message({ body: { type: BodyType.Text, content: 'Plain' } }))).toBe(
+      'Plain',
+    );
   });
 });
 

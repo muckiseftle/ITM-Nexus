@@ -47,9 +47,7 @@ let composeCounter = 0;
 
 /** Validiert die geparsten Empfänger; liefert ungültige Roh-Adressen zurück. */
 function invalidAddresses(recipients: readonly Recipient[]): string[] {
-  return recipients
-    .filter((r) => !isValidEmail(r.address.address))
-    .map((r) => r.address.address);
+  return recipients.filter((r) => !isValidEmail(r.address.address)).map((r) => r.address.address);
 }
 
 function normalize(recipients: readonly Recipient[]): Recipient[] {
@@ -96,12 +94,20 @@ export function ComposerScreen({
       ...parseRecipients(bcc, 'bcc'),
     ];
     if (recipients.length === 0) {
-      fail('Empfänger fehlt', 'Bitte mindestens eine Empfänger-Adresse angeben.', 'leerer Empfänger');
+      fail(
+        'Empfänger fehlt',
+        'Bitte mindestens eine Empfänger-Adresse angeben.',
+        'leerer Empfänger',
+      );
       return;
     }
     const invalid = invalidAddresses(recipients);
     if (invalid.length > 0) {
-      fail('Ungültige Adresse', `Bitte prüfen: ${invalid.join(', ')}`, `ungültig: ${invalid.join(',')}`);
+      fail(
+        'Ungültige Adresse',
+        `Bitte prüfen: ${invalid.join(', ')}`,
+        `ungültig: ${invalid.join(',')}`,
+      );
       return;
     }
 
@@ -254,7 +260,11 @@ function makeStyles(t: AppTheme) {
       marginTop: space.sm,
       padding: space.md,
     },
-    errorDetail: { color: t.c.textPrimary, fontSize: typography.caption.size, marginTop: space.xxs },
+    errorDetail: {
+      color: t.c.textPrimary,
+      fontSize: typography.caption.size,
+      marginTop: space.xxs,
+    },
     errorTitle: { color: t.c.danger, fontSize: typography.body.size, fontWeight: '700' },
     from: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.md },
     input: {
