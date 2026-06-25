@@ -7,6 +7,10 @@ import { useTheme, type AppTheme } from '../theme/ThemeContext';
 interface Props {
   readonly accountName: string;
   readonly accountEmail: string;
+  /** Abmelden: Zugangsdaten verwerfen, zurück zum Login (lokale Daten bleiben). */
+  readonly onSignOut: () => void;
+  /** Konto entfernen: Krypto-Shredding aller lokalen Daten + zurück zum Login. */
+  readonly onRemoveAccount: () => void;
 }
 
 interface Shared {
@@ -52,9 +56,36 @@ function initials(name: string): string {
  * Konto-Detailseite mit Sync-Zeitraum/-Intervall und Verwaltung freigegebener Postfächer —
  * 1:1 zur Web-Vorschau aufgebaut.
  */
-export function SettingsScreen({ accountName, accountEmail }: Props): React.JSX.Element {
+export function SettingsScreen({
+  accountName,
+  accountEmail,
+  onSignOut,
+  onRemoveAccount,
+}: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+
+  const confirmSignOut = (): void => {
+    Alert.alert(
+      'Abmelden',
+      `${accountEmail} abmelden? Lokale Daten bleiben verschlüsselt gespeichert.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Abmelden', style: 'destructive', onPress: onSignOut },
+      ],
+    );
+  };
+
+  const confirmRemove = (): void => {
+    Alert.alert(
+      'Konto entfernen',
+      'Konto und ALLE lokalen Daten unwiderruflich löschen (Krypto-Shredding)?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Entfernen', style: 'destructive', onPress: onRemoveAccount },
+      ],
+    );
+  };
 
   const [route, setRoute] = useState<'root' | 'account'>('root');
   const [push, setPush] = useState(true);
@@ -184,12 +215,12 @@ export function SettingsScreen({ accountName, accountEmail }: Props): React.JSX.
 
         <View style={s.spacer} />
         <View style={s.card}>
-          <Pressable onPress={() => Alert.alert('Abmelden', 'Demo: abgemeldet.')}>
+          <Pressable onPress={confirmSignOut}>
             <Row t={t}>
               <Text style={s.dangerText}>Abmelden</Text>
             </Row>
           </Pressable>
-          <Pressable onPress={() => Alert.alert('Konto entfernen', 'Demo: Konto entfernt.')}>
+          <Pressable onPress={confirmRemove}>
             <Row t={t}>
               <Text style={s.dangerText}>Konto entfernen</Text>
             </Row>

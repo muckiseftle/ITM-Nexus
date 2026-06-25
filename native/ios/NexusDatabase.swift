@@ -75,21 +75,39 @@ final class NexusDatabase {
       for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     let path = dir.appendingPathComponent("nexus.db").path
 
-    guard sqlite3_open(path, &db) == SQLITE_OK else {
-      throw NexusError.database("DB öffnen fehlgeschlagen")
-    }
-    // SQLCipher-Verschlüsselung aktivieren.
-    let keyBytes = Array(key.utf8)
-    guard nexus_sqlite3_key(db, keyBytes, Int32(keyBytes.count)) == SQLITE_OK else {
-      throw NexusError.database("DB-Schlüssel setzen fehlgeschlagen")
-    }
-    // Smoke-Test, dass der Schlüssel korrekt ist.
-    guard sqlite3_exec(db, "SELECT count(*) FROM sqlite_master;", nil, nil, nil) == SQLITE_OK else {
-      throw NexusError.database("DB-Schlüssel ungültig")
+    // Lässt sich die vorhandene DB mit dem aktuellen Schlüssel NICHT öffnen (z. B. nachdem
+    // „Konto entfernen" den Master-Key per Krypto-Shredding gelöscht hat), wird die nun
+    // unbrauchbare Datei verworfen und frisch angelegt — statt den App-Start zu blockieren.
+    if !openWithKey(path: path, key: key) {
+      for suffix in ["", "-wal", "-shm"] {
+        try? FileManager.default.removeItem(atPath: path + suffix)
+      }
+      db = nil
+      guard openWithKey(path: path, key: key) else {
+        throw NexusError.database("DB konnte nach Reset nicht geöffnet werden")
+      }
     }
 
     try splitStatements(Self.schema).forEach { try exec($0, params: []) }
     isOpen = true
+  }
+
+  /// Öffnet die DB unter `path` mit `key` und prüft den Schlüssel per Smoke-Test.
+  /// Liefert `false` (und schließt das Handle) bei jedem Fehlschlag.
+  private func openWithKey(path: String, key: String) -> Bool {
+    guard sqlite3_open(path, &db) == SQLITE_OK else {
+      if db != nil { sqlite3_close(db); db = nil }
+      return false
+    }
+    let keyBytes = Array(key.utf8)
+    guard nexus_sqlite3_key(db, keyBytes, Int32(keyBytes.count)) == SQLITE_OK,
+      sqlite3_exec(db, "SELECT count(*) FROM sqlite_master;", nil, nil, nil) == SQLITE_OK
+    else {
+      sqlite3_close(db)
+      db = nil
+      return false
+    }
+    return true
   }
 
   /// Fügt/aktualisiert eine Nachricht aus einem Transport-Delta (nativer Hintergrund-Sync).

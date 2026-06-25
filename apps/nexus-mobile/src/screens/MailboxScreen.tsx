@@ -24,6 +24,8 @@ interface Props {
   readonly onOpenMessage: (messageId: MessageId) => void;
   readonly onCompose: () => void;
   readonly onOpenDrawer: () => void;
+  /** Wird bei abgelehnter Anmeldung (401/403) während eines Syncs aufgerufen. */
+  readonly onAuthExpired: () => void;
 }
 
 export function MailboxScreen({
@@ -34,6 +36,7 @@ export function MailboxScreen({
   onOpenMessage,
   onCompose,
   onOpenDrawer,
+  onAuthExpired,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -56,12 +59,18 @@ export function MailboxScreen({
       await container.outbox.drain(account);
       await load();
     } catch (e: unknown) {
-      // Fehler dürfen die App NIE abstürzen lassen — als Banner zeigen, lokale Mails bleiben.
-      setSyncError(classifyError(e).detail);
+      const info = classifyError(e);
+      // Abgelehnte Anmeldung (z. B. geändertes/abgelaufenes Passwort) → sauber ausloggen.
+      if (info.kind === 'auth') {
+        onAuthExpired();
+        return;
+      }
+      // Sonstige Fehler dürfen die App NIE abstürzen lassen — als Banner zeigen.
+      setSyncError(info.detail);
     } finally {
       setRefreshing(false);
     }
-  }, [container, account, folderId, load]);
+  }, [container, account, folderId, load, onAuthExpired]);
 
   useEffect(() => {
     void load();

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import {
   buildComposePrefill,
@@ -13,6 +13,7 @@ import {
   type MessageId,
   type ReplyMode,
 } from '@nexus/domain';
+import { classifyError } from '@nexus/core-transport';
 import { space } from '@nexus/ui-kit';
 import {
   APP_MODE,
@@ -152,7 +153,9 @@ function AppInner(): React.JSX.Element {
 
     const interval = setInterval(() => {
       // Fehler im Hintergrund-Sync NIE als unbehandelte Rejection durchschlagen lassen.
-      container.backgroundSync.runDue(account).catch(() => undefined);
+      container.backgroundSync.runDue(account).catch((e: unknown) => {
+        if (classifyError(e).kind === 'auth') authExpiredRef.current();
+      });
     }, SYNC_INTERVALS.messages);
 
     void container.scheduleBackgroundSync?.();
@@ -186,6 +189,44 @@ function AppInner(): React.JSX.Element {
     setTab('mail');
     setMailRoute({ name: 'message', messageId });
   };
+
+  // Konto-Lebenszyklus: UI auf den Login-Zustand zurücksetzen.
+  const resetToLogin = useCallback((): void => {
+    setAccount(null);
+    setAccountEmail(DEMO_EMAIL);
+    setTab('mail');
+    setMailRoute({ name: 'list' });
+    setDrawerOpen(false);
+    setFolders([]);
+    setCurrentFolder(toFolderId(DEMO_INBOX_ID));
+  }, []);
+
+  // Abmelden: Zugangsdaten verwerfen (kein Auto-Restore mehr), lokale Daten bleiben.
+  const signOut = useCallback((): void => {
+    const c = container;
+    if (c !== null && account !== null) {
+      void c.setup.forget(accountEmail).catch(() => undefined);
+    }
+    resetToLogin();
+  }, [container, account, accountEmail, resetToLogin]);
+
+  // Konto entfernen: Krypto-Shredding ALLER lokalen Daten (DB-Key + Secrets) + Login.
+  const removeAccount = useCallback((): void => {
+    const c = container;
+    if (c !== null) {
+      void c.secureStore.wipe().catch(() => undefined);
+    }
+    resetToLogin();
+  }, [container, resetToLogin]);
+
+  // Abgelaufene/abgelehnte Anmeldung (401) → automatisch abmelden, zurück zum Login.
+  const handleAuthExpired = useCallback((): void => {
+    signOut();
+  }, [signOut]);
+
+  // Ref, damit der Hintergrund-Sync-Effekt nicht bei jeder Handler-Neubildung neu startet.
+  const authExpiredRef = useRef(handleAuthExpired);
+  authExpiredRef.current = handleAuthExpired;
 
   if (error !== null) {
     return (
@@ -259,6 +300,7 @@ function AppInner(): React.JSX.Element {
               folderId={currentFolder}
               folderTitle={folderName}
               onOpenMessage={openMessage}
+              onAuthExpired={handleAuthExpired}
               onOpenDrawer={() => {
                 void container.folders.listFolders(account).then(setFolders);
                 setDrawerOpen(true);
@@ -273,7 +315,12 @@ function AppInner(): React.JSX.Element {
         ) : tab === 'contacts' ? (
           <ContactsScreen container={container} account={account} />
         ) : (
-          <SettingsScreen accountName={accountName} accountEmail={accountEmail} />
+          <SettingsScreen
+            accountName={accountName}
+            accountEmail={accountEmail}
+            onSignOut={signOut}
+            onRemoveAccount={removeAccount}
+          />
         )}
       </View>
 
