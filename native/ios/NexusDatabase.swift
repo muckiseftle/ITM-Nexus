@@ -27,13 +27,17 @@ final class NexusDatabase {
 
   private static let schema = """
   CREATE TABLE IF NOT EXISTS messages (
-    id          TEXT PRIMARY KEY,
-    account_id  TEXT NOT NULL,
-    folder_id   TEXT NOT NULL,
-    received_at INTEGER NOT NULL,
-    subject     TEXT NOT NULL,
-    preview     TEXT NOT NULL,
-    payload     TEXT NOT NULL
+    id           TEXT PRIMARY KEY,
+    account_id   TEXT NOT NULL,
+    folder_id    TEXT NOT NULL,
+    received_at  INTEGER NOT NULL,
+    subject      TEXT NOT NULL,
+    preview      TEXT NOT NULL,
+    from_name    TEXT,
+    from_address TEXT,
+    is_read      INTEGER NOT NULL DEFAULT 0,
+    flagged      INTEGER NOT NULL DEFAULT 0,
+    payload      TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_messages_folder
     ON messages(account_id, folder_id, received_at DESC);
@@ -106,6 +110,12 @@ final class NexusDatabase {
     }
 
     try splitStatements(Self.schema).forEach { try _exec($0, params: []) }
+    // Schlanke Listen-Spalten (H7) additiv nachrüsten — ältere DBs haben die `messages`-Tabelle
+    // ohne diese Spalten. SQLite kennt kein „ADD COLUMN IF NOT EXISTS", daher `try?`: ein
+    // „duplicate column"-Fehler bei bereits vorhandener Spalte wird bewusst ignoriert.
+    for col in ["from_name TEXT", "from_address TEXT", "is_read INTEGER NOT NULL DEFAULT 0", "flagged INTEGER NOT NULL DEFAULT 0"] {
+      try? _exec("ALTER TABLE messages ADD COLUMN \(col)", params: [])
+    }
     // FTS5-Index per Trigger pflegen (external-content) + bestehende Zeilen einmalig einlesen.
     try Self.ftsMaintenance.forEach { try _exec($0, params: []) }
     isOpen = true
@@ -139,6 +149,14 @@ final class NexusDatabase {
     let received = (msg["receivedAt"] as? NSNumber)?.int64Value ?? 0
     let subject = msg["subject"] as? String ?? ""
     let preview = msg["preview"] as? String ?? ""
+    // Schlanke Listen-Spalten (H7): Absender + Lese-/Flag-Status aus dem Delta ableiten,
+    // damit `listFolder` ohne JSON-Parsing der vollen Payload auskommt.
+    let from = msg["from"] as? [String: Any]
+    let fromName = from?["displayName"] as? String
+    let fromAddress = from?["address"] as? String
+    let flags = (msg["flags"] as? [String]) ?? []
+    let isRead = flags.contains("read") ? 1 : 0
+    let flagged = flags.contains("flagged") ? 1 : 0
     // JSONSerialization kann eine NSException werfen (NaN/ungültiger Typ) — abfangen.
     var payloadData = Data()
     _ = NexusExceptionGuard.run {
@@ -148,13 +166,20 @@ final class NexusDatabase {
     try queue.sync {
       try _exec(
         """
-        INSERT INTO messages (id, account_id, folder_id, received_at, subject, preview, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages
+          (id, account_id, folder_id, received_at, subject, preview,
+           from_name, from_address, is_read, flagged, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           folder_id = excluded.folder_id, received_at = excluded.received_at,
-          subject = excluded.subject, preview = excluded.preview, payload = excluded.payload
+          subject = excluded.subject, preview = excluded.preview,
+          from_name = excluded.from_name, from_address = excluded.from_address,
+          is_read = excluded.is_read, flagged = excluded.flagged, payload = excluded.payload
         """,
-        params: [id, account, folder, received, subject, preview, payload])
+        params: [
+          id, account, folder, received, subject, preview,
+          fromName, fromAddress, isRead, flagged, payload,
+        ])
     }
   }
 
@@ -162,6 +187,34 @@ final class NexusDatabase {
   @discardableResult
   func exec(_ sql: String, params: [Any?]) throws -> Int {
     try queue.sync { try _exec(sql, params: params) }
+  }
+
+  /// Führt mehrere Statements in EINER Transaktion und EINEM `queue.sync` aus (H8). `json` ist
+  /// ein JSON-Array aus `{ "sql": "...", "params": [...] }`. Spart N fsyncs und N Bridge-Übergänge
+  /// beim Massen-Upsert. Bei einem Fehler wird die gesamte Transaktion zurückgerollt (atomar).
+  func execBatch(json: String) throws {
+    var parsed: Any?
+    let ex = NexusExceptionGuard.run {
+      parsed = try? JSONSerialization.jsonObject(with: Data(json.utf8))
+    }
+    if ex != nil { throw NexusError.database("execBatch: JSON ungültig") }
+    guard let statements = parsed as? [[String: Any]] else {
+      throw NexusError.database("execBatch: erwarte Array aus {sql, params}")
+    }
+    try queue.sync {
+      try _exec("BEGIN IMMEDIATE", params: [])
+      do {
+        for s in statements {
+          guard let sql = s["sql"] as? String else { continue }
+          let params = (s["params"] as? [Any?]) ?? []
+          try _exec(sql, params: params)
+        }
+        try _exec("COMMIT", params: [])
+      } catch {
+        try? _exec("ROLLBACK", params: [])
+        throw error
+      }
+    }
   }
 
   @discardableResult

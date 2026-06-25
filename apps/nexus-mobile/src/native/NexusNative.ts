@@ -23,6 +23,8 @@ export interface NexusNativeModule {
     sql: string,
     params: readonly (string | number | null)[],
   ): Promise<readonly Record<string, string | number | null>[]>;
+  /** Mehrere Statements atomar in EINER Transaktion (BEGIN/…/COMMIT) — Massen-Upsert (H8). */
+  dbExecBatch(stmtsJson: string): Promise<void>;
 
   // — Exchange-Transport (EWS/EAS, TLS+Pinning) — Rückgaben sind JSON-Strings —
   transportDiscover(email: string, credentialsJson: string): Promise<string>;

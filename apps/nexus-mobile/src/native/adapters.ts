@@ -6,6 +6,7 @@ import type {
   FolderId,
   MailFolder,
   MailMessage,
+  MessageFlag,
   MessageId,
   OutgoingMessage,
 } from '@nexus/domain';
@@ -70,28 +71,48 @@ interface MessageRow {
  */
 export class SqlMailStore implements MailStore {
   async upsertMessages(messages: readonly MailMessage[]): Promise<void> {
-    for (const m of messages) {
-      await NexusNative.dbExec(
-        `INSERT INTO messages (id, account_id, folder_id, received_at, subject, preview, payload)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           folder_id = excluded.folder_id,
-           received_at = excluded.received_at,
-           subject = excluded.subject,
-           preview = excluded.preview,
-           payload = excluded.payload`,
-        [m.id, m.accountId, m.folderId, m.receivedAt, m.subject, m.preview, JSON.stringify(m)],
-      );
-    }
+    if (messages.length === 0) return;
+    // H7: schlanke Listen-Spalten (from_*, is_read, flagged) mitschreiben, damit `listFolder`
+    // ohne JSON-Parsing der Payload auskommt. H8: alle Upserts atomar in EINER Transaktion.
+    const statements = messages.map((m) => ({
+      sql: `INSERT INTO messages
+              (id, account_id, folder_id, received_at, subject, preview,
+               from_name, from_address, is_read, flagged, payload)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              folder_id = excluded.folder_id,
+              received_at = excluded.received_at,
+              subject = excluded.subject,
+              preview = excluded.preview,
+              from_name = excluded.from_name,
+              from_address = excluded.from_address,
+              is_read = excluded.is_read,
+              flagged = excluded.flagged,
+              payload = excluded.payload`,
+      params: [
+        m.id,
+        m.accountId,
+        m.folderId,
+        m.receivedAt,
+        m.subject,
+        m.preview,
+        m.from.displayName ?? null,
+        m.from.address,
+        m.flags.includes('read') ? 1 : 0,
+        m.flags.includes('flagged') ? 1 : 0,
+        JSON.stringify(m),
+      ] as (string | number | null)[],
+    }));
+    await NexusNative.dbExecBatch(JSON.stringify(statements));
   }
 
   async deleteMessages(accountId: AccountId, messageIds: readonly string[]): Promise<void> {
-    for (const id of messageIds) {
-      await NexusNative.dbExec('DELETE FROM messages WHERE account_id = ? AND id = ?', [
-        accountId,
-        id,
-      ]);
-    }
+    if (messageIds.length === 0) return;
+    const statements = messageIds.map((id) => ({
+      sql: 'DELETE FROM messages WHERE account_id = ? AND id = ?',
+      params: [accountId, id] as (string | number | null)[],
+    }));
+    await NexusNative.dbExecBatch(JSON.stringify(statements));
   }
 
   async getMessage(accountId: AccountId, messageId: MessageId): Promise<MailMessage | undefined> {
@@ -109,13 +130,42 @@ export class SqlMailStore implements MailStore {
     limit: number,
     offset: number,
   ): Promise<readonly MailMessage[]> {
+    // H7: NUR die für die Listenzeile nötigen Spalten lesen (kein JSON.parse der vollen Payload
+    // mit Body/Anhängen/Empfängern). Die Liste braucht Absender, Betreff, Vorschau, Lese-/Flag-
+    // Status. Beim Öffnen lädt `getMessage` die vollständige Nachricht aus `payload` nach.
     const rows = (await NexusNative.dbQuery(
-      `SELECT payload FROM messages
+      `SELECT id, account_id, folder_id, received_at, subject, preview,
+              from_name, from_address, is_read, flagged
+       FROM messages
        WHERE account_id = ? AND folder_id = ?
        ORDER BY received_at DESC LIMIT ? OFFSET ?`,
       [accountId, folderId, limit, offset],
-    )) as readonly MessageRow[];
-    return rows.map((r) => JSON.parse(r.payload) as MailMessage);
+    )) as readonly Record<string, string | number | null>[];
+    return rows.map((r) => {
+      const fromName =
+        typeof r.from_name === 'string' && r.from_name.length > 0 ? r.from_name : undefined;
+      const flags: MessageFlag[] = [];
+      if (r.is_read) flags.push('read');
+      if (r.flagged) flags.push('flagged');
+      return {
+        id: String(r.id) as MessageId,
+        accountId: String(r.account_id) as AccountId,
+        folderId: String(r.folder_id) as FolderId,
+        subject: typeof r.subject === 'string' ? r.subject : '',
+        from: {
+          address: typeof r.from_address === 'string' ? r.from_address : '',
+          ...(fromName !== undefined ? { displayName: fromName } : {}),
+        },
+        recipients: [],
+        receivedAt: Number(r.received_at),
+        importance: 'normal',
+        flags,
+        categories: [],
+        hasAttachments: false,
+        attachments: [],
+        preview: typeof r.preview === 'string' ? r.preview : '',
+      } satisfies MailMessage;
+    });
   }
 
   async searchLocal(accountId: AccountId, query: string): Promise<readonly SearchHit[]> {

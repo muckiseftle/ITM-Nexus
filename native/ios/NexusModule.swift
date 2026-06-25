@@ -77,6 +77,14 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(dbExecBatch:resolver:rejecter:)
+  func dbExecBatch(_ stmtsJson: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    guarded("db_exec_batch", reject) {
+      do { try NexusDatabase.shared.execBatch(json: stmtsJson); resolve(nil) }
+      catch { reject("db_exec_batch", "\(error)", error) }
+    }
+  }
+
   // MARK: Transport (async → Promise)
 
   @objc(transportDiscover:credentialsJson:resolver:rejecter:)
