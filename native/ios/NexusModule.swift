@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import React
 
 /// React-Native-Bridge des nativen NEXUS-Kernmoduls. Exportiert Secure-Storage, die
@@ -230,6 +231,46 @@ final class NexusModule: NSObject {
     Task {
       do { try await NexusTransport.shared.presentAttachment(accountId: accountId, attachmentId: attachmentId); resolve(nil) }
       catch { reject("transport_present_attachment", "\(error)", error) }
+    }
+  }
+
+  // MARK: App-Sperre (Biometrie / Face ID / Touch ID)
+
+  /// Liefert, ob Geräte-Biometrie verfügbar ist und welcher Typ (faceID/touchID/none).
+  @objc(biometricAvailable:rejecter:)
+  func biometricAvailable(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    guarded("biometric_available", reject) {
+      let context = LAContext()
+      var error: NSError?
+      let canBio = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+      let type: String
+      switch context.biometryType {
+      case .faceID: type = "faceID"
+      case .touchID: type = "touchID"
+      default: type = "none"
+      }
+      resolve(["available": canBio, "type": canBio ? type : "none"])
+    }
+  }
+
+  /// Fordert eine biometrische Entsperrung an (mit Geräte-Code als Fallback). Resolved `true`
+  /// bei Erfolg, rejectet bei Abbruch/Fehlschlag/fehlender Hardware.
+  @objc(biometricAuthenticate:resolver:rejecter:)
+  func biometricAuthenticate(_ reason: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    let context = LAContext()
+    context.localizedFallbackTitle = "Code eingeben"
+    var error: NSError?
+    // deviceOwnerAuthentication = Biometrie ODER Geräte-Code (robuster als nur Biometrie).
+    guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+      reject("biometric_unavailable", error?.localizedDescription ?? "Sperre nicht verfügbar", error)
+      return
+    }
+    context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, evalError in
+      if success {
+        resolve(true)
+      } else {
+        reject("biometric_failed", evalError?.localizedDescription ?? "Authentifizierung fehlgeschlagen", evalError)
+      }
     }
   }
 }

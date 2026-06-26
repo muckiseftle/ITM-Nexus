@@ -10,6 +10,8 @@ export interface AppSettings {
   readonly syncInterval: string;
   /** Schlüssel aus {@link WINDOW_OPTS}; wie weit zurück Mails geladen werden (Anzeige-/Sync-Wunsch). */
   readonly syncWindow: string;
+  /** App-Sperre per Biometrie/Code beim Start und nach Rückkehr aus dem Hintergrund. */
+  readonly appLock: boolean;
 }
 
 export const INTERVAL_OPTS = [
@@ -28,7 +30,11 @@ export const WINDOW_OPTS = [
   { key: 'all', label: 'Alle Nachrichten' },
 ] as const;
 
-export const DEFAULT_SETTINGS: AppSettings = { syncInterval: '1m', syncWindow: '1m' };
+export const DEFAULT_SETTINGS: AppSettings = {
+  syncInterval: '1m',
+  syncWindow: '1m',
+  appLock: false,
+};
 
 const SETTINGS_KEY = 'nexus:settings';
 
@@ -68,6 +74,7 @@ export async function loadSettings(secureStore: SecureStore): Promise<AppSetting
           : DEFAULT_SETTINGS.syncInterval,
       syncWindow:
         typeof parsed.syncWindow === 'string' ? parsed.syncWindow : DEFAULT_SETTINGS.syncWindow,
+      appLock: typeof parsed.appLock === 'boolean' ? parsed.appLock : DEFAULT_SETTINGS.appLock,
     };
   } catch {
     return DEFAULT_SETTINGS;

@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   buildComposePrefill,
   createMailAddress,
@@ -18,6 +26,7 @@ import { space } from '@nexus/ui-kit';
 import { APP_MODE, DEMO_ACCOUNT_ID, DEMO_INBOX_ID, PUSH_TIMEOUT_MS } from './config';
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
+import { NexusNative } from './native/NexusNative';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -28,6 +37,7 @@ import {
 import { ThemeProvider, useTheme, type AppTheme } from './theme/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { type IconName } from './components/Icon';
+import { LockScreen } from './components/LockScreen';
 import { TabBar } from './components/TabBar';
 import { FolderDrawer } from './components/FolderDrawer';
 import { LoginScreen } from './screens/LoginScreen';
@@ -121,6 +131,8 @@ function AppInner(): React.JSX.Element {
   // Wird nach jedem erfolgreichen Hintergrund-Sync erhöht → Screens laden lokal neu.
   const [syncTick, setSyncTick] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  // App-Sperre (Biometrie): aktiv, solange nicht entsperrt. Nur Live (natives Modul vorhanden).
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
@@ -128,7 +140,10 @@ function AppInner(): React.JSX.Element {
       .then(async (c) => {
         setContainer(c);
         // Persistente Einstellungen laden (Sync-Intervall steuert den Vordergrund-Sync).
-        setSettings(await loadSettings(c.secureStore));
+        const loaded = await loadSettings(c.secureStore);
+        setSettings(loaded);
+        // App-Sperre beim Start erzwingen (nur Live — Biometrie braucht das native Modul).
+        if (APP_MODE === 'live' && loaded.appLock) setLocked(true);
         if (APP_MODE === 'demo') {
           setAccount(toAccountId(DEMO_ACCOUNT_ID));
           setRestoring(false);
@@ -225,6 +240,19 @@ function AppInner(): React.JSX.Element {
     };
   }, [container, account, settings.syncInterval]);
 
+  // App-Sperre nach echter Rückkehr aus dem Hintergrund erneut erzwingen (nur Live).
+  const appLockRef = useRef(settings.appLock);
+  appLockRef.current = settings.appLock;
+  useEffect(() => {
+    if (APP_MODE !== 'live') return;
+    let prev = AppState.currentState;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (prev === 'background' && next === 'active' && appLockRef.current) setLocked(true);
+      prev = next;
+    });
+    return () => sub.remove();
+  }, []);
+
   // Einstellungen ändern → sofort wirksam (State) und persistieren (SecureStore).
   const updateSettings = useCallback(
     (next: AppSettings) => {
@@ -232,6 +260,22 @@ function AppInner(): React.JSX.Element {
       if (container !== null) void saveSettings(container.secureStore, next);
     },
     [container],
+  );
+
+  // Bestätigt die App-Sperre beim Aktivieren per Biometrie/Code (nur Live). true = bestätigt.
+  const verifyAppLock = useMemo(
+    () =>
+      APP_MODE === 'live'
+        ? async (): Promise<boolean> => {
+            try {
+              await NexusNative.biometricAuthenticate('App-Sperre aktivieren');
+              return true;
+            } catch {
+              return false;
+            }
+          }
+        : undefined,
+    [],
   );
 
   // Passwort neu setzen (nach Server-seitiger Änderung): verifizieren + im Keychain aktualisieren.
@@ -306,6 +350,19 @@ function AppInner(): React.JSX.Element {
     return (
       <SafeAreaView style={s.centered}>
         <ActivityIndicator color={t.c.brandPrimary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (locked) {
+    return (
+      <SafeAreaView style={s.root}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={t.mode === 'dark' ? 'light-content' : 'dark-content'}
+        />
+        <LockScreen onUnlock={() => setLocked(false)} />
       </SafeAreaView>
     );
   }
@@ -398,6 +455,7 @@ function AppInner(): React.JSX.Element {
             onSignOut={signOut}
             onRemoveAccount={removeAccount}
             {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
+            {...(verifyAppLock !== undefined ? { onVerifyAppLock: verifyAppLock } : {})}
           />
         )}
       </View>

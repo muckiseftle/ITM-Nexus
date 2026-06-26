@@ -28,6 +28,8 @@ interface Props {
   readonly onRemoveAccount: () => void;
   /** Passwort neu setzen (verifiziert + persistiert). Nur Live-Modus → sonst Zeile ausgeblendet. */
   readonly onChangePassword?: (newPassword: string) => Promise<void>;
+  /** Bestätigt die App-Sperre beim Aktivieren per Biometrie. true = bestätigt. Nur Live. */
+  readonly onVerifyAppLock?: () => Promise<boolean>;
 }
 
 interface Shared {
@@ -59,9 +61,22 @@ export function SettingsScreen({
   onSignOut,
   onRemoveAccount,
   onChangePassword,
+  onVerifyAppLock,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+
+  // App-Sperre umschalten: beim Aktivieren erst per Biometrie bestätigen (nur Live).
+  const toggleAppLock = async (value: boolean): Promise<void> => {
+    if (value && onVerifyAppLock !== undefined) {
+      const ok = await onVerifyAppLock();
+      if (!ok) {
+        Alert.alert('App-Sperre', 'Aktivierung abgebrochen oder nicht verfügbar.');
+        return;
+      }
+    }
+    onChangeSettings({ ...settings, appLock: value });
+  };
 
   const confirmSignOut = (): void => {
     Alert.alert(
@@ -89,7 +104,6 @@ export function SettingsScreen({
   const [push, setPush] = useState(true);
   const [background, setBackground] = useState(true);
   const [wifiOnly, setWifiOnly] = useState(false);
-  const [appLock, setAppLock] = useState(true);
   const [sheet, setSheet] = useState<Sheet>('none');
   const [pw, setPw] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
@@ -365,7 +379,13 @@ export function SettingsScreen({
 
       <Text style={s.section}>Sicherheit</Text>
       <View style={s.card}>
-        <ToggleRow t={t} title="App-Sperre (Face ID)" value={appLock} onValueChange={setAppLock} />
+        <ToggleRow
+          t={t}
+          title="App-Sperre (Face ID / Code)"
+          sub="Beim Start & nach Hintergrund entsperren"
+          value={settings.appLock}
+          onValueChange={(v) => void toggleAppLock(v)}
+        />
         <Row t={t}>
           <View style={s.grow}>
             <Text style={s.itemTitle}>Zertifikat-Pinning</Text>

@@ -59,6 +59,12 @@ export interface NexusNativeModule {
   transportGetAttachment(accountId: string, attachmentId: string): Promise<string>;
   /** Lädt + dekodiert den Anhang nativ in eine Datei und öffnet das System-Teilen-Blatt (H9). */
   transportPresentAttachment(accountId: string, attachmentId: string): Promise<void>;
+
+  // — App-Sperre (Biometrie / Face ID / Touch ID) —
+  /** Verfügbarkeit + Typ der Geräte-Biometrie. */
+  biometricAvailable(): Promise<{ readonly available: boolean; readonly type: string }>;
+  /** Fordert Entsperrung an (Biometrie + Code-Fallback). Resolved true, rejectet bei Fehlschlag. */
+  biometricAuthenticate(reason: string): Promise<boolean>;
 }
 
 function resolveNative(): NexusNativeModule {
