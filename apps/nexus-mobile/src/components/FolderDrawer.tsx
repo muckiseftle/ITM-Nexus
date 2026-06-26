@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FolderType, type FolderId, type MailFolder } from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
@@ -53,21 +53,23 @@ export function FolderDrawer({
       <View style={s.overlay}>
         <Pressable style={s.scrim} onPress={onClose} />
         <View style={s.panel}>
-          <ScrollView contentContainerStyle={s.panelContent}>
-            <View style={s.acct}>
-              <View style={s.ava}>
-                <Text style={s.avaText}>{initials(accountName)}</Text>
-              </View>
-              <View style={s.acctBody}>
-                <Text style={s.acctName} numberOfLines={1}>
-                  {accountName}
-                </Text>
-                <Text style={s.acctMail} numberOfLines={1}>
-                  {accountEmail}
-                </Text>
-              </View>
+          {/* Konto-Kopf in einer SafeAreaView: Markenfarbe füllt bis zur Oberkante, Avatar/Name
+              sitzen UNTER der Dynamic Island / Statusleiste (kein react-native-safe-area-context
+              nötig — die eingebaute SafeAreaView liefert den Top-Inset auch innerhalb des Modals). */}
+          <SafeAreaView style={s.acct}>
+            <View style={s.ava}>
+              <Text style={s.avaText}>{initials(accountName)}</Text>
             </View>
-
+            <View style={s.acctBody}>
+              <Text style={s.acctName} numberOfLines={1}>
+                {accountName}
+              </Text>
+              <Text style={s.acctMail} numberOfLines={1}>
+                {accountEmail}
+              </Text>
+            </View>
+          </SafeAreaView>
+          <ScrollView contentContainerStyle={s.panelContent}>
             <Text style={s.section}>Postfächer</Text>
             <View style={s.mbx}>
               <Text style={s.mbxName} numberOfLines={1}>

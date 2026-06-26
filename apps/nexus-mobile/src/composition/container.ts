@@ -69,6 +69,11 @@ export interface AppContainer {
    * zurück.
    */
   readonly openAttachment?: (accountId: AccountId, attachmentId: string) => Promise<void>;
+  /**
+   * Leert den lokalen Daten-Cache (verschlüsselte DB) und baut ihn leer neu auf. Zugangsdaten
+   * und DB-Schlüssel bleiben erhalten — der Sync füllt die Daten danach erneut. Nur Live-Modus.
+   */
+  readonly clearCache?: () => Promise<void>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -145,6 +150,10 @@ export async function createContainer(): Promise<AppContainer> {
     restoreSession: () => NexusNative.transportRestore(),
     openAttachment: (accountId, attachmentId) =>
       NexusNative.transportPresentAttachment(accountId, attachmentId),
+    clearCache: async () => {
+      await NexusNative.dbReset();
+      await NexusNative.dbInit();
+    },
   };
 }
 

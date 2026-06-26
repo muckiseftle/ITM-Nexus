@@ -96,19 +96,33 @@ final class NexusDatabase {
       for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     let path = dir.appendingPathComponent("nexus.db").path
 
-    // Lässt sich die vorhandene DB mit dem aktuellen Schlüssel NICHT öffnen (z. B. nachdem
-    // „Konto entfernen" den Master-Key per Krypto-Shredding gelöscht hat), wird die nun
-    // unbrauchbare Datei verworfen und frisch angelegt — statt den App-Start zu blockieren.
-    if !openWithKey(path: path, key: key) {
-      for suffix in ["", "-wal", "-shm", "-journal"] {
-        try? FileManager.default.removeItem(atPath: path + suffix)
-      }
-      db = nil
+    // Selbstheilung beim Start: Lässt sich die vorhandene DB nicht öffnen ODER ist sie öffenbar,
+    // aber inhaltlich beschädigt (Schema/FTS-Aufbau wirft — z. B. nach einem früheren Daten-Race
+    // mit zerstörten Seiten), wird die Datei EINMAL verworfen und komplett frisch aufgebaut.
+    // Eine leere, funktionierende DB ist immer besser als ein Dauer-Absturz beim App-Start.
+    do {
+      try openAndBuildSchema(path: path, key: key)
+    } catch {
+      discardDatabaseFiles(at: path)
       guard openWithKey(path: path, key: key) else {
         throw NexusError.database("DB konnte nach Reset nicht geöffnet werden")
       }
+      try buildSchema()
     }
+    isOpen = true
+  }
 
+  /// Öffnet die DB unter `path` und legt Schema, additive Spalten und FTS-Pflege an. Wirft bei
+  /// jedem Fehler (Öffnen ODER Aufbau), damit `_initialize` selbstheilend neu aufbauen kann.
+  private func openAndBuildSchema(path: String, key: String) throws {
+    guard openWithKey(path: path, key: key) else {
+      throw NexusError.database("DB konnte nicht geöffnet werden")
+    }
+    try buildSchema()
+  }
+
+  /// Legt Schema + additive H7-Spalten + FTS5-Pflege auf der bereits geöffneten DB an.
+  private func buildSchema() throws {
     try splitStatements(Self.schema).forEach { try _exec($0, params: []) }
     // Schlanke Listen-Spalten (H7) additiv nachrüsten — ältere DBs haben die `messages`-Tabelle
     // ohne diese Spalten. SQLite kennt kein „ADD COLUMN IF NOT EXISTS", daher `try?`: ein
@@ -118,7 +132,29 @@ final class NexusDatabase {
     }
     // FTS5-Index per Trigger pflegen (external-content) + bestehende Zeilen einmalig einlesen.
     try Self.ftsMaintenance.forEach { try _exec($0, params: []) }
-    isOpen = true
+  }
+
+  /// Schließt das Handle und entfernt die DB-Datei samt WAL/SHM/Journal (Selbstheilung/Reset).
+  private func discardDatabaseFiles(at path: String) {
+    if db != nil {
+      sqlite3_close(db)
+      db = nil
+    }
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+      try? FileManager.default.removeItem(atPath: path + suffix)
+    }
+  }
+
+  /// Vollständiger Daten-Reset (Notfall/„Daten zurücksetzen"): schließt die DB und löscht die
+  /// Datei. Beim nächsten `initialize()` wird leer neu aufgebaut. Thread-sicher über die Queue.
+  func reset() throws {
+    try queue.sync {
+      let dir = try FileManager.default.url(
+        for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+      let path = dir.appendingPathComponent("nexus.db").path
+      discardDatabaseFiles(at: path)
+      isOpen = false
+    }
   }
 
   /// Öffnet die DB unter `path` mit `key` und prüft den Schlüssel per Smoke-Test.

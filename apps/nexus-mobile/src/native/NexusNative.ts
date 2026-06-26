@@ -25,6 +25,8 @@ export interface NexusNativeModule {
   ): Promise<readonly Record<string, string | number | null>[]>;
   /** Mehrere Statements atomar in EINER Transaktion (BEGIN/…/COMMIT) — Massen-Upsert (H8). */
   dbExecBatch(stmtsJson: string): Promise<void>;
+  /** Leert die lokale DB (Schlüssel/Zugangsdaten bleiben) — „Lokalen Cache leeren". */
+  dbReset(): Promise<void>;
 
   // — Exchange-Transport (EWS/EAS, TLS+Pinning) — Rückgaben sind JSON-Strings —
   transportDiscover(email: string, credentialsJson: string): Promise<string>;

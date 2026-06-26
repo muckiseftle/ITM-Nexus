@@ -30,6 +30,8 @@ interface Props {
   readonly onChangePassword?: (newPassword: string) => Promise<void>;
   /** Bestätigt die App-Sperre beim Aktivieren per Biometrie. true = bestätigt. Nur Live. */
   readonly onVerifyAppLock?: () => Promise<boolean>;
+  /** Lokalen Daten-Cache leeren (DB) ohne Logout — neu laden via Sync. Nur Live-Modus. */
+  readonly onClearCache?: () => Promise<void>;
 }
 
 interface Shared {
@@ -62,9 +64,34 @@ export function SettingsScreen({
   onRemoveAccount,
   onChangePassword,
   onVerifyAppLock,
+  onClearCache,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  const [cacheBusy, setCacheBusy] = useState(false);
+
+  // Lokalen Cache leeren (mit Bestätigung): löscht nur die lokale DB, Login bleibt erhalten.
+  const confirmClearCache = (): void => {
+    if (onClearCache === undefined) return;
+    Alert.alert(
+      'Lokalen Cache leeren',
+      'Lokal gespeicherte Mails/Ordner verwerfen und neu vom Server laden? Anmeldung bleibt erhalten.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Leeren',
+          style: 'destructive',
+          onPress: () => {
+            setCacheBusy(true);
+            void onClearCache()
+              .then(() => Alert.alert('Cache', 'Lokaler Cache geleert — wird neu geladen.'))
+              .catch(() => Alert.alert('Cache', 'Konnte nicht geleert werden.'))
+              .finally(() => setCacheBusy(false));
+          },
+        },
+      ],
+    );
+  };
 
   // App-Sperre umschalten: beim Aktivieren erst per Biometrie bestätigen (nur Live).
   const toggleAppLock = async (value: boolean): Promise<void> => {
@@ -265,6 +292,26 @@ export function SettingsScreen({
               </Pressable>
             )}
           </View>
+
+          {onClearCache !== undefined ? (
+            <>
+              <Text style={s.section}>Wartung</Text>
+              <View style={s.card}>
+                <Pressable disabled={cacheBusy} onPress={confirmClearCache}>
+                  <Row t={t}>
+                    <View style={s.grow}>
+                      <Text style={s.itemTitle}>Lokalen Cache leeren</Text>
+                      <Text style={s.itemSub}>
+                        Lokale Mails verwerfen und neu laden (Login bleibt)
+                      </Text>
+                    </View>
+                    <Text style={s.itemValue}>{cacheBusy ? 'Leere …' : ''}</Text>
+                    <Text style={s.chev}>›</Text>
+                  </Row>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
 
           <View style={s.spacer} />
           <View style={s.card}>

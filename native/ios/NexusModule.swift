@@ -86,6 +86,16 @@ final class NexusModule: NSObject {
     }
   }
 
+  /// Leert die lokale DB (Krypto-Schlüssel/Zugangsdaten bleiben) — „Lokalen Cache leeren".
+  /// Beim nächsten `dbInit()` wird leer neu aufgebaut, der Sync füllt die Daten erneut.
+  @objc(dbReset:rejecter:)
+  func dbReset(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    guarded("db_reset", reject) {
+      do { try NexusDatabase.shared.reset(); resolve(nil) }
+      catch { reject("db_reset", "\(error)", error) }
+    }
+  }
+
   // MARK: Transport (async → Promise)
 
   @objc(transportDiscover:credentialsJson:resolver:rejecter:)

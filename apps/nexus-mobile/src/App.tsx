@@ -289,6 +289,20 @@ function AppInner(): React.JSX.Element {
     [container, accountEmail],
   );
 
+  // Lokalen Cache leeren (nur Live): DB leeren + leer neu aufbauen, danach Screens neu laden.
+  // Zugangsdaten/Login bleiben — der Sync füllt die Mails erneut.
+  const clearCache = useMemo(
+    () =>
+      APP_MODE === 'live' && container !== null
+        ? async (): Promise<void> => {
+            await container.clearCache?.();
+            setFolders([]);
+            setSyncTick((x) => x + 1);
+          }
+        : undefined,
+    [container],
+  );
+
   const accountName = useMemo(() => deriveName(accountEmail), [accountEmail]);
   const folderName = useMemo(
     () => folders.find((f) => f.id === currentFolder)?.displayName ?? 'Posteingang',
@@ -456,6 +470,7 @@ function AppInner(): React.JSX.Element {
             onRemoveAccount={removeAccount}
             {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
             {...(verifyAppLock !== undefined ? { onVerifyAppLock: verifyAppLock } : {})}
+            {...(clearCache !== undefined ? { onClearCache: clearCache } : {})}
           />
         )}
       </View>
