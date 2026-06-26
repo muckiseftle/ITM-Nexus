@@ -76,20 +76,30 @@ export async function toggleFlag(
   return updated;
 }
 
+/** In einen beliebigen Ordner verschieben (optimistisch + Outbox). */
+export async function moveToFolder(
+  container: AppContainer,
+  account: AccountId,
+  message: MailMessage,
+  targetFolderId: FolderId,
+): Promise<void> {
+  await container.mailStore.upsertMessages([{ ...message, folderId: targetFolderId }]);
+  await enqueue(
+    container,
+    account,
+    'move',
+    message.id,
+    outboxCommand.move(message.id, targetFolderId),
+  );
+}
+
 /** In den Archiv-Ordner verschieben (optimistisch + Outbox). */
 export async function archive(
   container: AppContainer,
   account: AccountId,
   message: MailMessage,
 ): Promise<void> {
-  await container.mailStore.upsertMessages([{ ...message, folderId: ARCHIVE_FOLDER }]);
-  await enqueue(
-    container,
-    account,
-    'move',
-    message.id,
-    outboxCommand.move(message.id, ARCHIVE_FOLDER),
-  );
+  await moveToFolder(container, account, message, ARCHIVE_FOLDER);
 }
 
 /** Nachricht löschen (optimistisch aus dem Store entfernen + Outbox). */

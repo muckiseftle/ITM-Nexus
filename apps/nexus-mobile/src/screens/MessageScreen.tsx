@@ -5,15 +5,19 @@ import {
   isUnread,
   messageBodyToText,
   MessageFlag,
+  toFolderId,
   type AccountId,
   type Attachment,
+  type FolderId,
+  type MailFolder,
   type MailMessage,
   type MessageId,
   type ReplyMode,
 } from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
-import { archive, remove, setRead, toggleFlag } from '../actions/messageActions';
+import { archive, moveToFolder, remove, setRead, toggleFlag } from '../actions/messageActions';
+import { OptionSheet, type SheetOption } from '../components/BottomSheet';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 function formatSize(bytes: number): string {
@@ -42,6 +46,8 @@ export function MessageScreen({
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const [message, setMessage] = useState<MailMessage | undefined>(undefined);
+  const [folders, setFolders] = useState<readonly MailFolder[]>([]);
+  const [moveOpen, setMoveOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +93,20 @@ export function MessageScreen({
   const onDelete = async (): Promise<void> => {
     if (message === undefined) return;
     await remove(container, account, message);
+    onBack();
+  };
+
+  const openMove = (): void => {
+    void container.folders
+      .listFolders(account)
+      .then(setFolders)
+      .catch(() => undefined);
+    setMoveOpen(true);
+  };
+
+  const doMove = async (folderId: FolderId): Promise<void> => {
+    if (message === undefined) return;
+    await moveToFolder(container, account, message, folderId);
     onBack();
   };
 
@@ -155,11 +175,23 @@ export function MessageScreen({
               label={hasFlag(message, MessageFlag.Flagged) ? 'Entmarkieren' : 'Markieren'}
               onPress={() => void onToggleFlag()}
             />
+            <Action t={t} label="Verschieben" onPress={openMove} />
             <Action t={t} label="Archiv" onPress={() => void onArchive()} />
             <Action t={t} label="Löschen" onPress={() => void onDelete()} danger />
           </View>
         </>
       )}
+
+      <OptionSheet
+        visible={moveOpen}
+        onClose={() => setMoveOpen(false)}
+        title="In Ordner verschieben"
+        options={folders
+          .filter((f) => f.id !== message?.folderId)
+          .map((f): SheetOption => ({ key: f.id, label: f.displayName }))}
+        selected=""
+        onSelect={(key) => void doMove(toFolderId(key))}
+      />
     </View>
   );
 }
