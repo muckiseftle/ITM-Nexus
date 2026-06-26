@@ -8,11 +8,19 @@ import UIKit
 final class NexusTransport: NSObject, URLSessionDelegate {
   static let shared = NexusTransport()
 
-  /// Laufzeit-Konfiguration (aus Autodiscover/Account-Setup gesetzt).
-  var ewsUrl: URL?
-  var basicAuthHeader: String?
-  private var username: String?
-  private var password: String?
+  // Aller veränderliche Laufzeit-Zustand wird über `stateLock` synchronisiert: er wird aus
+  // async-Tasks, dem (nebenläufigen) URLSession-Delegate UND dem Hintergrund-Task gelesen/
+  // geschrieben. WICHTIG: Das Lock wird IMMER nur kurz um reine Speicherzugriffe gehalten —
+  // NIE über ein `await`/einen Netzaufruf hinweg (sonst Deadlock/Serialisierung). Zugriff
+  // ausschließlich über die thread-sicheren Accessor-Helfer unten.
+  private let stateLock = NSLock()
+  private var _ewsUrl: URL?
+  private var _basicAuthHeader: String?
+  private var _username: String?
+  private var _password: String?
+  private var _pinPolicies: [PinPolicy] = []
+  /// Pro Ordner gemerkte Signatur für DirectPush-Änderungserkennung (Ping/Long-Poll).
+  private var _folderSignatures: [String: String] = [:]
 
   /// Certificate-Pinning-Policy (siehe core-transport/pinning.ts). Leer ⇒ Pinning inaktiv.
   struct PinPolicy {
@@ -20,16 +28,61 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let includeSubdomains: Bool
     let pins: [String]
   }
-  private var pinPolicies: [PinPolicy] = []
 
-  /// Pro Ordner gemerkte Signatur für DirectPush-Änderungserkennung (Ping/Long-Poll).
-  private var folderSignatures: [String: String] = [:]
+  // Eager initialisiert (kein `lazy`): die nebenläufige Erst-Initialisierung einer `lazy var`
+  // ist nicht thread-safe — bei parallelen Tasks (sync + ping) drohte ein Init-Race.
+  private var session: URLSession!
 
-  private lazy var session: URLSession = {
+  override init() {
+    super.init()
     let config = URLSessionConfiguration.ephemeral
     config.tlsMinimumSupportedProtocolVersion = .TLSv12
-    return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-  }()
+    session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+  }
+
+  /// Führt `body` unter dem State-Lock aus. NUR für kurze Speicherzugriffe — niemals `await`.
+  private func locked<T>(_ body: () -> T) -> T {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return body()
+  }
+
+  /// EWS-Endpunkt (thread-safe).
+  var ewsUrl: URL? {
+    get { locked { _ewsUrl } }
+    set { locked { _ewsUrl = newValue } }
+  }
+  /// Preemptiver Basic-Auth-Header (thread-safe).
+  var basicAuthHeader: String? {
+    get { locked { _basicAuthHeader } }
+    set { locked { _basicAuthHeader = newValue } }
+  }
+
+  /// Setzt Benutzer + Passwort + Basic-Header atomar (verhindert inkonsistente Teil-Updates).
+  private func setCredentials(username: String, password: String, header: String) {
+    locked {
+      _username = username
+      _password = password
+      _basicAuthHeader = header
+    }
+  }
+  /// Liest Benutzer + Passwort atomar (URLSession-Auth-Challenge — beide zusammen oder keiner).
+  private func basicCredentials() -> (user: String, pass: String)? {
+    locked {
+      guard let u = _username, let p = _password else { return nil }
+      return (u, p)
+    }
+  }
+  /// Aktueller Benutzername (thread-safe).
+  private func currentUsername() -> String? { locked { _username } }
+
+  /// Gemerkte Ordner-Signatur lesen/schreiben (thread-safe — Dictionary ist nicht nebenläufig).
+  private func cachedSignature(for folderId: String) -> String? {
+    locked { _folderSignatures[folderId] }
+  }
+  private func cacheSignature(_ signature: String, for folderId: String) {
+    locked { _folderSignatures[folderId] = signature }
+  }
 
   /// Auth-Challenges: NTLM/Basic/Digest mit gespeicherten Credentials beantworten;
   /// Server-Trust (TLS/Pinning) separat behandeln.
@@ -67,10 +120,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         completionHandler(.cancelAuthenticationChallenge, nil)
         return
       }
-      if let user = username, let pass = password {
+      if let cred = basicCredentials() {
         completionHandler(
           .useCredential,
-          URLCredential(user: user, password: pass, persistence: .forSession))
+          URLCredential(user: cred.user, password: cred.pass, persistence: .forSession))
       } else {
         completionHandler(.performDefaultHandling, nil)
       }
@@ -109,9 +162,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       let effectiveUser =
         (netbios != nil && !user.contains("\\") && !user.contains("@"))
         ? "\(netbios!)\\\(user)" : user
-      username = effectiveUser
-      password = secret
-      basicAuthHeader = Self.basicAuth(user: effectiveUser, password: secret)
+      setCredentials(
+        username: effectiveUser, password: secret,
+        header: Self.basicAuth(user: effectiveUser, password: secret))
     }
     let scheme = (creds?["scheme"] as? String) ?? "basic"
 
@@ -223,23 +276,25 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     guard let obj = Self.jsonObject(json) as? [String: Any],
       let policies = obj["policies"] as? [[String: Any]]
     else {
-      pinPolicies = []
+      locked { _pinPolicies = [] }
       return
     }
-    pinPolicies = policies.compactMap { p in
+    let parsed: [PinPolicy] = policies.compactMap { p in
       guard let host = p["host"] as? String, let pins = p["pins"] as? [String], !pins.isEmpty
       else { return nil }
       return PinPolicy(
         host: host.lowercased(), includeSubdomains: (p["includeSubdomains"] as? Bool) ?? false,
         pins: pins)
     }
+    locked { _pinPolicies = parsed }
   }
 
   /// Findet die spezifischste passende Policy für `host` (exakt vor Subdomain-Wildcard).
   private func pinPolicy(for host: String) -> PinPolicy? {
     let h = host.lowercased()
-    if let exact = pinPolicies.first(where: { $0.host == h }) { return exact }
-    return pinPolicies.first { $0.includeSubdomains && h.hasSuffix(".\($0.host)") }
+    let policies = locked { _pinPolicies }
+    if let exact = policies.first(where: { $0.host == h }) { return exact }
+    return policies.first { $0.includeSubdomains && h.hasSuffix(".\($0.host)") }
   }
 
   // MARK: DirectPush (Ping / Long-Poll)
@@ -260,10 +315,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       var changed: [String] = []
       for folderId in folders {
         let signature = try await folderSignature(folderId)
-        if let previous = folderSignatures[folderId], previous != signature {
+        if let previous = cachedSignature(for: folderId), previous != signature {
           changed.append(folderId)
         }
-        folderSignatures[folderId] = signature
+        cacheSignature(signature, for: folderId)
       }
       if !changed.isEmpty {
         return try Self.json(["status": "changed", "changedFolderIds": changed])
@@ -501,11 +556,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// des neuen Secrets im Keychain übernimmt die JS-Schicht (AccountSetupService).
   func updatePassword(email: String, newPassword: String) async throws -> String {
     if ewsUrl == nil { _ = try restoreSession() }
-    guard let user = username, ewsUrl != nil else {
+    guard let user = currentUsername(), ewsUrl != nil else {
       throw NexusError.transport("Kein Konto geladen — bitte neu anmelden.")
     }
-    password = newPassword
-    basicAuthHeader = Self.basicAuth(user: user, password: newPassword)
+    locked {
+      _password = newPassword
+      _basicAuthHeader = Self.basicAuth(user: user, password: newPassword)
+    }
     _ = try await post(EwsSoap.findFolders())
     return try Self.json(["verified": true])
   }
@@ -535,9 +592,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let effectiveUser =
       (domain != nil && !user.contains("\\") && !user.contains("@")) ? "\(domain!)\\\(user)" : user
     ewsUrl = url
-    username = effectiveUser
-    password = secret
-    basicAuthHeader = Self.basicAuth(user: effectiveUser, password: secret)
+    setCredentials(
+      username: effectiveUser, password: secret,
+      header: Self.basicAuth(user: effectiveUser, password: secret))
     return account
   }
 
