@@ -128,9 +128,6 @@ export function SettingsScreen({
   };
 
   const [route, setRoute] = useState<'root' | 'account'>('root');
-  const [push, setPush] = useState(true);
-  const [background, setBackground] = useState(true);
-  const [wifiOnly, setWifiOnly] = useState(false);
   const [sheet, setSheet] = useState<Sheet>('none');
   const [pw, setPw] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
@@ -406,21 +403,21 @@ export function SettingsScreen({
           t={t}
           title="Push (DirectPush)"
           sub="Neue Mails sofort, ohne Abfrage-Intervall"
-          value={push}
-          onValueChange={setPush}
+          value={settings.push}
+          onValueChange={(v) => onChangeSettings({ ...settings, push: v })}
         />
         <ToggleRow
           t={t}
           title="Hintergrund-Aktualisierung"
           sub="Sync auch bei geschlossener App"
-          value={background}
-          onValueChange={setBackground}
+          value={settings.background}
+          onValueChange={(v) => onChangeSettings({ ...settings, background: v })}
         />
         <ToggleRow
           t={t}
           title="Nur über WLAN synchronisieren"
-          value={wifiOnly}
-          onValueChange={setWifiOnly}
+          value={settings.wifiOnly}
+          onValueChange={(v) => onChangeSettings({ ...settings, wifiOnly: v })}
         />
       </View>
 

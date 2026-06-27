@@ -62,6 +62,10 @@ export interface NexusNativeModule {
   /** Lädt + dekodiert den Anhang nativ in eine Datei und öffnet das System-Teilen-Blatt (H9). */
   transportPresentAttachment(accountId: string, attachmentId: string): Promise<void>;
 
+  // — Netzwerkstatus (für „Nur über WLAN") —
+  /** Aktueller Verbindungstyp: 'wifi' | 'cellular' | 'none'. */
+  networkStatus(): Promise<string>;
+
   // — App-Sperre (Biometrie / Face ID / Touch ID) —
   /** Verfügbarkeit + Typ der Geräte-Biometrie. */
   biometricAvailable(): Promise<{ readonly available: boolean; readonly type: string }>;

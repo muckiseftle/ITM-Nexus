@@ -185,8 +185,17 @@ function AppInner(): React.JSX.Element {
     const acc = account;
     let cancelled = false;
 
+    // „Nur über WLAN": auf Mobilfunk wird Sync/Push übersprungen. Ohne nativen Netzwerkstatus
+    // (Demo) oder bei deaktivierter Option immer erlaubt. Fehler bei der Abfrage ⇒ erlauben.
+    const networkAllowsSync = async (): Promise<boolean> => {
+      if (!settings.wifiOnly || c.networkStatus === undefined) return true;
+      const status = await c.networkStatus().catch(() => 'wifi');
+      return status !== 'cellular';
+    };
+
     // Ein Sync-Durchlauf; signalisiert den Screens per syncTick, lokal neu zu laden.
     const runSync = async (): Promise<void> => {
+      if (!(await networkAllowsSync())) return;
       try {
         await c.backgroundSync.runDue(acc);
         if (!cancelled) setSyncTick((x) => x + 1);
@@ -201,7 +210,8 @@ function AppInner(): React.JSX.Element {
     const periodMs = syncIntervalMs(settings.syncInterval);
     const interval = periodMs !== null ? setInterval(() => void runSync(), periodMs) : undefined;
 
-    void c.scheduleBackgroundSync?.();
+    // iOS-Hintergrund-Sync nur planen, wenn der Schalter „Hintergrund-Aktualisierung" an ist.
+    if (settings.background) void c.scheduleBackgroundSync?.();
 
     // Abbrechbarer Backoff-Timer für die Push-Schleife (wird beim Unmount geleert).
     let pushDelayTimer: ReturnType<typeof setTimeout> | undefined;
@@ -209,6 +219,13 @@ function AppInner(): React.JSX.Element {
       const inbox = toFolderId(DEMO_INBOX_ID);
       let failures = 0;
       while (!cancelled && c.push !== undefined) {
+        // „Nur über WLAN": auf Mobilfunk nicht pollen, kurz warten und erneut prüfen.
+        if (!(await networkAllowsSync())) {
+          await new Promise<void>((resolve) => {
+            pushDelayTimer = setTimeout(resolve, 30_000);
+          });
+          continue;
+        }
         try {
           const result = await c.push.ping(acc, [inbox], PUSH_TIMEOUT_MS);
           failures = 0;
@@ -231,14 +248,22 @@ function AppInner(): React.JSX.Element {
         }
       }
     };
-    void pushLoop();
+    // DirectPush-Long-Poll nur starten, wenn der Schalter „Push" an ist.
+    if (settings.push) void pushLoop();
 
     return () => {
       cancelled = true;
       if (interval !== undefined) clearInterval(interval);
       if (pushDelayTimer !== undefined) clearTimeout(pushDelayTimer);
     };
-  }, [container, account, settings.syncInterval]);
+  }, [
+    container,
+    account,
+    settings.syncInterval,
+    settings.push,
+    settings.background,
+    settings.wifiOnly,
+  ]);
 
   // App-Sperre nach echter Rückkehr aus dem Hintergrund erneut erzwingen (nur Live).
   const appLockRef = useRef(settings.appLock);

@@ -74,6 +74,11 @@ export interface AppContainer {
    * und DB-Schlüssel bleiben erhalten — der Sync füllt die Daten danach erneut. Nur Live-Modus.
    */
   readonly clearCache?: () => Promise<void>;
+  /**
+   * Aktueller Verbindungstyp ('wifi' | 'cellular' | 'none') für die Einstellung „Nur über
+   * WLAN". Nur Live-Modus — im Demo-Modus undefiniert (Sync läuft dort uneingeschränkt).
+   */
+  readonly networkStatus?: () => Promise<string>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -154,6 +159,7 @@ export async function createContainer(): Promise<AppContainer> {
       await NexusNative.dbReset();
       await NexusNative.dbInit();
     },
+    networkStatus: () => NexusNative.networkStatus(),
   };
 }
 

@@ -12,6 +12,12 @@ export interface AppSettings {
   readonly syncWindow: string;
   /** App-Sperre per Biometrie/Code beim Start und nach Rückkehr aus dem Hintergrund. */
   readonly appLock: boolean;
+  /** DirectPush-Long-Poll (sofortige neue Mails). Aus ⇒ nur Intervall-Sync. */
+  readonly push: boolean;
+  /** iOS-Hintergrund-Sync (BGTaskScheduler) bei geschlossener App planen. */
+  readonly background: boolean;
+  /** Nur über WLAN synchronisieren (kein Sync/Push über Mobilfunk). */
+  readonly wifiOnly: boolean;
 }
 
 export const INTERVAL_OPTS = [
@@ -34,6 +40,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   syncInterval: '1m',
   syncWindow: '1m',
   appLock: false,
+  push: true,
+  background: true,
+  wifiOnly: false,
 };
 
 const SETTINGS_KEY = 'nexus:settings';
@@ -75,6 +84,10 @@ export async function loadSettings(secureStore: SecureStore): Promise<AppSetting
       syncWindow:
         typeof parsed.syncWindow === 'string' ? parsed.syncWindow : DEFAULT_SETTINGS.syncWindow,
       appLock: typeof parsed.appLock === 'boolean' ? parsed.appLock : DEFAULT_SETTINGS.appLock,
+      push: typeof parsed.push === 'boolean' ? parsed.push : DEFAULT_SETTINGS.push,
+      background:
+        typeof parsed.background === 'boolean' ? parsed.background : DEFAULT_SETTINGS.background,
+      wifiOnly: typeof parsed.wifiOnly === 'boolean' ? parsed.wifiOnly : DEFAULT_SETTINGS.wifiOnly,
     };
   } catch {
     return DEFAULT_SETTINGS;

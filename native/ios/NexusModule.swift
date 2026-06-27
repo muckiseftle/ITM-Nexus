@@ -244,6 +244,16 @@ final class NexusModule: NSObject {
     }
   }
 
+  // MARK: Netzwerkstatus (für „Nur über WLAN")
+
+  /// Aktueller Verbindungstyp: "wifi" | "cellular" | "none".
+  @objc(networkStatus:rejecter:)
+  func networkStatus(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    guarded("network_status", reject) {
+      resolve(NexusNetwork.shared.status())
+    }
+  }
+
   // MARK: App-Sperre (Biometrie / Face ID / Touch ID)
 
   /// Liefert, ob Geräte-Biometrie verfügbar ist und welcher Typ (faceID/touchID/none).

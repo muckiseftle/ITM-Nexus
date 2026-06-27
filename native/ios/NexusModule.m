@@ -55,6 +55,8 @@ RCT_EXTERN_METHOD(transportGetAttachment:(NSString *)accountId attachmentId:(NSS
 RCT_EXTERN_METHOD(transportPresentAttachment:(NSString *)accountId attachmentId:(NSString *)attachmentId
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(networkStatus:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(biometricAvailable:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(biometricAuthenticate:(NSString *)reason
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
