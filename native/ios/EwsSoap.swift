@@ -107,7 +107,10 @@ enum EwsSoap {
     cc: [String],
     bcc: [String],
     subject: String,
-    body: String
+    body: String,
+    attachments: [(name: String, contentType: String, base64: String)] = [],
+    disposition: String = "SendAndSaveCopy",
+    savedFolder: String? = nil
   ) -> String {
     func mailboxes(_ addresses: [String]) -> String {
       addresses.map { "<t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox>" }.joined()
@@ -116,12 +119,31 @@ enum EwsSoap {
     let ccXml = cc.isEmpty ? "" : "<t:CcRecipients>\(mailboxes(cc))</t:CcRecipients>"
     let bccXml = bcc.isEmpty ? "" : "<t:BccRecipients>\(mailboxes(bcc))</t:BccRecipients>"
     let senderXml = sender.map { "<t:Sender><t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox></t:Sender>" } ?? ""
+    // FileAttachments inline (EWS-Schemareihenfolge: nach <t:Body>, vor den Empfängern). Der
+    // Base64-Content braucht KEIN XML-Escaping (nur [A-Za-z0-9+/=]).
+    let attachXml = attachments.isEmpty
+      ? ""
+      : "<t:Attachments>"
+        + attachments.map {
+          "<t:FileAttachment>"
+            + "<t:Name>\(xmlEscape($0.name))</t:Name>"
+            + "<t:ContentType>\(xmlEscape($0.contentType))</t:ContentType>"
+            + "<t:Content>\($0.base64)</t:Content>"
+            + "</t:FileAttachment>"
+        }.joined()
+        + "</t:Attachments>"
+    // Zielordner (z. B. Entwürfe beim SaveOnly) — vor <m:Items> laut Schema.
+    let savedXml = savedFolder.map {
+      "<m:SavedItemFolderId>\(distinguishedFolder($0))</m:SavedItemFolderId>"
+    } ?? ""
     return envelope("""
-      <m:CreateItem MessageDisposition="SendAndSaveCopy">
+      <m:CreateItem MessageDisposition="\(xmlEscape(disposition))">
+        \(savedXml)
         <m:Items>
           <t:Message>
             <t:Subject>\(xmlEscape(subject))</t:Subject>
             <t:Body BodyType="Text">\(xmlEscape(body))</t:Body>
+            \(attachXml)
             <t:ToRecipients>\(mailboxes(to))</t:ToRecipients>
             \(ccXml)
             \(bccXml)

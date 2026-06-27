@@ -33,6 +33,8 @@ interface Props {
   readonly backLabel: string;
   readonly onBack: () => void;
   readonly onCompose: (mode: ReplyMode, message: MailMessage) => void;
+  /** Nur für Entwürfe: öffnet die Nachricht zum Weiterbearbeiten im Composer. */
+  readonly onEdit?: (message: MailMessage) => void;
 }
 
 export function MessageScreen({
@@ -42,6 +44,7 @@ export function MessageScreen({
   backLabel,
   onBack,
   onCompose,
+  onEdit,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -162,6 +165,9 @@ export function MessageScreen({
           </ScrollView>
 
           <View style={s.actions}>
+            {onEdit !== undefined ? (
+              <Action t={t} label="Bearbeiten" onPress={() => onEdit(message)} primary />
+            ) : null}
             <Action t={t} label="Antworten" onPress={() => onCompose('reply', message)} primary />
             <Action t={t} label="Allen antw." onPress={() => onCompose('replyAll', message)} />
             <Action t={t} label="Weiterleiten" onPress={() => onCompose('forward', message)} />

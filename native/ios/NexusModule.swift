@@ -156,6 +156,23 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportSaveDraft:messageJson:resolver:rejecter:)
+  func transportSaveDraft(_ accountId: String, messageJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.saveDraft(accountId: accountId, messageJson: messageJson)) }
+      catch { reject("transport_savedraft", "\(error)", error) }
+    }
+  }
+
+  /// Öffnet den System-Dateiauswähler und liefert die gewählte Datei (Base64) zurück.
+  @objc(pickAttachment:rejecter:)
+  func pickAttachment(_ resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusAttachmentPicker.pick()) }
+      catch { reject("attachment_pick", "\(error)", error) }
+    }
+  }
+
   @objc(transportSearchServer:query:resolver:rejecter:)
   func transportSearchServer(_ accountId: String, query: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {

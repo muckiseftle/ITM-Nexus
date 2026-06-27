@@ -43,6 +43,15 @@ export interface NexusNativeModule {
   ): Promise<string>;
   transportApplyOperation(operationJson: string): Promise<void>;
   transportSendMessage(accountId: string, messageJson: string): Promise<string>;
+  /** Speichert die Nachricht als Entwurf (EWS SaveOnly → Ordner „Entwürfe"). Liefert JSON {id}. */
+  transportSaveDraft(accountId: string, messageJson: string): Promise<string>;
+  /** Öffnet den System-Dateiauswähler; resolved die Datei, rejectet bei Abbruch ('CANCELLED'). */
+  pickAttachment(): Promise<{
+    readonly name: string;
+    readonly contentType: string;
+    readonly sizeBytes: number;
+    readonly base64: string;
+  }>;
   transportSearchServer(accountId: string, query: string): Promise<string>;
   transportLoadAccount(accountId: string): Promise<string>;
   transportSyncFolders(accountId: string, syncKey: string | null): Promise<string>;

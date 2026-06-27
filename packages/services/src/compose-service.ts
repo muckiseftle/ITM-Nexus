@@ -4,6 +4,7 @@ import type {
   MailAddress,
   MessageBody,
   MessageId,
+  OutgoingAttachment,
   OutgoingMessage,
   Recipient,
 } from '@nexus/domain';
@@ -18,6 +19,7 @@ export interface Draft {
   readonly body: MessageBody;
   readonly recipients: readonly Recipient[];
   readonly inReplyTo?: MessageId;
+  readonly attachments?: readonly OutgoingAttachment[];
 }
 
 /**
@@ -31,6 +33,25 @@ export class ComposeService {
     private readonly clock: Clock,
   ) {}
 
+  /**
+   * Baut die ausgehende Nachricht (Sende-Identität auflösen, Anhänge übernehmen) OHNE sie zu
+   * versenden — genutzt von {@link send} und vom Entwurf-Speichern (Composer → transportSaveDraft).
+   */
+  buildMessage(activeMailbox: Mailbox, primaryAddress: MailAddress, draft: Draft): OutgoingMessage {
+    const identity = resolveSenderIdentity(activeMailbox, primaryAddress);
+    return {
+      from: identity.from,
+      ...(identity.sender !== undefined ? { sender: identity.sender } : {}),
+      subject: draft.subject,
+      body: draft.body,
+      recipients: draft.recipients,
+      ...(draft.inReplyTo !== undefined ? { inReplyTo: draft.inReplyTo } : {}),
+      ...(draft.attachments !== undefined && draft.attachments.length > 0
+        ? { attachments: draft.attachments }
+        : {}),
+    };
+  }
+
   async send(
     accountId: AccountId,
     operationId: string,
@@ -38,16 +59,7 @@ export class ComposeService {
     primaryAddress: MailAddress,
     draft: Draft,
   ): Promise<OutgoingMessage> {
-    const identity = resolveSenderIdentity(activeMailbox, primaryAddress);
-
-    const message: OutgoingMessage = {
-      from: identity.from,
-      ...(identity.sender !== undefined ? { sender: identity.sender } : {}),
-      subject: draft.subject,
-      body: draft.body,
-      recipients: draft.recipients,
-      ...(draft.inReplyTo !== undefined ? { inReplyTo: draft.inReplyTo } : {}),
-    };
+    const message = this.buildMessage(activeMailbox, primaryAddress, draft);
 
     await this.outbox.enqueue(
       accountId,

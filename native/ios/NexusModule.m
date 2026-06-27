@@ -33,6 +33,9 @@ RCT_EXTERN_METHOD(transportApplyOperation:(NSString *)operationJson
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSendMessage:(NSString *)accountId messageJson:(NSString *)messageJson
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportSaveDraft:(NSString *)accountId messageJson:(NSString *)messageJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(pickAttachment:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSearchServer:(NSString *)accountId query:(NSString *)query
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportLoadAccount:(NSString *)accountId

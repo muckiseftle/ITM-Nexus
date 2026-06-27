@@ -560,7 +560,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
 
   /// Baut aus einem OutgoingMessage-Dict den CreateItem-SOAP und versendet ihn (EWS).
   /// Wird von `sendMessage` UND vom Outbox-`send`-Befehl (`applyOperation`) genutzt.
-  private func deliver(_ msg: [String: Any]) async throws {
+  /// Baut den EWS-CreateItem-Request aus einer OutgoingMessage (gemeinsam für Senden + Entwurf).
+  private func buildCreateItem(_ msg: [String: Any], disposition: String, savedFolder: String?)
+    -> String
+  {
     let from = (msg["from"] as? [String: Any])?["address"] as? String ?? ""
     let sender = (msg["sender"] as? [String: Any])?["address"] as? String
     let subject = msg["subject"] as? String ?? ""
@@ -571,11 +574,37 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         .filter { ($0["kind"] as? String) == kind }
         .compactMap { ($0["address"] as? [String: Any])?["address"] as? String }
     }
-    _ = try await post(
-      EwsSoap.createItem(
-        from: from, sender: sender,
-        to: addresses(kind: "to"), cc: addresses(kind: "cc"), bcc: addresses(kind: "bcc"),
-        subject: subject, body: body))
+    let attachments = (msg["attachments"] as? [[String: Any]] ?? []).compactMap {
+      (a) -> (name: String, contentType: String, base64: String)? in
+      guard let b64 = a["contentBase64"] as? String, !b64.isEmpty else { return nil }
+      return (
+        a["name"] as? String ?? "Anhang",
+        a["contentType"] as? String ?? "application/octet-stream",
+        b64
+      )
+    }
+    return EwsSoap.createItem(
+      from: from, sender: sender,
+      to: addresses(kind: "to"), cc: addresses(kind: "cc"), bcc: addresses(kind: "bcc"),
+      subject: subject, body: body,
+      attachments: attachments, disposition: disposition, savedFolder: savedFolder)
+  }
+
+  private func deliver(_ msg: [String: Any]) async throws {
+    _ = try await post(buildCreateItem(msg, disposition: "SendAndSaveCopy", savedFolder: nil))
+  }
+
+  /// Speichert die Nachricht als ENTWURF (EWS CreateItem MessageDisposition=SaveOnly → Ordner
+  /// „Entwürfe"), ohne sie zu senden. Liefert die erzeugte Item-ID als JSON {id}.
+  func saveDraft(accountId: String, messageJson: String) async throws -> String {
+    guard let msg = Self.jsonObject(messageJson) as? [String: Any] else {
+      throw NexusError.transport("Ungültige Nachricht")
+    }
+    let xml = try await post(buildCreateItem(msg, disposition: "SaveOnly", savedFolder: "drafts"))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("SERVER: \(EwsSoap.responseCode(xml) ?? "Entwurf fehlgeschlagen")")
+    }
+    return try Self.json(["id": EwsSoap.extractItemIds(xml).first ?? ""])
   }
 
   /// Anmeldeprüfung: genau ein authentifizierter EWS-Roundtrip (FindFolder auf der

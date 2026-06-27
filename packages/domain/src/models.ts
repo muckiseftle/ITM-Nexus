@@ -84,6 +84,14 @@ export interface CalendarEvent {
   readonly attendees: readonly MailAddress[];
 }
 
+/** Ein anzuhängender Inhalt (Composer) — Base64, da über die Bridge/Outbox serialisiert. */
+export interface OutgoingAttachment {
+  readonly name: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+  readonly contentBase64: string;
+}
+
 /** Eine noch nicht versendete Nachricht (Composer-Ausgabe → Outbox). */
 export interface OutgoingMessage {
   /** Absender-Identität (From-Header). */
@@ -94,4 +102,6 @@ export interface OutgoingMessage {
   readonly body: MessageBody;
   readonly recipients: readonly Recipient[];
   readonly inReplyTo?: MessageId;
+  /** Datei-Anhänge (optional). Inline als FileAttachment im EWS-CreateItem. */
+  readonly attachments?: readonly OutgoingAttachment[];
 }

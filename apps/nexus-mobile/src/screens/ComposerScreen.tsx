@@ -16,6 +16,7 @@ import {
   type AccountId,
   type Mailbox,
   type MessageId,
+  type OutgoingAttachment,
   type Recipient,
 } from '@nexus/domain';
 import { classifyError, type ErrorInfo } from '@nexus/core-transport';
@@ -44,6 +45,15 @@ interface Props {
 }
 
 let composeCounter = 0;
+
+const MAX_ATTACH_MB = 15;
+const MAX_ATTACH_BYTES = MAX_ATTACH_MB * 1_000_000;
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1000) return `${String(Math.round(bytes / 1000))} KB`;
+  return `${String(bytes)} B`;
+}
 
 /** Validiert die geparsten Empfänger; liefert ungültige Roh-Adressen zurück. */
 function invalidAddresses(recipients: readonly Recipient[]): string[] {
@@ -82,9 +92,78 @@ export function ComposerScreen({
   const [ccVisible, setCcVisible] = useState((initial?.cc ?? '').length > 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
+  const [attachments, setAttachments] = useState<readonly OutgoingAttachment[]>([]);
 
   const fail = (title: string, detail: string, technical: string): void => {
     setError({ kind: 'unknown', title, detail, technical });
+  };
+
+  // Sende-Identität aus dem aktiven Konto (From = primäres Postfach).
+  const identity = (): {
+    mailbox: Mailbox;
+    primaryAddress: ReturnType<typeof createMailAddress>;
+  } => {
+    const primaryAddress = createMailAddress(accountEmail);
+    const mailbox: Mailbox = {
+      id: account,
+      kind: 'primary',
+      address: primaryAddress,
+      displayName: accountEmail,
+      permissions: ['read', 'write', 'sendAs'],
+    };
+    return { mailbox, primaryAddress };
+  };
+
+  // Gemeinsame Entwurf-Daten (Empfänger/Betreff/Text/Anhänge) für Senden UND Entwurf-Speichern.
+  const buildDraft = (recipients: readonly Recipient[]) => ({
+    subject: subject.trim(),
+    body: { type: BodyType.Text, content: bodyText },
+    recipients: normalize(recipients),
+    ...(initial?.inReplyTo !== undefined ? { inReplyTo: initial.inReplyTo } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
+  });
+
+  // Anhang über den System-Dateiauswähler hinzufügen (nur Live — natives Modul).
+  const onAttach = async (): Promise<void> => {
+    if (container.pickAttachment === undefined) return;
+    const file = await container.pickAttachment();
+    if (file === null) return;
+    if (file.sizeBytes > MAX_ATTACH_BYTES) {
+      fail(
+        'Anhang zu groß',
+        `Maximal ${MAX_ATTACH_MB} MB pro Anhang.`,
+        `${String(file.sizeBytes)} B`,
+      );
+      return;
+    }
+    setError(null);
+    setAttachments((list) => [...list, file]);
+  };
+
+  // Als Entwurf speichern (EWS SaveOnly → Ordner „Entwürfe"). Empfänger sind hier optional.
+  const onSaveDraft = async (): Promise<void> => {
+    if (container.saveDraft === undefined) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const recipients: Recipient[] = [
+        ...parseRecipients(to, 'to'),
+        ...parseRecipients(cc, 'cc'),
+        ...parseRecipients(bcc, 'bcc'),
+      ];
+      const { mailbox, primaryAddress } = identity();
+      const message = container.compose.buildMessage(
+        mailbox,
+        primaryAddress,
+        buildDraft(recipients),
+      );
+      await container.saveDraft(account, message);
+      onClose();
+    } catch (e: unknown) {
+      setError(classifyError(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async (): Promise<void> => {
@@ -114,22 +193,16 @@ export function ComposerScreen({
     setBusy(true);
     setError(null);
     try {
-      const primaryAddress = createMailAddress(accountEmail);
-      const mailbox: Mailbox = {
-        id: account,
-        kind: 'primary',
-        address: primaryAddress,
-        displayName: accountEmail,
-        permissions: ['read', 'write', 'sendAs'],
-      };
+      const { mailbox, primaryAddress } = identity();
       composeCounter += 1;
       const operationId = `compose-${String(Date.now())}-${String(composeCounter)}`;
-      await container.compose.send(account, operationId, mailbox, primaryAddress, {
-        subject: subject.trim(),
-        body: { type: BodyType.Text, content: bodyText },
-        recipients: normalize(recipients),
-        ...(initial?.inReplyTo !== undefined ? { inReplyTo: initial.inReplyTo } : {}),
-      });
+      await container.compose.send(
+        account,
+        operationId,
+        mailbox,
+        primaryAddress,
+        buildDraft(recipients),
+      );
       await container.outbox.drain(account);
       onSent();
     } catch (e: unknown) {
@@ -146,13 +219,20 @@ export function ComposerScreen({
           <Text style={s.barAction}>Abbrechen</Text>
         </Pressable>
         <Text style={s.barTitle}>{initial?.title ?? 'Neue E-Mail'}</Text>
-        <Pressable onPress={() => void submit()} disabled={busy} hitSlop={8}>
-          {busy ? (
-            <ActivityIndicator color={t.c.brandPrimary} />
-          ) : (
-            <Text style={s.barSend}>Senden</Text>
-          )}
-        </Pressable>
+        <View style={s.barRight}>
+          {container.saveDraft !== undefined ? (
+            <Pressable onPress={() => void onSaveDraft()} disabled={busy} hitSlop={8}>
+              <Text style={s.barAction}>Entwurf</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => void submit()} disabled={busy} hitSlop={8}>
+            {busy ? (
+              <ActivityIndicator color={t.c.brandPrimary} />
+            ) : (
+              <Text style={s.barSend}>Senden</Text>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
@@ -221,6 +301,28 @@ export function ComposerScreen({
           onChangeText={setBodyText}
         />
 
+        {container.pickAttachment !== undefined ? (
+          <>
+            <Pressable style={s.attachBtn} onPress={() => void onAttach()} hitSlop={6}>
+              <Text style={s.attachBtnText}>📎 Anhang hinzufügen</Text>
+            </Pressable>
+            {attachments.map((a, i) => (
+              <View key={`${a.name}-${String(i)}`} style={s.attachRow}>
+                <Text style={s.attachName} numberOfLines={1}>
+                  {a.name}
+                </Text>
+                <Text style={s.attachSize}>{formatSize(a.sizeBytes)}</Text>
+                <Pressable
+                  hitSlop={8}
+                  onPress={() => setAttachments((list) => list.filter((_, j) => j !== i))}
+                >
+                  <Text style={s.attachRemove}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+          </>
+        ) : null}
+
         {error !== null ? (
           <View style={s.errorBox}>
             <Text style={s.errorTitle}>{error.title}</Text>
@@ -245,7 +347,33 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: space.md,
       paddingVertical: space.sm,
     },
+    attachBtn: {
+      alignSelf: 'flex-start',
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.pill,
+      marginBottom: space.sm,
+      paddingHorizontal: space.md,
+      paddingVertical: space.sm,
+    },
+    attachBtnText: {
+      color: t.c.brandPrimary,
+      fontSize: typography.caption.size,
+      fontWeight: '600',
+    },
+    attachName: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
+    attachRemove: { color: t.c.danger, fontSize: typography.body.size, fontWeight: '700' },
+    attachRow: {
+      alignItems: 'center',
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.md,
+      flexDirection: 'row',
+      gap: space.sm,
+      marginBottom: space.xs,
+      padding: space.sm,
+    },
+    attachSize: { color: t.c.textSecondary, fontSize: typography.caption.size },
     barAction: { color: t.c.textSecondary, fontSize: typography.body.size },
+    barRight: { alignItems: 'center', flexDirection: 'row', gap: space.md },
     barSend: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '700' },
     barTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
     body: { minHeight: 200 },

@@ -20,7 +20,13 @@ import {
   SearchService,
   SyncService,
 } from '@nexus/services';
-import { toFolderId, type AccountId, type MailMessage } from '@nexus/domain';
+import {
+  toFolderId,
+  type AccountId,
+  type MailMessage,
+  type OutgoingAttachment,
+  type OutgoingMessage,
+} from '@nexus/domain';
 import { NexusNative } from '../native/NexusNative';
 import {
   addSharedMailbox,
@@ -107,6 +113,10 @@ export interface AppContainer {
     readonly remove: (account: AccountId, email: string) => Promise<void>;
     readonly loadInbox: (account: AccountId, email: string) => Promise<readonly MailMessage[]>;
   };
+  /** Öffnet den System-Dateiauswähler für einen Anhang. `null` bei Abbruch. Nur Live-Modus. */
+  readonly pickAttachment?: () => Promise<OutgoingAttachment | null>;
+  /** Speichert die Nachricht als Entwurf (EWS SaveOnly → „Entwürfe"). Nur Live-Modus. */
+  readonly saveDraft?: (account: AccountId, message: OutgoingMessage) => Promise<void>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -206,6 +216,23 @@ export async function createContainer(): Promise<AppContainer> {
       add: (account, email) => addSharedMailbox(secureStore, account, email),
       remove: (account, email) => removeSharedMailbox(secureStore, account, email),
       loadInbox: (account, email) => loadSharedInbox(account, email),
+    },
+    pickAttachment: async () => {
+      try {
+        const f = await NexusNative.pickAttachment();
+        return {
+          name: f.name,
+          contentType: f.contentType,
+          sizeBytes: f.sizeBytes,
+          contentBase64: f.base64,
+        };
+      } catch {
+        // Abbruch ('CANCELLED') oder Lesefehler → kein Anhang.
+        return null;
+      }
+    },
+    saveDraft: async (account, message) => {
+      await NexusNative.transportSaveDraft(account, JSON.stringify(message));
     },
   };
 }

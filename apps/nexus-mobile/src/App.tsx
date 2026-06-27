@@ -12,6 +12,8 @@ import {
   buildComposePrefill,
   createMailAddress,
   formatAddressList,
+  FolderType,
+  messageBodyToText,
   toAccountId,
   toFolderId,
   type AccountId,
@@ -81,6 +83,22 @@ function composerInitialFor(
     body: p.body,
     title: COMPOSE_TITLES[mode],
     ...(p.inReplyTo !== undefined ? { inReplyTo: p.inReplyTo } : {}),
+  };
+}
+
+/** Composer-Vorbelegung aus einem Entwurf: Empfänger/Betreff/Text 1:1 zum Weiterbearbeiten. */
+function draftInitialFor(message: MailMessage): ComposerInitial {
+  const addrs = (kind: string): string =>
+    message.recipients
+      .filter((r) => r.kind === kind)
+      .map((r) => r.address.address)
+      .join(', ');
+  return {
+    to: addrs('to'),
+    cc: addrs('cc'),
+    subject: message.subject,
+    body: messageBodyToText(message),
+    title: 'Entwurf',
   };
 }
 
@@ -388,6 +406,11 @@ function AppInner(): React.JSX.Element {
     () => folders.find((f) => f.id === currentFolder)?.displayName ?? 'Posteingang',
     [folders, currentFolder],
   );
+  // Entwürfe-Ordner aktiv? Dann erlaubt MessageScreen das Weiterbearbeiten statt nur Lesen.
+  const isDraftFolder = useMemo(
+    () => folders.find((f) => f.id === currentFolder)?.type === FolderType.Drafts,
+    [folders, currentFolder],
+  );
 
   const openMessage = (messageId: MessageId): void => {
     setTab('mail');
@@ -623,6 +646,12 @@ function AppInner(): React.JSX.Element {
                   initial: composerInitialFor(mode, message, accountEmail),
                 });
               }}
+              {...(isDraftFolder
+                ? {
+                    onEdit: (m: MailMessage) =>
+                      setMailRoute({ name: 'compose', initial: draftInitialFor(m) }),
+                  }
+                : {})}
             />
           ) : mailRoute.name === 'compose' ? (
             <ComposerScreen
