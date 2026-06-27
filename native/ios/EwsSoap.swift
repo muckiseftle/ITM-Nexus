@@ -112,47 +112,63 @@ enum EwsSoap {
     disposition: String = "SendAndSaveCopy",
     savedFolder: String? = nil
   ) -> String {
+    // Hinweis: Bewusst mit explizitem String-Aufbau (var/+=) statt großer verschachtelter
+    // Ausdrücke — der Swift-Typechecker bricht bei langen Interpolations-/+-Ketten sonst ab
+    // („unable to type-check this expression in reasonable time").
     func mailboxes(_ addresses: [String]) -> String {
-      addresses.map { "<t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox>" }.joined()
+      var out = ""
+      for a in addresses {
+        out += "<t:Mailbox><t:EmailAddress>" + xmlEscape(a) + "</t:EmailAddress></t:Mailbox>"
+      }
+      return out
     }
     // Cc/Bcc nur ausgeben, wenn vorhanden — leere Recipient-Container vermeiden.
-    let ccXml = cc.isEmpty ? "" : "<t:CcRecipients>\(mailboxes(cc))</t:CcRecipients>"
-    let bccXml = bcc.isEmpty ? "" : "<t:BccRecipients>\(mailboxes(bcc))</t:BccRecipients>"
-    let senderXml = sender.map { "<t:Sender><t:Mailbox><t:EmailAddress>\(xmlEscape($0))</t:EmailAddress></t:Mailbox></t:Sender>" } ?? ""
+    let ccXml = cc.isEmpty ? "" : "<t:CcRecipients>" + mailboxes(cc) + "</t:CcRecipients>"
+    let bccXml = bcc.isEmpty ? "" : "<t:BccRecipients>" + mailboxes(bcc) + "</t:BccRecipients>"
+    var senderXml = ""
+    if let s = sender {
+      senderXml = "<t:Sender><t:Mailbox><t:EmailAddress>" + xmlEscape(s)
+        + "</t:EmailAddress></t:Mailbox></t:Sender>"
+    }
     // FileAttachments inline (EWS-Schemareihenfolge: nach <t:Body>, vor den Empfängern). Der
     // Base64-Content braucht KEIN XML-Escaping (nur [A-Za-z0-9+/=]).
-    let attachXml = attachments.isEmpty
-      ? ""
-      : "<t:Attachments>"
-        + attachments.map {
-          "<t:FileAttachment>"
-            + "<t:Name>\(xmlEscape($0.name))</t:Name>"
-            + "<t:ContentType>\(xmlEscape($0.contentType))</t:ContentType>"
-            + "<t:Content>\($0.base64)</t:Content>"
-            + "</t:FileAttachment>"
-        }.joined()
-        + "</t:Attachments>"
+    var attachXml = ""
+    if !attachments.isEmpty {
+      attachXml = "<t:Attachments>"
+      for a in attachments {
+        attachXml += "<t:FileAttachment><t:Name>" + xmlEscape(a.name) + "</t:Name>"
+        attachXml += "<t:ContentType>" + xmlEscape(a.contentType) + "</t:ContentType>"
+        attachXml += "<t:Content>" + a.base64 + "</t:Content></t:FileAttachment>"
+      }
+      attachXml += "</t:Attachments>"
+    }
     // Zielordner (z. B. Entwürfe beim SaveOnly) — vor <m:Items> laut Schema.
-    let savedXml = savedFolder.map {
-      "<m:SavedItemFolderId>\(distinguishedFolder($0))</m:SavedItemFolderId>"
-    } ?? ""
-    return envelope("""
-      <m:CreateItem MessageDisposition="\(xmlEscape(disposition))">
-        \(savedXml)
-        <m:Items>
-          <t:Message>
-            <t:Subject>\(xmlEscape(subject))</t:Subject>
-            <t:Body BodyType="Text">\(xmlEscape(body))</t:Body>
-            \(attachXml)
-            <t:ToRecipients>\(mailboxes(to))</t:ToRecipients>
-            \(ccXml)
-            \(bccXml)
-            \(senderXml)
-            <t:From><t:Mailbox><t:EmailAddress>\(xmlEscape(from))</t:EmailAddress></t:Mailbox></t:From>
-          </t:Message>
-        </m:Items>
-      </m:CreateItem>
-    """)
+    var savedXml = ""
+    if let folder = savedFolder {
+      savedXml = "<m:SavedItemFolderId>" + distinguishedFolder(folder) + "</m:SavedItemFolderId>"
+    }
+    let toXml = "<t:ToRecipients>" + mailboxes(to) + "</t:ToRecipients>"
+    let fromXml = "<t:From><t:Mailbox><t:EmailAddress>" + xmlEscape(from)
+      + "</t:EmailAddress></t:Mailbox></t:From>"
+    let subjectXml = "<t:Subject>" + xmlEscape(subject) + "</t:Subject>"
+    let bodyXml = "<t:Body BodyType=\"Text\">" + xmlEscape(body) + "</t:Body>"
+
+    var message = "<t:Message>"
+    message += subjectXml
+    message += bodyXml
+    message += attachXml
+    message += toXml
+    message += ccXml
+    message += bccXml
+    message += senderXml
+    message += fromXml
+    message += "</t:Message>"
+
+    var create = "<m:CreateItem MessageDisposition=\"" + xmlEscape(disposition) + "\">"
+    create += savedXml
+    create += "<m:Items>" + message + "</m:Items>"
+    create += "</m:CreateItem>"
+    return envelope(create)
   }
 
   static func setIsRead(itemId: String, isRead: Bool) -> String {
