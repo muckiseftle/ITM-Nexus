@@ -29,12 +29,34 @@ enum EwsSoap {
 
   // MARK: Request-Envelopes
 
-  static func syncFolderItems(folderId: String, syncState: String?) -> String {
+  /// Baut eine DistinguishedFolderId — optional mit `<t:Mailbox>`-Targeting für ein FREMDES
+  /// (freigegebenes) Postfach. Der Server erzwingt die Zugriffsrechte: ohne Delegation/Recht
+  /// antwortet EWS mit `ErrorAccessDenied` — clientseitig ist kein Umgehen möglich.
+  static func distinguishedFolder(_ id: String, mailbox: String? = nil) -> String {
+    if let mb = mailbox, !mb.isEmpty {
+      return "<t:DistinguishedFolderId Id=\"\(xmlEscape(id))\">"
+        + "<t:Mailbox><t:EmailAddress>\(xmlEscape(mb))</t:EmailAddress></t:Mailbox>"
+        + "</t:DistinguishedFolderId>"
+    }
+    return "<t:DistinguishedFolderId Id=\"\(xmlEscape(id))\"/>"
+  }
+
+  /// GetFolder als Zugriffs-/Berechtigungsprobe (für ein eigenes oder freigegebenes Postfach).
+  static func getFolder(distinguished: String, mailbox: String? = nil) -> String {
+    envelope("""
+      <m:GetFolder>
+        <m:FolderShape><t:BaseShape>Default</t:BaseShape></m:FolderShape>
+        <m:FolderIds>\(distinguishedFolder(distinguished, mailbox: mailbox))</m:FolderIds>
+      </m:GetFolder>
+    """)
+  }
+
+  static func syncFolderItems(folderId: String, syncState: String?, mailbox: String? = nil) -> String {
     let state = syncState.map { "<m:SyncState>\(xmlEscape($0))</m:SyncState>" } ?? ""
     return envelope("""
       <m:SyncFolderItems>
         <m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>
-        <m:SyncFolderId><t:DistinguishedFolderId Id="\(xmlEscape(folderId))"/></m:SyncFolderId>
+        <m:SyncFolderId>\(distinguishedFolder(folderId, mailbox: mailbox))</m:SyncFolderId>
         \(state)
         <m:MaxChangesReturned>100</m:MaxChangesReturned>
       </m:SyncFolderItems>
@@ -146,12 +168,14 @@ enum EwsSoap {
     """)
   }
 
-  static func findItem(folderId: String, query: String) -> String {
-    envelope("""
+  static func findItem(folderId: String, query: String, mailbox: String? = nil) -> String {
+    // QueryString nur ausgeben, wenn vorhanden (leeres AQS-Element kann EWS ablehnen).
+    let queryXml = query.isEmpty ? "" : "<m:QueryString>\(xmlEscape(query))</m:QueryString>"
+    return envelope("""
       <m:FindItem Traversal="Shallow">
         <m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>
-        <m:ParentFolderIds><t:DistinguishedFolderId Id="\(xmlEscape(folderId))"/></m:ParentFolderIds>
-        <m:QueryString>\(xmlEscape(query))</m:QueryString>
+        <m:ParentFolderIds>\(distinguishedFolder(folderId, mailbox: mailbox))</m:ParentFolderIds>
+        \(queryXml)
       </m:FindItem>
     """)
   }
@@ -186,13 +210,33 @@ enum EwsSoap {
     """)
   }
 
-  static func findFolders() -> String {
+  static func findFolders(mailbox: String? = nil) -> String {
     envelope("""
       <m:FindFolder Traversal="Deep">
         <m:FolderShape><t:BaseShape>Default</t:BaseShape></m:FolderShape>
-        <m:ParentFolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:ParentFolderIds>
+        <m:ParentFolderIds>\(distinguishedFolder("msgfolderroot", mailbox: mailbox))</m:ParentFolderIds>
       </m:FindFolder>
     """)
+  }
+
+  // MARK: EWS-Antwort-Status (für Berechtigungsprüfung)
+
+  /// Erste `<m:ResponseCode>` aus einer EWS-Antwort (z. B. „NoError", „ErrorAccessDenied").
+  static func responseCode(_ xml: Data) -> String? {
+    guard let s = String(data: xml, encoding: .utf8),
+      let open = s.range(of: "ResponseCode>")
+    else { return nil }
+    let rest = s[open.upperBound...]
+    guard let close = rest.range(of: "<") else { return nil }
+    return String(rest[..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// True, wenn die EWS-Antwort erfolgreich war (ResponseClass="Success" bzw. NoError).
+  static func isSuccess(_ xml: Data) -> Bool {
+    if let s = String(data: xml, encoding: .utf8), s.contains("ResponseClass=\"Success\"") {
+      return true
+    }
+    return responseCode(xml) == "NoError"
   }
 
   static func syncFolderItemsIdOnly(distinguished: String, syncState: String?) -> String {

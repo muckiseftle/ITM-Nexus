@@ -360,6 +360,42 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     return try Self.json(delta)
   }
 
+  // MARK: Freigegebene Postfächer (Delegation)
+
+  /// Prüft SERVERSEITIG, ob der angemeldete Nutzer auf das Postfach `owner` zugreifen darf
+  /// (GetFolder auf dessen Posteingang mit Mailbox-Targeting). Erfolg ⇒ JSON {email}. Ohne
+  /// Berechtigung antwortet EWS mit ErrorAccessDenied → „FORBIDDEN" (Hinzufügen wird abgelehnt).
+  /// So kann ein Nutzer nur Postfächer hinzufügen/öffnen, für die er tatsächlich berechtigt ist.
+  func verifySharedMailbox(owner: String) async throws -> String {
+    let mb = owner.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard mb.contains("@") else { throw NexusError.transport("INVALID: Ungültige Adresse") }
+    let xml = try await post(EwsSoap.getFolder(distinguished: "inbox", mailbox: mb))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("FORBIDDEN: \(EwsSoap.responseCode(xml) ?? "ErrorAccessDenied")")
+    }
+    return try Self.json(["email": mb])
+  }
+
+  /// Liest (nur lesend) Posteingangs-Nachrichten eines freigegebenen Postfachs. Der Server
+  /// erzwingt die Rechte erneut (ErrorAccessDenied ⇒ FORBIDDEN). Liefert JSON {messages:[…]}.
+  func syncSharedInbox(owner: String) async throws -> String {
+    let mb = owner.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard mb.contains("@") else { throw NexusError.transport("INVALID: Ungültige Adresse") }
+    let findXml = try await post(EwsSoap.findItem(folderId: "inbox", query: "", mailbox: mb))
+    guard EwsSoap.isSuccess(findXml) else {
+      throw NexusError.transport("FORBIDDEN: \(EwsSoap.responseCode(findXml) ?? "ErrorAccessDenied")")
+    }
+    let ids = Array(EwsSoap.extractItemIds(findXml).prefix(50))
+    var messages: [[String: Any]] = []
+    if !ids.isEmpty {
+      let itemsXml = try await post(EwsSoap.getItems(ids: ids))
+      messages = EwsSoap.parseItems(itemsXml).map {
+        Self.messageJson($0, accountId: "shared:\(mb)", folderId: "inbox")
+      }
+    }
+    return try Self.json(["messages": messages])
+  }
+
   func getAttachment(accountId: String, attachmentId: String) async throws -> String {
     let xml = try await post(EwsSoap.getAttachment(id: attachmentId))
     let a = EwsSoap.parseAttachmentContent(xml)

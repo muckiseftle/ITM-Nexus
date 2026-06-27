@@ -62,6 +62,12 @@ export interface NexusNativeModule {
   /** Lädt + dekodiert den Anhang nativ in eine Datei und öffnet das System-Teilen-Blatt (H9). */
   transportPresentAttachment(accountId: string, attachmentId: string): Promise<void>;
 
+  // — Freigegebene Postfächer (Delegation) — Rückgaben sind JSON-Strings —
+  /** Prüft serverseitig den Zugriff auf ein freigegebenes Postfach. Rejectet ohne Berechtigung. */
+  transportVerifySharedMailbox(accountId: string, owner: string): Promise<string>;
+  /** Liest (nur lesend) den Posteingang eines freigegebenen Postfachs. Rejectet ohne Berechtigung. */
+  transportSyncSharedInbox(accountId: string, owner: string): Promise<string>;
+
   // — Netzwerkstatus (für „Nur über WLAN") —
   /** Aktueller Verbindungstyp: 'wifi' | 'cellular' | 'none'. */
   networkStatus(): Promise<string>;

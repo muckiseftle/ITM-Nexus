@@ -38,12 +38,17 @@ interface Props {
   readonly onVerifyAppLock?: () => Promise<boolean>;
   /** Lokalen Daten-Cache leeren (DB) ohne Logout — neu laden via Sync. Nur Live-Modus. */
   readonly onClearCache?: () => Promise<void>;
-}
-
-interface Shared {
-  readonly id: string;
-  readonly name: string;
-  readonly addr: string;
+  /** Freigegebene Postfächer des aktiven Kontos (serverseitig berechtigungsgeprüft). */
+  readonly sharedMailboxes: readonly { readonly email: string; readonly displayName: string }[];
+  /** Postfach hinzufügen — prüft serverseitig die Berechtigung; wirft bei fehlendem Recht. */
+  readonly onAddSharedMailbox?: (email: string) => Promise<void>;
+  /** Freigegebenes Postfach wieder entfernen (nur lokale Liste). */
+  readonly onRemoveSharedMailbox?: (email: string) => void;
+  /** Freigegebenes Postfach öffnen (Nur-Lese-Ansicht des Posteingangs). */
+  readonly onOpenSharedMailbox?: (mailbox: {
+    readonly email: string;
+    readonly displayName: string;
+  }) => void;
 }
 
 type Sheet = 'none' | 'interval' | 'window' | 'password';
@@ -74,6 +79,10 @@ export function SettingsScreen({
   onChangePassword,
   onVerifyAppLock,
   onClearCache,
+  sharedMailboxes,
+  onAddSharedMailbox,
+  onRemoveSharedMailbox,
+  onOpenSharedMailbox,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -141,7 +150,6 @@ export function SettingsScreen({
   const [pw, setPw] = useState('');
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
-  const [shared, setShared] = useState<readonly Shared[]>([]);
 
   const openPasswordSheet = (): void => {
     setPw('');
@@ -169,22 +177,37 @@ export function SettingsScreen({
     }
   };
   const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
   const [newAddr, setNewAddr] = useState('');
+  const [sharedBusy, setSharedBusy] = useState(false);
+  const [sharedError, setSharedError] = useState<string | null>(null);
 
   const pinningActive = PINNING.policies.length > 0;
 
+  // Postfach hinzufügen: serverseitige Berechtigungsprüfung. Fehlt das Recht, kommt eine klare
+  // Meldung und es wird NICHTS hinzugefügt — der Nutzer kann nur Postfächer öffnen, auf die er
+  // tatsächlich berechtigt ist.
   const addShared = (): void => {
+    if (onAddSharedMailbox === undefined) return;
     const addr = newAddr.trim();
     if (addr.indexOf('@') < 1) {
-      Alert.alert('Postfach', 'Bitte eine gültige Adresse eingeben.');
+      setSharedError('Bitte eine gültige Postfach-Adresse eingeben.');
       return;
     }
-    const name = newName.trim().length > 0 ? newName.trim() : (addr.split('@')[0] ?? addr);
-    setShared((list) => [...list, { id: `s-${String(Date.now())}`, name, addr }]);
-    setNewName('');
-    setNewAddr('');
-    setAdding(false);
+    setSharedBusy(true);
+    setSharedError(null);
+    void onAddSharedMailbox(addr)
+      .then(() => {
+        setNewAddr('');
+        setAdding(false);
+      })
+      .catch((e: unknown) => {
+        setSharedError(
+          e instanceof Error && e.message.length > 0
+            ? e.message
+            : 'Postfach konnte nicht geprüft werden.',
+        );
+      })
+      .finally(() => setSharedBusy(false));
   };
 
   if (route === 'account') {
@@ -246,58 +269,79 @@ export function SettingsScreen({
             ) : null}
           </View>
 
-          <Text style={s.section}>Freigegebene Postfächer</Text>
-          <View style={s.card}>
-            {shared.map((m) => (
-              <Row t={t} key={m.id}>
-                <View style={s.grow}>
-                  <Text style={s.itemTitle}>{m.name}</Text>
-                  <Text style={s.itemSub}>{m.addr} · Freigegeben</Text>
-                </View>
-                <Pressable
-                  style={s.rm}
-                  onPress={() => setShared((list) => list.filter((x) => x.id !== m.id))}
-                >
-                  <Text style={s.rmText}>Entfernen</Text>
-                </Pressable>
-              </Row>
-            ))}
-            {adding ? (
-              <View style={s.addBlock}>
-                <TextInput
-                  style={s.input}
-                  placeholder="Name (optional)"
-                  placeholderTextColor={t.c.textSecondary}
-                  value={newName}
-                  onChangeText={setNewName}
-                />
-                <TextInput
-                  style={s.input}
-                  placeholder="postfach@firma.de"
-                  placeholderTextColor={t.c.textSecondary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                  value={newAddr}
-                  onChangeText={setNewAddr}
-                />
-                <View style={s.formRow}>
-                  <Pressable style={[s.action, s.actionPrimary]} onPress={addShared}>
-                    <Text style={s.actionPrimaryText}>Hinzufügen</Text>
+          {onAddSharedMailbox !== undefined ? (
+            <>
+              <Text style={s.section}>Freigegebene Postfächer</Text>
+              <View style={s.card}>
+                {sharedMailboxes.map((m) => (
+                  <Row t={t} key={m.email}>
+                    <Pressable style={s.grow} onPress={() => onOpenSharedMailbox?.(m)}>
+                      <Text style={s.itemTitle}>{m.displayName}</Text>
+                      <Text style={s.itemSub}>{m.email} · Nur lesen</Text>
+                    </Pressable>
+                    <Text style={s.chev}>›</Text>
+                    <Pressable style={s.rm} onPress={() => onRemoveSharedMailbox?.(m.email)}>
+                      <Text style={s.rmText}>Entfernen</Text>
+                    </Pressable>
+                  </Row>
+                ))}
+                {adding ? (
+                  <View style={s.addBlock}>
+                    <TextInput
+                      style={s.input}
+                      placeholder="postfach@firma.de"
+                      placeholderTextColor={t.c.textSecondary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="email-address"
+                      value={newAddr}
+                      editable={!sharedBusy}
+                      onChangeText={(v) => {
+                        setNewAddr(v);
+                        setSharedError(null);
+                      }}
+                    />
+                    {sharedError !== null ? <Text style={s.sheetError}>{sharedError}</Text> : null}
+                    <View style={s.formRow}>
+                      <Pressable
+                        style={[s.action, s.actionPrimary, sharedBusy ? s.actionDisabled : null]}
+                        disabled={sharedBusy}
+                        onPress={addShared}
+                      >
+                        <Text style={s.actionPrimaryText}>
+                          {sharedBusy ? 'Prüfe …' : 'Prüfen & hinzufügen'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={s.action}
+                        onPress={() => {
+                          setAdding(false);
+                          setSharedError(null);
+                        }}
+                      >
+                        <Text style={s.actionText}>Abbrechen</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={s.itemSub}>
+                      Es lassen sich nur Postfächer hinzufügen, für die du auf dem Server berechtigt
+                      bist — die Prüfung erfolgt direkt bei Exchange.
+                    </Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setAdding(true);
+                      setSharedError(null);
+                    }}
+                  >
+                    <Row t={t}>
+                      <Text style={s.addText}>＋ Freigegebenes Postfach hinzufügen</Text>
+                    </Row>
                   </Pressable>
-                  <Pressable style={s.action} onPress={() => setAdding(false)}>
-                    <Text style={s.actionText}>Abbrechen</Text>
-                  </Pressable>
-                </View>
+                )}
               </View>
-            ) : (
-              <Pressable onPress={() => setAdding(true)}>
-                <Row t={t}>
-                  <Text style={s.addText}>＋ Freigegebenes Postfach hinzufügen</Text>
-                </Row>
-              </Pressable>
-            )}
-          </View>
+            </>
+          ) : null}
 
           {onClearCache !== undefined ? (
             <>
@@ -531,6 +575,7 @@ function makeStyles(t: AppTheme) {
       flex: 1,
       padding: space.sm,
     },
+    actionDisabled: { opacity: 0.6 },
     actionPrimary: { backgroundColor: t.c.brandPrimary },
     actionPrimaryText: { color: t.onBrand, fontWeight: '700', textAlign: 'center' },
     actionText: { color: t.c.textPrimary, fontWeight: '600', textAlign: 'center' },

@@ -55,6 +55,11 @@ RCT_EXTERN_METHOD(transportGetAttachment:(NSString *)accountId attachmentId:(NSS
 RCT_EXTERN_METHOD(transportPresentAttachment:(NSString *)accountId attachmentId:(NSString *)attachmentId
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(transportVerifySharedMailbox:(NSString *)accountId owner:(NSString *)owner
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportSyncSharedInbox:(NSString *)accountId owner:(NSString *)owner
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(networkStatus:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(biometricAvailable:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)

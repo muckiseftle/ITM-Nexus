@@ -244,6 +244,24 @@ final class NexusModule: NSObject {
     }
   }
 
+  // MARK: Freigegebene Postfächer (Delegation)
+
+  @objc(transportVerifySharedMailbox:owner:resolver:rejecter:)
+  func transportVerifySharedMailbox(_ accountId: String, owner: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.verifySharedMailbox(owner: owner)) }
+      catch { reject("shared_verify", "\(error)", error) }
+    }
+  }
+
+  @objc(transportSyncSharedInbox:owner:resolver:rejecter:)
+  func transportSyncSharedInbox(_ accountId: String, owner: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.syncSharedInbox(owner: owner)) }
+      catch { reject("shared_inbox", "\(error)", error) }
+    }
+  }
+
   // MARK: Netzwerkstatus (für „Nur über WLAN")
 
   /// Aktueller Verbindungstyp: "wifi" | "cellular" | "none".

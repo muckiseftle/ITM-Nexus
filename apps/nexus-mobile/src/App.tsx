@@ -27,6 +27,7 @@ import { space } from '@nexus/ui-kit';
 import { APP_MODE, DEMO_ACCOUNT_ID, DEMO_INBOX_ID, PUSH_TIMEOUT_MS } from './config';
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
+import { type SharedMailbox } from './composition/sharedMailboxes';
 import { NexusNative } from './native/NexusNative';
 import {
   DEFAULT_SETTINGS,
@@ -48,6 +49,7 @@ import { ComposerScreen, type ComposerInitial } from './screens/ComposerScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { ContactsScreen } from './screens/ContactsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { SharedMailboxScreen } from './screens/SharedMailboxScreen';
 
 type Tab = 'mail' | 'calendar' | 'contacts' | 'settings';
 
@@ -137,6 +139,9 @@ function AppInner(): React.JSX.Element {
   // Multi-Account: Registry aller eingerichteten Konten + Flag für den „Konto hinzufügen"-Fluss.
   const [accounts, setAccounts] = useState<readonly StoredAccount[]>([]);
   const [addingAccount, setAddingAccount] = useState(false);
+  // Freigegebene Postfächer des aktiven Kontos + die aktuell geöffnete Nur-Lese-Ansicht.
+  const [sharedMailboxes, setSharedMailboxes] = useState<readonly SharedMailbox[]>([]);
+  const [sharedView, setSharedView] = useState<SharedMailbox | null>(null);
 
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
@@ -190,6 +195,25 @@ function AppInner(): React.JSX.Element {
       .listAccounts()
       .then((list) => {
         if (active) setAccounts(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [container, account]);
+
+  // Freigegebene Postfächer des aktiven Kontos laden (nur Live — Demo hat keine Delegation).
+  useEffect(() => {
+    const sm = container?.sharedMailboxes;
+    if (container === null || account === null || sm === undefined) {
+      setSharedMailboxes([]);
+      return;
+    }
+    let active = true;
+    void sm
+      .list(account)
+      .then((list) => {
+        if (active) setSharedMailboxes(list);
       })
       .catch(() => undefined);
     return () => {
@@ -379,6 +403,7 @@ function AppInner(): React.JSX.Element {
     setDrawerOpen(false);
     setFolders([]);
     setCurrentFolder(toFolderId(DEMO_INBOX_ID));
+    setSharedView(null);
   }, []);
 
   // Aktives Konto umschalten (Multi-Account): Zeiger + Transport-Restore, dann UI auf das
@@ -396,6 +421,7 @@ function AppInner(): React.JSX.Element {
       setDrawerOpen(false);
       setFolders([]);
       setCurrentFolder(toFolderId(DEMO_INBOX_ID));
+      setSharedView(null);
       setSyncTick((x) => x + 1);
     },
     [container],
@@ -445,6 +471,36 @@ function AppInner(): React.JSX.Element {
 
   // Konto hinzufügen: den Login-Fluss als Overlay öffnen (ohne das aktive Konto zu verwerfen).
   const addAccount = useCallback((): void => setAddingAccount(true), []);
+
+  // Freigegebenes Postfach hinzufügen — serverseitig berechtigungsgeprüft. Wirft bei fehlender
+  // Berechtigung (SharedMailboxError 'forbidden'); die SettingsScreen-UI zeigt die Meldung an.
+  const addSharedMailbox = useCallback(
+    async (email: string): Promise<void> => {
+      const c = container;
+      const sm = c?.sharedMailboxes;
+      if (c === null || account === null || sm === undefined) return;
+      await sm.add(account, email);
+      setSharedMailboxes(await sm.list(account));
+    },
+    [container, account],
+  );
+  const removeSharedMailbox = useCallback(
+    (email: string): void => {
+      const c = container;
+      const sm = c?.sharedMailboxes;
+      if (c === null || account === null || sm === undefined) return;
+      void sm
+        .remove(account, email)
+        .then(() => sm.list(account))
+        .then(setSharedMailboxes)
+        .catch(() => undefined);
+    },
+    [container, account],
+  );
+  const openSharedMailbox = useCallback(
+    (mailbox: SharedMailbox): void => setSharedView(mailbox),
+    [],
+  );
 
   // Abgelaufene/abgelehnte Anmeldung (401) → automatisch abmelden, zurück zum Login.
   const handleAuthExpired = useCallback((): void => {
@@ -502,6 +558,26 @@ function AppInner(): React.JSX.Element {
             setCurrentFolder(toFolderId(DEMO_INBOX_ID));
             setSyncTick((x) => x + 1);
           }}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // Nur-Lese-Ansicht eines freigegebenen Postfachs als Overlay über dem aktiven Konto.
+  if (sharedView !== null && account !== null) {
+    return (
+      <SafeAreaView style={s.root}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={t.mode === 'dark' ? 'light-content' : 'dark-content'}
+        />
+        <SharedMailboxScreen
+          container={container}
+          account={account}
+          email={sharedView.email}
+          displayName={sharedView.displayName}
+          onBack={() => setSharedView(null)}
         />
       </SafeAreaView>
     );
@@ -593,10 +669,18 @@ function AppInner(): React.JSX.Element {
             accounts={accountList}
             onSwitchAccount={(email) => void switchAccount(email)}
             onAddAccount={addAccount}
+            sharedMailboxes={sharedMailboxes}
             settings={settings}
             onChangeSettings={updateSettings}
             onSignOut={signOut}
             onRemoveAccount={removeAccount}
+            {...(container.sharedMailboxes !== undefined
+              ? {
+                  onAddSharedMailbox: addSharedMailbox,
+                  onRemoveSharedMailbox: removeSharedMailbox,
+                  onOpenSharedMailbox: openSharedMailbox,
+                }
+              : {})}
             {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
             {...(verifyAppLock !== undefined ? { onVerifyAppLock: verifyAppLock } : {})}
             {...(clearCache !== undefined ? { onClearCache: clearCache } : {})}

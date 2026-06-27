@@ -20,8 +20,15 @@ import {
   SearchService,
   SyncService,
 } from '@nexus/services';
-import { toFolderId, type AccountId } from '@nexus/domain';
+import { toFolderId, type AccountId, type MailMessage } from '@nexus/domain';
 import { NexusNative } from '../native/NexusNative';
+import {
+  addSharedMailbox,
+  listSharedMailboxes,
+  loadSharedInbox,
+  removeSharedMailbox,
+  type SharedMailbox,
+} from './sharedMailboxes';
 import {
   configurePinning,
   NativeMailTransport,
@@ -89,6 +96,17 @@ export interface AppContainer {
    * der verschlüsselten DB — andere Konten bleiben unberührt. Nur Live-Modus.
    */
   readonly purgeAccount?: (accountId: AccountId) => Promise<void>;
+  /**
+   * Freigegebene Postfächer (EWS-Delegation). Hinzufügen/Öffnen ist serverseitig
+   * berechtigungsgeprüft — ohne Recht wirft `add`/`loadInbox` einen SharedMailboxError
+   * ('forbidden'). Nur Live-Modus.
+   */
+  readonly sharedMailboxes?: {
+    readonly list: (account: AccountId) => Promise<readonly SharedMailbox[]>;
+    readonly add: (account: AccountId, email: string) => Promise<SharedMailbox>;
+    readonly remove: (account: AccountId, email: string) => Promise<void>;
+    readonly loadInbox: (account: AccountId, email: string) => Promise<readonly MailMessage[]>;
+  };
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -182,6 +200,12 @@ export async function createContainer(): Promise<AppContainer> {
         await NexusNative.dbExec(`DELETE FROM ${table} WHERE account_id = ?`, [accountId]);
       }
       await NexusNative.dbExec('DELETE FROM sync_cursors WHERE key LIKE ?', [`${accountId}:%`]);
+    },
+    sharedMailboxes: {
+      list: (account) => listSharedMailboxes(secureStore, account),
+      add: (account, email) => addSharedMailbox(secureStore, account, email),
+      remove: (account, email) => removeSharedMailbox(secureStore, account, email),
+      loadInbox: (account, email) => loadSharedInbox(account, email),
     },
   };
 }
