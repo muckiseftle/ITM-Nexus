@@ -22,6 +22,7 @@ import {
   type ReplyMode,
 } from '@nexus/domain';
 import { classifyError } from '@nexus/core-transport';
+import { type StoredAccount } from '@nexus/services';
 import { space } from '@nexus/ui-kit';
 import { APP_MODE, DEMO_ACCOUNT_ID, DEMO_INBOX_ID, PUSH_TIMEOUT_MS } from './config';
 import { createContainer, type AppContainer } from './composition/container';
@@ -133,6 +134,9 @@ function AppInner(): React.JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   // App-Sperre (Biometrie): aktiv, solange nicht entsperrt. Nur Live (natives Modul vorhanden).
   const [locked, setLocked] = useState(false);
+  // Multi-Account: Registry aller eingerichteten Konten + Flag für den „Konto hinzufügen"-Fluss.
+  const [accounts, setAccounts] = useState<readonly StoredAccount[]>([]);
+  const [addingAccount, setAddingAccount] = useState(false);
 
   useEffect(() => {
     const factory = APP_MODE === 'demo' ? createDemoContainer : createContainer;
@@ -176,6 +180,21 @@ function AppInner(): React.JSX.Element {
       .listFolders(account)
       .then(setFolders)
       .catch(() => undefined);
+  }, [container, account]);
+
+  // Multi-Account: Registry laden (und bei Konto-Wechsel/Hinzufügen/Entfernen aktualisieren).
+  useEffect(() => {
+    if (container === null) return;
+    let active = true;
+    void container.setup
+      .listAccounts()
+      .then((list) => {
+        if (active) setAccounts(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, [container, account]);
 
   // Hintergrund-Sync (Vordergrund-Intervall) + DirectPush-Long-Poll, sobald ein Konto offen ist.
@@ -329,6 +348,18 @@ function AppInner(): React.JSX.Element {
   );
 
   const accountName = useMemo(() => deriveName(accountEmail), [accountEmail]);
+  // Anzeige-Liste der Konten für die Einstellungen: Registry + sicherstellen, dass das aktive
+  // Konto enthalten ist (im Demo-Modus ist die Registry leer, das aktive Konto existiert dennoch).
+  const accountList = useMemo(() => {
+    const list = accounts.map((a) => ({ email: a.email, name: deriveName(a.email) }));
+    if (
+      account !== null &&
+      !list.some((a) => a.email.toLowerCase() === accountEmail.toLowerCase())
+    ) {
+      list.unshift({ email: accountEmail, name: accountName });
+    }
+    return list;
+  }, [accounts, account, accountEmail, accountName]);
   const folderName = useMemo(
     () => folders.find((f) => f.id === currentFolder)?.displayName ?? 'Posteingang',
     [folders, currentFolder],
@@ -350,23 +381,70 @@ function AppInner(): React.JSX.Element {
     setCurrentFolder(toFolderId(DEMO_INBOX_ID));
   }, []);
 
-  // Abmelden: Zugangsdaten verwerfen (kein Auto-Restore mehr), lokale Daten bleiben.
+  // Aktives Konto umschalten (Multi-Account): Zeiger + Transport-Restore, dann UI auf das
+  // Zielkonto umstellen. Die Datenschicht ist kontogetrennt → Screens zeigen automatisch die
+  // richtigen Daten; ein syncTick stößt das Neuladen an.
+  const switchAccount = useCallback(
+    async (email: string): Promise<void> => {
+      const c = container;
+      if (c === null) return;
+      await Promise.resolve(c.switchAccount?.(email)).catch(() => undefined);
+      setAccount(toAccountId(email.toLowerCase()));
+      setAccountEmail(email);
+      setTab('mail');
+      setMailRoute({ name: 'list' });
+      setDrawerOpen(false);
+      setFolders([]);
+      setCurrentFolder(toFolderId(DEMO_INBOX_ID));
+      setSyncTick((x) => x + 1);
+    },
+    [container],
+  );
+
+  // Abmelden: aktives Konto vergessen (kein Auto-Restore mehr). Gibt es weitere Konten, wird
+  // auf eines davon umgeschaltet; sonst zurück zum Login. Lokale Daten bleiben.
   const signOut = useCallback((): void => {
     const c = container;
-    if (c !== null && account !== null) {
-      void c.setup.forget(accountEmail).catch(() => undefined);
+    if (c === null || account === null) {
+      resetToLogin();
+      return;
     }
-    resetToLogin();
-  }, [container, account, accountEmail, resetToLogin]);
+    const current = accountEmail;
+    void (async () => {
+      await c.setup.forget(current).catch(() => undefined);
+      const remaining = await c.setup.listAccounts().catch(() => [] as readonly StoredAccount[]);
+      const [next] = remaining;
+      if (next !== undefined) await switchAccount(next.email);
+      else resetToLogin();
+    })();
+  }, [container, account, accountEmail, resetToLogin, switchAccount]);
 
-  // Konto entfernen: Krypto-Shredding ALLER lokalen Daten (DB-Key + Secrets) + Login.
+  // Konto entfernen: Daten DIESES Kontos löschen (DB-Inhalte) + Zugangsdaten vergessen. Gibt es
+  // weitere Konten, auf eines umschalten; ist es das letzte, alles per Krypto-Shredding löschen.
   const removeAccount = useCallback((): void => {
     const c = container;
-    if (c !== null) {
-      void c.secureStore.wipe().catch(() => undefined);
+    if (c === null || account === null) {
+      resetToLogin();
+      return;
     }
-    resetToLogin();
-  }, [container, resetToLogin]);
+    const current = accountEmail;
+    const currentId = account;
+    void (async () => {
+      await Promise.resolve(c.purgeAccount?.(currentId)).catch(() => undefined);
+      await c.setup.forget(current).catch(() => undefined);
+      const remaining = await c.setup.listAccounts().catch(() => [] as readonly StoredAccount[]);
+      const [next] = remaining;
+      if (next !== undefined) {
+        await switchAccount(next.email);
+      } else {
+        await c.secureStore.wipe().catch(() => undefined);
+        resetToLogin();
+      }
+    })();
+  }, [container, account, accountEmail, resetToLogin, switchAccount]);
+
+  // Konto hinzufügen: den Login-Fluss als Overlay öffnen (ohne das aktive Konto zu verwerfen).
+  const addAccount = useCallback((): void => setAddingAccount(true), []);
 
   // Abgelaufene/abgelehnte Anmeldung (401) → automatisch abmelden, zurück zum Login.
   const handleAuthExpired = useCallback((): void => {
@@ -402,6 +480,29 @@ function AppInner(): React.JSX.Element {
           barStyle={t.mode === 'dark' ? 'light-content' : 'dark-content'}
         />
         <LockScreen onUnlock={() => setLocked(false)} />
+      </SafeAreaView>
+    );
+  }
+
+  // Multi-Account: „Konto hinzufügen" zeigt den Login-Fluss als Overlay über dem aktiven Konto.
+  // Nach erfolgreichem Setup ist das neue Konto bereits aktiv (current-account + Transport).
+  if (addingAccount && account !== null) {
+    return (
+      <SafeAreaView style={s.root}>
+        <LoginScreen
+          container={container}
+          onCancel={() => setAddingAccount(false)}
+          onLoggedIn={(accountId, email) => {
+            setAddingAccount(false);
+            setAccount(accountId);
+            setAccountEmail(email);
+            setTab('mail');
+            setMailRoute({ name: 'list' });
+            setFolders([]);
+            setCurrentFolder(toFolderId(DEMO_INBOX_ID));
+            setSyncTick((x) => x + 1);
+          }}
+        />
       </SafeAreaView>
     );
   }
@@ -489,6 +590,9 @@ function AppInner(): React.JSX.Element {
           <SettingsScreen
             accountName={accountName}
             accountEmail={accountEmail}
+            accounts={accountList}
+            onSwitchAccount={(email) => void switchAccount(email)}
+            onAddAccount={addAccount}
             settings={settings}
             onChangeSettings={updateSettings}
             onSignOut={signOut}

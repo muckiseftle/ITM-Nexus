@@ -79,6 +79,16 @@ export interface AppContainer {
    * WLAN". Nur Live-Modus — im Demo-Modus undefiniert (Sync läuft dort uneingeschränkt).
    */
   readonly networkStatus?: () => Promise<string>;
+  /**
+   * Aktives Konto umschalten (Multi-Account): setzt den Zeiger und lädt die Transport-
+   * Zugangsdaten des Zielkontos aus dem Keychain neu. Nur Live-Modus.
+   */
+  readonly switchAccount?: (email: string) => Promise<void>;
+  /**
+   * Löscht alle lokalen Daten EINES Kontos (Mails/Ordner/Termine/Kontakte/Outbox/Cursor) aus
+   * der verschlüsselten DB — andere Konten bleiben unberührt. Nur Live-Modus.
+   */
+  readonly purgeAccount?: (accountId: AccountId) => Promise<void>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -122,6 +132,7 @@ export async function createContainer(): Promise<AppContainer> {
   const folders = new FolderSyncService(transport, folderStore);
   const calendar = new CalendarService(transport, calendarStore);
   const contacts = new ContactsService(transport, contactStore);
+  const setup = new AccountSetupService(transport, secureStore);
 
   return {
     secureStore,
@@ -129,7 +140,7 @@ export async function createContainer(): Promise<AppContainer> {
     calendarStore,
     contactStore,
     transport,
-    setup: new AccountSetupService(transport, secureStore),
+    setup,
     sync,
     outbox,
     search: new SearchService(mailStore, transport),
@@ -160,6 +171,18 @@ export async function createContainer(): Promise<AppContainer> {
       await NexusNative.dbInit();
     },
     networkStatus: () => NexusNative.networkStatus(),
+    switchAccount: async (email) => {
+      // Zeiger setzen, dann die Zugangsdaten des Zielkontos in den Transport laden (Keychain).
+      await setup.activate(email);
+      await NexusNative.transportRestore();
+    },
+    purgeAccount: async (accountId) => {
+      // Inhalts-Tabellen pro Konto leeren (Master-Key bleibt — andere Konten unberührt).
+      for (const table of ['messages', 'folders', 'events', 'contacts', 'outbox']) {
+        await NexusNative.dbExec(`DELETE FROM ${table} WHERE account_id = ?`, [accountId]);
+      }
+      await NexusNative.dbExec('DELETE FROM sync_cursors WHERE key LIKE ?', [`${accountId}:%`]);
+    },
   };
 }
 

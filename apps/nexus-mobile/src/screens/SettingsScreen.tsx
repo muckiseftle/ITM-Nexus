@@ -18,6 +18,12 @@ import { INTERVAL_OPTS, WINDOW_OPTS, labelOf, type AppSettings } from '../compos
 interface Props {
   readonly accountName: string;
   readonly accountEmail: string;
+  /** Alle eingerichteten Konten (Multi-Account). Das aktive ist über {@link accountEmail} bestimmt. */
+  readonly accounts: readonly { readonly email: string; readonly name: string }[];
+  /** Auf ein anderes Konto umschalten. */
+  readonly onSwitchAccount: (email: string) => void;
+  /** Neues Konto hinzufügen (öffnet den Login-Fluss). */
+  readonly onAddAccount: () => void;
   /** Persistente App-Einstellungen (Sync-Intervall/-Zeitraum). */
   readonly settings: AppSettings;
   /** Einstellungen ändern (sofort wirksam + persistiert). */
@@ -58,6 +64,9 @@ function initials(name: string): string {
 export function SettingsScreen({
   accountName,
   accountEmail,
+  accounts,
+  onSwitchAccount,
+  onAddAccount,
   settings,
   onChangeSettings,
   onSignOut,
@@ -119,7 +128,7 @@ export function SettingsScreen({
   const confirmRemove = (): void => {
     Alert.alert(
       'Konto entfernen',
-      'Konto und ALLE lokalen Daten unwiderruflich löschen (Krypto-Shredding)?',
+      `${accountEmail} entfernen? Lokale Daten dieses Kontos werden gelöscht; weitere Konten bleiben erhalten.`,
       [
         { text: 'Abbrechen', style: 'cancel' },
         { text: 'Entfernen', style: 'destructive', onPress: onRemoveAccount },
@@ -377,20 +386,28 @@ export function SettingsScreen({
 
       <Text style={s.section}>Konten</Text>
       <View style={s.card}>
-        <Pressable onPress={() => setRoute('account')}>
-          <Row t={t}>
-            <View style={s.miniAva}>
-              <Text style={s.miniAvaText}>{initials(accountName)}</Text>
-            </View>
-            <View style={s.grow}>
-              <Text style={s.itemTitle}>{accountName}</Text>
-              <Text style={s.itemSub}>{accountEmail}</Text>
-            </View>
-            <Text style={s.activeTag}>Aktiv</Text>
-            <Text style={s.chev}>›</Text>
-          </Row>
-        </Pressable>
-        <Pressable onPress={() => Alert.alert('Konto hinzufügen', 'Demo: nicht verfügbar.')}>
+        {accounts.map((a) => {
+          const isActive = a.email.toLowerCase() === accountEmail.toLowerCase();
+          return (
+            <Pressable
+              key={a.email}
+              onPress={() => (isActive ? setRoute('account') : onSwitchAccount(a.email))}
+            >
+              <Row t={t}>
+                <View style={s.miniAva}>
+                  <Text style={s.miniAvaText}>{initials(a.name)}</Text>
+                </View>
+                <View style={s.grow}>
+                  <Text style={s.itemTitle}>{a.name}</Text>
+                  <Text style={s.itemSub}>{a.email}</Text>
+                </View>
+                {isActive ? <Text style={s.activeTag}>Aktiv</Text> : null}
+                <Text style={s.chev}>›</Text>
+              </Row>
+            </Pressable>
+          );
+        })}
+        <Pressable onPress={onAddAccount}>
           <Row t={t}>
             <Text style={s.addText}>＋ Konto hinzufügen</Text>
           </Row>

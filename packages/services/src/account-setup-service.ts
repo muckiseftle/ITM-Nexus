@@ -9,6 +9,14 @@ const secretKey = (email: string): string => `nexus:secret:${email.toLowerCase()
 const metaKey = (email: string): string => `nexus:account:${email.toLowerCase()}`;
 /** Zeiger auf das aktive Konto — der native Hintergrund-Task liest ihn beim Cold Start. */
 const CURRENT_ACCOUNT_KEY = 'nexus:current-account';
+/** Registry aller eingerichteten Konten (JSON-Array kleingeschriebener E-Mail-Adressen). */
+const ACCOUNTS_KEY = 'nexus:accounts';
+
+/** Ein in der Registry hinterlegtes Konto (E-Mail + Anzeige-Benutzername aus den Metadaten). */
+export interface StoredAccount {
+  readonly email: string;
+  readonly username: string;
+}
 
 /**
  * Konto-Einrichtung: führt Autodiscover über den Transport-Port aus und legt das Secret
@@ -74,12 +82,65 @@ export class AccountSetupService {
       );
       // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).
       await this.secureStore.set(CURRENT_ACCOUNT_KEY, email.toLowerCase());
+      // In die Konten-Registry aufnehmen (Multi-Account-Liste/-Umschalter).
+      const emails = await this.readAccountEmails();
+      await this.writeAccountEmails([...emails, email.toLowerCase()]);
     } catch (e) {
       await this.forget(email).catch(() => undefined);
       throw e;
     }
 
     return discovered;
+  }
+
+  /** Liste der hinterlegten Konto-E-Mails (Registry). Leeres Array, wenn keine vorhanden. */
+  private async readAccountEmails(): Promise<string[]> {
+    const raw = await this.secureStore.get(ACCOUNTS_KEY);
+    if (raw === undefined) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async writeAccountEmails(emails: readonly string[]): Promise<void> {
+    await this.secureStore.set(ACCOUNTS_KEY, JSON.stringify([...new Set(emails)]));
+  }
+
+  /** Alle eingerichteten Konten (E-Mail + Anzeige-Benutzername aus den Metadaten). */
+  async listAccounts(): Promise<readonly StoredAccount[]> {
+    const emails = await this.readAccountEmails();
+    const accounts: StoredAccount[] = [];
+    for (const email of emails) {
+      let username = email;
+      try {
+        const metaRaw = await this.secureStore.get(metaKey(email));
+        if (metaRaw !== undefined) {
+          const meta = JSON.parse(metaRaw) as { username?: unknown };
+          if (typeof meta.username === 'string' && meta.username.length > 0)
+            username = meta.username;
+        }
+      } catch {
+        /* Metadaten unlesbar → E-Mail als Anzeigename verwenden */
+      }
+      accounts.push({ email, username });
+    }
+    return accounts;
+  }
+
+  /** E-Mail des aktiven Kontos (oder null). */
+  async currentAccount(): Promise<string | null> {
+    return (await this.secureStore.get(CURRENT_ACCOUNT_KEY)) ?? null;
+  }
+
+  /**
+   * Aktives Konto umschalten — setzt nur den Zeiger im SecureStore. Die Reaktivierung der
+   * Transport-Zugangsdaten (nativer Keychain-Restore) übernimmt der Container/Aufrufer.
+   */
+  async activate(email: string): Promise<void> {
+    await this.secureStore.set(CURRENT_ACCOUNT_KEY, email.toLowerCase());
   }
 
   /** Bequemer Gesamtablauf: Endpunkt ermitteln → Anmeldung prüfen → speichern. */
@@ -99,10 +160,22 @@ export class AccountSetupService {
     await this.secureStore.set(secretKey(email), newSecret);
   }
 
-  /** Sicheres Vergessen eines Kontos (Teil der Datenlöschungs-Strategie). */
+  /**
+   * Sicheres Vergessen eines Kontos (Teil der Datenlöschungs-Strategie). Entfernt Secret +
+   * Metadaten + Registry-Eintrag. War es das aktive Konto, rückt — falls vorhanden — ein
+   * verbleibendes Konto nach (Multi-Account), sonst wird der Aktiv-Zeiger gelöscht.
+   */
   async forget(email: string): Promise<void> {
-    await this.secureStore.delete(secretKey(email));
-    await this.secureStore.delete(metaKey(email));
-    await this.secureStore.delete(CURRENT_ACCOUNT_KEY);
+    const e = email.toLowerCase();
+    await this.secureStore.delete(secretKey(e));
+    await this.secureStore.delete(metaKey(e));
+    const remaining = (await this.readAccountEmails()).filter((a) => a !== e);
+    await this.writeAccountEmails(remaining);
+    const current = await this.secureStore.get(CURRENT_ACCOUNT_KEY);
+    if (current === e) {
+      const [next] = remaining;
+      if (next !== undefined) await this.secureStore.set(CURRENT_ACCOUNT_KEY, next);
+      else await this.secureStore.delete(CURRENT_ACCOUNT_KEY);
+    }
   }
 }

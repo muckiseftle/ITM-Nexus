@@ -110,4 +110,37 @@ describe('AccountSetupService', () => {
     expect(await secure.get('nexus:secret:user@example.com')).toBeUndefined();
     expect(await secure.get('nexus:account:user@example.com')).toBeUndefined();
   });
+
+  it('führt mehrere Konten in der Registry und kann das aktive umschalten', async () => {
+    const secure = new InMemorySecureStore();
+    const service = new AccountSetupService(new FakeMailTransport(), secure);
+
+    await service.setUp('a@example.com', credentials);
+    await service.setUp('b@example.com', credentials);
+
+    const accounts = await service.listAccounts();
+    expect(accounts.map((a) => a.email).sort()).toEqual(['a@example.com', 'b@example.com']);
+    // Zuletzt eingerichtetes Konto ist aktiv.
+    expect(await service.currentAccount()).toBe('b@example.com');
+
+    await service.activate('a@example.com');
+    expect(await service.currentAccount()).toBe('a@example.com');
+  });
+
+  it('forget des aktiven Kontos lässt ein verbleibendes Konto nachrücken', async () => {
+    const secure = new InMemorySecureStore();
+    const service = new AccountSetupService(new FakeMailTransport(), secure);
+
+    await service.setUp('a@example.com', credentials);
+    await service.setUp('b@example.com', credentials); // b ist aktiv
+    await service.forget('b@example.com');
+
+    expect((await service.listAccounts()).map((a) => a.email)).toEqual(['a@example.com']);
+    // Aktiv-Zeiger rückt auf das verbleibende Konto nach (kein toter Zeiger).
+    expect(await service.currentAccount()).toBe('a@example.com');
+
+    await service.forget('a@example.com');
+    expect(await service.listAccounts()).toEqual([]);
+    expect(await service.currentAccount()).toBeNull();
+  });
 });

@@ -17,6 +17,8 @@ import { useTheme, type AppTheme } from '../theme/ThemeContext';
 interface Props {
   readonly container: AppContainer;
   readonly onLoggedIn: (accountId: AccountId, email: string) => void;
+  /** Optional: bricht den Fluss ab (z. B. „Konto hinzufügen" über einem aktiven Konto). */
+  readonly onCancel?: () => void;
 }
 
 /** Schritte der Einrichtung: erst E-Mail, dann Anmeldung; manueller Server nur bei Bedarf. */
@@ -33,7 +35,7 @@ type Step = 'email' | 'credentials' | 'manual';
  * Erst wenn die Anmeldung serverseitig bestätigt ist, wird das Konto geöffnet. Das Secret
  * landet ausschließlich im SecureStore (Keychain).
  */
-export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element {
+export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
 
@@ -202,7 +204,12 @@ export function LoginScreen({ container, onLoggedIn }: Props): React.JSX.Element
 
   return (
     <View style={s.container}>
-      <Text style={s.title}>NEXUS</Text>
+      {onCancel !== undefined ? (
+        <Pressable style={s.cancelRow} onPress={onCancel} hitSlop={8}>
+          <Text style={s.cancelLink}>‹ Abbrechen</Text>
+        </Pressable>
+      ) : null}
+      <Text style={s.title}>{onCancel !== undefined ? 'Konto hinzufügen' : 'NEXUS'}</Text>
 
       {step === 'email' ? (
         <>
@@ -367,6 +374,8 @@ function makeStyles(t: AppTheme) {
     },
     buttonDisabled: { opacity: 0.6 },
     buttonText: { color: t.onBrand, fontSize: typography.body.size, fontWeight: '600' },
+    cancelLink: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    cancelRow: { marginBottom: space.md },
     changeLink: { color: t.c.brandPrimary, fontSize: typography.caption.size, fontWeight: '600' },
     container: {
       backgroundColor: t.c.bgCanvas,
