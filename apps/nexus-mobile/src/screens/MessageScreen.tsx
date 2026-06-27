@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
+  BodyType,
   hasFlag,
   isUnread,
   messageBodyToText,
@@ -18,6 +19,7 @@ import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { archive, moveToFolder, remove, setRead, toggleFlag } from '../actions/messageActions';
 import { OptionSheet, type SheetOption } from '../components/BottomSheet';
+import { HtmlBody } from '../components/HtmlBody';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 function formatSize(bytes: number): string {
@@ -51,9 +53,12 @@ export function MessageScreen({
   const [message, setMessage] = useState<MailMessage | undefined>(undefined);
   const [folders, setFolders] = useState<readonly MailFolder[]>([]);
   const [moveOpen, setMoveOpen] = useState(false);
+  // Externe Bilder pro geöffneter Nachricht erst nach ausdrücklicher Freigabe laden (Tracking-Schutz).
+  const [showRemoteImages, setShowRemoteImages] = useState(false);
 
   useEffect(() => {
     let active = true;
+    setShowRemoteImages(false);
     void container.mailStore
       .getMessage(account, messageId)
       .then((m) => {
@@ -146,7 +151,17 @@ export function MessageScreen({
             {message.categories.length > 0 ? (
               <Text style={s.categories}>{message.categories.join(' · ')}</Text>
             ) : null}
-            <Text style={s.body}>{messageBodyToText(message)}</Text>
+            {message.body?.type === BodyType.Html ? (
+              <View style={s.htmlWrap}>
+                <HtmlBody
+                  html={message.body.content}
+                  loadRemoteImages={showRemoteImages}
+                  onRequestRemoteImages={() => setShowRemoteImages(true)}
+                />
+              </View>
+            ) : (
+              <Text style={s.body}>{messageBodyToText(message)}</Text>
+            )}
 
             {message.attachments.length > 0 ? (
               <View style={s.attachWrap}>
@@ -299,6 +314,7 @@ function makeStyles(t: AppTheme) {
     },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
     content: { padding: space.md },
+    htmlWrap: { marginTop: space.md },
     meta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
     subject: { color: t.c.textPrimary, fontSize: typography.headline.size, fontWeight: '700' },
   });
