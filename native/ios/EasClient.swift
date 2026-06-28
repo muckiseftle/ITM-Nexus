@@ -341,13 +341,17 @@ final class EasClient {
   ) async throws -> (newKey: String, created: [[String: Any]], deleted: [String], hasMore: Bool) {
     let a = Wbxml.Page.airSync
     let b = Wbxml.Page.airSyncBase
-    // BodyPreference: gekürztes HTML (32 KB) — Speicher-schonend; voller Body beim Öffnen (Fetch).
+    // Options: FilterType=4 (2 Wochen) hält den Erst-Sync klein; BodyPreference Type=Text(1) mit
+    // 8 KB Truncation. Bewusst KONSERVATIV: Falls der Server die Truncation ignorieren würde,
+    // begrenzt schon der kleine WindowSize + FilterType den Speicher (Schutz vor Jetsam). Den
+    // vollen HTML-Body holt das Öffnen einzeln via ItemOperations.
     let options = Wbxml.el(
       a, "Options",
       [
+        Wbxml.txt(a, "FilterType", "4"),
         Wbxml.el(
           b, "BodyPreference",
-          [Wbxml.txt(b, "Type", "2"), Wbxml.txt(b, "TruncationSize", "32768")])
+          [Wbxml.txt(b, "Type", "1"), Wbxml.txt(b, "TruncationSize", "8192")]),
       ])
     let collection = Wbxml.el(
       a, "Collection",
@@ -356,7 +360,7 @@ final class EasClient {
         Wbxml.txt(a, "CollectionId", collectionId),
         Wbxml.txt(a, "DeletesAsMoves", "1"),
         Wbxml.txt(a, "GetChanges", "1"),
-        Wbxml.txt(a, "WindowSize", "50"),
+        Wbxml.txt(a, "WindowSize", "10"),
         options,
       ])
     let req = Wbxml.el(a, "Sync", [Wbxml.el(a, "Collections", [collection])])
