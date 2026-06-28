@@ -315,11 +315,23 @@ enum EwsSoap {
     var total = 0
   }
 
+  /// Startet einen XMLParser mit AKTIVIERTER Namespace-Verarbeitung.
+  ///
+  /// ENTSCHEIDEND: EWS-Antworten sind namespace-präfixiert (`<t:ItemId>`, `<t:Message>`, `<m:…>`).
+  /// Ohne `shouldProcessNamespaces = true` liefert `didStartElement` den QUALIFIZIERTEN Namen
+  /// („t:ItemId") statt des lokalen („ItemId"). Unsere Delegates vergleichen mit lokalen Namen —
+  /// ohne diese Option matcht NICHTS und der Sync liefert leere Ergebnisse (keine Mails/Kalender/
+  /// Kontakte/Ordner), obwohl die Anmeldung (HTTP 200) erfolgreich war.
+  private static func runParser(_ xml: Data, _ delegate: XMLParserDelegate) {
+    let xp = XMLParser(data: xml)
+    xp.shouldProcessNamespaces = true
+    xp.delegate = delegate
+    xp.parse()
+  }
+
   static func parseFolders(_ xml: Data) -> [ParsedFolder] {
     let parser = FolderParser()
-    let xmlParser = XMLParser(data: xml)
-    xmlParser.delegate = parser
-    xmlParser.parse()
+    runParser(xml, parser)
     return parser.folders
   }
 
@@ -334,9 +346,7 @@ enum EwsSoap {
 
   static func parseEvents(_ xml: Data) -> [ParsedEvent] {
     let parser = EventParser()
-    let xmlParser = XMLParser(data: xml)
-    xmlParser.delegate = parser
-    xmlParser.parse()
+    runParser(xml, parser)
     return parser.events
   }
 
@@ -348,9 +358,7 @@ enum EwsSoap {
 
   static func parseContacts(_ xml: Data) -> [ParsedContact] {
     let parser = ContactParser()
-    let xmlParser = XMLParser(data: xml)
-    xmlParser.delegate = parser
-    xmlParser.parse()
+    runParser(xml, parser)
     return parser.contacts
   }
 
@@ -403,45 +411,35 @@ enum EwsSoap {
   /// SyncFolderItems-Antwort inkl. `IncludesLastItemInRange`.
   static func parseSyncChanges(_ xml: Data) -> SyncChanges {
     let p = SyncChangesParser()
-    let xp = XMLParser(data: xml)
-    xp.delegate = p
-    xp.parse()
+    runParser(xml, p)
     return p.result
   }
 
   /// Extrahiert `ItemId`-Werte aus einer SyncFolderItems/FindItem-Antwort.
   static func extractItemIds(_ xml: Data) -> [String] {
     let parser = ItemIdParser()
-    let xmlParser = XMLParser(data: xml)
-    xmlParser.delegate = parser
-    xmlParser.parse()
+    runParser(xml, parser)
     return parser.ids
   }
 
   /// Liest den neuen `<m:SyncState>` aus einer SyncFolderItems-Antwort (Delta-Cursor).
   static func extractSyncState(_ xml: Data) -> String? {
     let p = SyncStateParser()
-    let xp = XMLParser(data: xml)
-    xp.delegate = p
-    xp.parse()
+    runParser(xml, p)
     return p.state.isEmpty ? nil : p.state
   }
 
   /// Parst eine GetAttachment-Antwort (erster FileAttachment-Inhalt als Base64).
   static func parseAttachmentContent(_ xml: Data) -> ParsedAttachmentContent {
     let p = AttachmentContentParser()
-    let xp = XMLParser(data: xml)
-    xp.delegate = p
-    xp.parse()
+    runParser(xml, p)
     return p.result
   }
 
   /// Parst eine GetItem-Antwort in `ParsedItem`s.
   static func parseItems(_ xml: Data) -> [ParsedItem] {
     let parser = ItemParser()
-    let xmlParser = XMLParser(data: xml)
-    xmlParser.delegate = parser
-    xmlParser.parse()
+    runParser(xml, parser)
     return parser.items
   }
 }

@@ -66,6 +66,9 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
   const [cert, setCert] = useState<CertInfo | null>(null);
   const [syncCalendar, setSyncCalendar] = useState(true);
   const [syncContacts, setSyncContacts] = useState(true);
+  // Protokollwahl: Standard EAS (false). „EWS bevorzugen" nur, wenn der Server EAS nicht
+  // unterstützt/zulässt — dann wird bewusst EWS verwendet.
+  const [preferEws, setPreferEws] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
@@ -119,6 +122,7 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
       scheme,
       ...(login.form === 'downlevel' && login.domain !== undefined ? { domain: login.domain } : {}),
       ...(manualEws !== undefined ? { manual: { ewsUrl: manualEws } } : {}),
+      ...(preferEws ? { preferEws: true } : {}),
     };
   };
 
@@ -145,7 +149,16 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
       const result = await container.setup.discover(email.trim(), credentials);
       await container.transport.verifyCredentials(email.trim());
       setDiscovered(result);
-      setResolvedServer(result.ewsUrl ?? credentials.manual?.ewsUrl ?? null);
+      const resolved = result.ewsUrl ?? credentials.manual?.ewsUrl ?? null;
+      setResolvedServer(resolved);
+      // Den ermittelten Host ins editierbare Feld übernehmen — so SIEHT der Nutzer den
+      // tatsächlich verwendeten Server und kann ihn bei Bedarf korrigieren (z. B. auf
+      // mail.firma.de, falls Autodiscover den nackten Domain-Host geliefert hat). Der Host
+      // gilt dann für EWS UND EAS gleichermaßen.
+      if (resolved !== null && serverUrl.trim().length === 0) {
+        const host = resolved.replace(/^[a-z]+:\/\//i, '').split('/')[0];
+        if (host !== undefined && host.length > 0) setServerUrl(host);
+      }
       setStep('server');
     } catch (e: unknown) {
       const info = classifyError(e);
@@ -436,6 +449,17 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
             s={s}
             t={t}
           />
+          <ToggleRow
+            label="EWS bevorzugen (Kompatibilitätsmodus)"
+            value={preferEws}
+            enabled
+            onChange={setPreferEws}
+            s={s}
+            t={t}
+          />
+          <Text style={s.hint}>
+            Standard ist ActiveSync (EAS). Nur aktivieren, wenn dein Server EAS nicht unterstützt.
+          </Text>
           {errorBox}
           <PrimaryButton label="Weiter" busy={busy} onPress={() => setStep('done')} s={s} t={t} />
         </>

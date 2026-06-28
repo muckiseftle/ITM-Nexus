@@ -78,6 +78,8 @@ export class AccountSetupService {
           ewsUrl: discovered.ewsUrl,
           easUrl: discovered.easUrl,
           manual: credentials.manual !== undefined,
+          // Protokollwahl: true ⇒ bewusst EWS (Kompatibilitätsmodus); sonst EAS bevorzugt.
+          preferEws: credentials.preferEws === true,
         }),
       );
       // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).

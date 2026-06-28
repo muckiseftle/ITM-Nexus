@@ -18,6 +18,8 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   private var _basicAuthHeader: String?
   private var _username: String?
   private var _password: String?
+  /// Konto-Wunsch „EWS bevorzugen" (Kompatibilitätsmodus). true ⇒ EAS für die Sitzung aus.
+  private var _preferEws = false
   private var _pinPolicies: [PinPolicy] = []
   /// Aus JS gesetzte Basis-Pins (statische Policy); die effektiven `_pinPolicies` sind Basis +
   /// TOFU-Pins (vom Nutzer beim ersten Login bestätigt, im Keychain persistiert).
@@ -54,6 +56,11 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   var ewsUrl: URL? {
     get { locked { _ewsUrl } }
     set { locked { _ewsUrl = newValue } }
+  }
+  /// „EWS bevorzugen" der aktuellen Sitzung (thread-safe).
+  var preferEwsSession: Bool {
+    get { locked { _preferEws } }
+    set { locked { _preferEws = newValue } }
   }
   /// Preemptiver Basic-Auth-Header (thread-safe).
   var basicAuthHeader: String? {
@@ -158,6 +165,8 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       throw NexusError.transport("Ungültige E-Mail-Adresse")
     }
     let creds = Self.jsonObject(credentialsJson) as? [String: Any]
+    // Protokollwahl der Einrichtung übernehmen (true ⇒ EAS für die Sitzung aus).
+    preferEwsSession = (creds?["preferEws"] as? Bool) ?? false
 
     // Login-Namen ggf. um die NetBIOS-Domäne ergänzen (NTLM erwartet DOMÄNE\Benutzer).
     if let user = creds?["username"] as? String, let secret = creds?["secret"] as? String {
@@ -651,7 +660,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   // (NexusCrashReporter) den exakten Grund fest.
   private static let easEnabled = true
   private func useEas(_ accountId: String) -> Bool {
-    Self.easEnabled && ewsUrl?.host != nil
+    Self.easEnabled && ewsUrl?.host != nil && !preferEwsSession
   }
 
   /// EAS-URL der aktuellen Sitzung (Standardpfad aus dem EWS-Host) — für `EasClient.ensureState`.
@@ -861,6 +870,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let domain = meta["domain"] as? String
     let effectiveUser =
       (domain != nil && !user.contains("\\") && !user.contains("@")) ? "\(domain!)\\\(user)" : user
+    preferEwsSession = (meta["preferEws"] as? Bool) ?? false
     ewsUrl = url
     setCredentials(
       username: effectiveUser, password: secret,

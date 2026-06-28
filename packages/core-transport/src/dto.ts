@@ -19,6 +19,11 @@ export interface Credentials {
   readonly domain?: string;
   /** Wenn gesetzt: Autodiscover überspringen und diese Serverkonfiguration verwenden. */
   readonly manual?: ManualServerConfig;
+  /**
+   * Wenn `true`: bewusst EWS statt EAS verwenden (Kompatibilitätsmodus). Standard `false`/
+   * undefiniert ⇒ EAS bevorzugt (mit automatischem EWS-Fallback bei Hardfailure).
+   */
+  readonly preferEws?: boolean;
 }
 
 /** Vom Server/Autodiscover gemeldete Fähigkeiten — steuert die Protokollwahl im Hybrid. */
