@@ -120,6 +120,15 @@ export interface AppContainer {
   readonly pickAttachment?: () => Promise<OutgoingAttachment | null>;
   /** Speichert die Nachricht als Entwurf (EWS SaveOnly → „Entwürfe"). Nur Live-Modus. */
   readonly saveDraft?: (account: AccountId, message: OutgoingMessage) => Promise<void>;
+  /**
+   * TOFU-Zertifikat: liest den Server-Fingerprint (SPKI) + Subject, OHNE etwas zu vertrauen.
+   * Für die Bestätigung im Setup-Wizard. Nur Live-Modus.
+   */
+  readonly probeCertificate?: (
+    host: string,
+  ) => Promise<{ host: string; spkiSha256: string; subject: string }>;
+  /** Speichert den vom Nutzer bestätigten SPKI-Pin (fail-closed ab dann). Nur Live-Modus. */
+  readonly trustCertificate?: (host: string, spki: string) => Promise<void>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -196,6 +205,13 @@ export async function createContainer(): Promise<AppContainer> {
       await NexusNative.transportScheduleBackgroundSync();
     },
     restoreSession: () => NexusNative.transportRestore(),
+    probeCertificate: async (host) =>
+      JSON.parse(await NexusNative.transportProbeCertificate(host)) as {
+        host: string;
+        spkiSha256: string;
+        subject: string;
+      },
+    trustCertificate: (host, spki) => NexusNative.transportTrustCertificate(host, spki),
     openAttachment: (accountId, attachmentId) =>
       NexusNative.transportPresentAttachment(accountId, attachmentId),
     clearCache: async () => {
