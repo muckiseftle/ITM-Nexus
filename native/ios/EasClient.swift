@@ -61,6 +61,32 @@ final class EasClient {
     return id
   }
 
+  /// Stellt den EAS-Zustand für ein Konto sicher (lazy): nach App-Neustart bzw. wenn nur über
+  /// EWS angemeldet wurde, ist `states` leer. Dann EAS-URL/DeviceId/Version ermitteln und einmal
+  /// provisionieren. Schlägt das fehl (Server ohne EAS), wirft es Hardfailure → EWS-Fallback.
+  @discardableResult
+  private func ensureState(_ accountId: String) async throws -> AccountState {
+    if let st = getState(accountId) { return st }
+    let urlStr = NexusTransport.shared.easUrlForSession()
+    guard !urlStr.isEmpty, let url = URL(string: urlStr) else {
+      throw EasError.hard("Keine EAS-URL für die Sitzung")
+    }
+    let deviceId = try Self.deviceId(for: accountId)
+    let user = NexusTransport.shared.sessionUsername() ?? accountId
+    let version = try await negotiate(url)
+    putState(
+      accountId,
+      AccountState(
+        easUrl: url, protocolVersion: version, policyKey: "0", deviceId: deviceId,
+        deviceType: "iPhone", user: user))
+    let key = try await provision(accountId)
+    setPolicyKey(accountId, key)
+    guard let st = getState(accountId) else {
+      throw EasError.hard("EAS-Status konnte nicht aufgebaut werden")
+    }
+    return st
+  }
+
   // MARK: OPTIONS-Versions-Negotiation
 
   private static let supportedVersions = ["14.1", "14.0", "12.1", "12.0"]
@@ -146,6 +172,7 @@ final class EasClient {
 
   /// Vollständiger Ordnerabgleich. Liefert das `SyncDelta<MailFolder>`-JSON wie der EWS-Pfad.
   func syncFolders(accountId: String, syncKey: String?) async throws -> String {
+    try await ensureState(accountId)
     let r = try await fetchFolders(accountId, syncKey: syncKey ?? "0")
     let json = NexusJSON.string(from: [
       "syncKey": r.newKey, "created": r.created, "updated": [], "deletedIds": r.deleted,
@@ -270,6 +297,7 @@ final class EasClient {
   // MARK: Sync (Code-Pages 0/2/17) → syncMessages
 
   func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
+    try await ensureState(accountId)
     let startKey: String
     if let sk = syncKey, !sk.isEmpty, sk != "0" {
       startKey = sk
@@ -378,6 +406,7 @@ final class EasClient {
   // MARK: getMessage (voller HTML-Body via ItemOperations:Fetch, Code-Page 20)
 
   func getMessage(accountId: String, messageId: String) async throws -> String {
+    try await ensureState(accountId)
     guard let collId = collection(forServerId: messageId) else {
       // Collection unbekannt (z. B. nach Neustart) → EWS-Fallback im Router.
       throw EasError.hard("Unbekannte Collection für \(messageId)")
@@ -408,6 +437,7 @@ final class EasClient {
   // MARK: SendMail (ComposeMail Page 21)
 
   func sendMessage(accountId: String, messageJson: String) async throws -> String {
+    try await ensureState(accountId)
     guard let msg = NexusJSON.object(from: messageJson) as? [String: Any] else {
       throw EasError.hard("Ungültige Nachricht")
     }
@@ -441,6 +471,7 @@ final class EasClient {
       let command = op["command"] as? [String: Any], let type = command["type"] as? String
     else { throw EasError.hard("Ungültige Operation") }
     let accountId = op["accountId"] as? String ?? ""
+    try await ensureState(accountId)
     let itemId = command["messageId"] as? String ?? ""
     let e = Wbxml.Page.email
 
@@ -561,6 +592,7 @@ final class EasClient {
   /// ändert. Liefert das `PingResult`-JSON (`{status, changedFolderIds}`). `folderIds` sind die
   /// CollectionIds (FolderSync-ServerIds).
   func ping(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws -> String {
+    try await ensureState(accountId)
     let folders = (NexusJSON.object(from: folderIdsJson) as? [String]) ?? []
     let heartbeat = Int(min(max(timeoutSec, 1), 600))
     let p = Wbxml.Page.ping
@@ -598,6 +630,7 @@ final class EasClient {
   // MARK: Anhang laden (ItemOperations:Fetch per FileReference)
 
   func getAttachment(accountId: String, attachmentId: String) async throws -> String {
+    try await ensureState(accountId)
     let io = Wbxml.Page.itemOperations
     let b = Wbxml.Page.airSyncBase
     let fetch = Wbxml.el(

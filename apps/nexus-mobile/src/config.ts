@@ -54,11 +54,15 @@ export const PUSH_TIMEOUT_MS = 300_000;
  * Bewusst als `: boolean` typisiert (nicht als Literal), damit die abhängigen Bedingungen nicht
  * als „immer falsch" gewertet werden.
  */
-export const ENABLE_DIRECT_PUSH: boolean = false;
+// DirectPush ist jetzt echtes EAS-`Ping` (Vordergrund-Long-Poll, KEIN Background-Entitlement
+// nötig) → aktiv. Zusätzlich pro Konto über die Einstellung „Push" gegated.
+export const ENABLE_DIRECT_PUSH: boolean = true;
+// BGTaskScheduler braucht ein Background-Entitlement, das Sideload-Builds fehlt → bleibt AUS
+// (auch sicher in NexusBGTasks @try/@catch gekapselt, liefe dort aber ohnehin nicht).
 export const ENABLE_BACKGROUND_TASKS: boolean = false;
 /**
- * DIAGNOSE: Automatischen Vordergrund-Sync nach dem Anmelden auslösen? Vorübergehend AUS, um
- * zu trennen, ob der Absturz im angemeldeten Zustand vom Sync (`runSync`) oder vom Rendern der
- * Haupt-UI kommt. Bleibt die App mit Konto offen ⇒ Sync war die Ursache.
+ * Automatischer Vordergrund-Sync direkt nach dem Anmelden („Mails beim Login"). Aktiv, seit der
+ * Sync schlank ist (EAS BodyPreference-Truncation bzw. EWS Text-Body + HTML-on-open) — kein
+ * Speicher-Spike/Jetsam mehr.
  */
-export const ENABLE_FOREGROUND_SYNC: boolean = false;
+export const ENABLE_FOREGROUND_SYNC: boolean = true;

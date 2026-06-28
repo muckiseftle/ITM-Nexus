@@ -621,10 +621,18 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     ])
   }
 
-  // MARK: EAS-Routing (Hardfailure ⇒ EWS-Fallback). Global aus (easEnabled=false) bis P3 —
-  // dann pro Konto über persistierte Meta (capabilities.activeSync + useEas).
-  private static let easEnabled = false
-  private func useEas(_ accountId: String) -> Bool { Self.easEnabled }
+  // MARK: EAS-Routing (Hardfailure ⇒ EWS-Fallback)
+  // EAS bevorzugt, sobald ein Konto geladen ist (bekannter Host). Unterstützt der Server kein EAS,
+  // wirft `ensureState`/`negotiate` einen Hardfailure → der Router fällt automatisch auf EWS zurück.
+  private static let easEnabled = true
+  private func useEas(_ accountId: String) -> Bool {
+    Self.easEnabled && ewsUrl?.host != nil
+  }
+
+  /// EAS-URL der aktuellen Sitzung (Standardpfad aus dem EWS-Host) — für `EasClient.ensureState`.
+  func easUrlForSession() -> String { Self.defaultEasUrl(forEwsHost: ewsUrl?.host) }
+  /// Benutzername der aktuellen Sitzung (EAS `User`-Parameter).
+  func sessionUsername() -> String? { currentUsername() }
 
   func syncFolders(accountId: String, syncKey: String?) async throws -> String {
     if useEas(accountId) {
