@@ -172,8 +172,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     if let manual = creds?["manual"] as? [String: Any],
       let manualEws = manual["ewsUrl"] as? String, let url = URL(string: manualEws) {
       ewsUrl = url
+      let manualEas = (manual["easUrl"] as? String) ?? Self.defaultEasUrl(forEwsHost: url.host)
       return try Self.json([
-        "emailAddress": email, "auth": scheme, "ewsUrl": manualEws,
+        "emailAddress": email, "auth": scheme, "ewsUrl": manualEws, "easUrl": manualEas,
         "capabilities": Self.defaultCapabilities,
       ])
     }
@@ -192,6 +193,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       ewsUrl = URL(string: ews)
       return try Self.json([
         "emailAddress": email, "auth": scheme, "ewsUrl": ews,
+        "easUrl": Self.defaultEasUrl(forEwsHost: URL(string: ews)?.host),
         "capabilities": Self.defaultCapabilities,
       ])
     }
@@ -208,6 +210,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         ewsUrl = url
         return try Self.json([
           "emailAddress": email, "auth": scheme, "ewsUrl": fb,
+          "easUrl": Self.defaultEasUrl(forEwsHost: url.host),
           "capabilities": Self.defaultCapabilities,
         ])
       }
@@ -696,6 +699,66 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     }
     guard code == 200 else { throw NexusError.transport("SERVER: EWS HTTP \(code)") }
     return data
+  }
+
+  // MARK: EAS (ActiveSync) — HTTP über dieselbe gepinnte URLSession
+
+  /// POSTet einen WBXML-Body an den EAS-Endpunkt. Reicht Command/User/DeviceId/DeviceType als
+  /// Query-Parameter und MS-ASProtocolVersion/X-MS-PolicyKey als Header. Nutzt `self.session`
+  /// (gleiche TLS/Pinning/Auth-Challenge wie EWS). Auth-Header (Basic) wird preemptiv gesetzt;
+  /// NTLM-only-Server werden über die Challenge abgewickelt.
+  func easPost(
+    _ url: URL, command: String, deviceId: String, deviceType: String, user: String,
+    protocolVersion: String, policyKey: String?, body: Data
+  ) async throws -> (Data, HTTPURLResponse) {
+    var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    comps?.queryItems = [
+      URLQueryItem(name: "Cmd", value: command),
+      URLQueryItem(name: "User", value: user),
+      URLQueryItem(name: "DeviceId", value: deviceId),
+      URLQueryItem(name: "DeviceType", value: deviceType),
+    ]
+    guard let full = comps?.url else { throw NexusError.transport("EAS-URL ungültig") }
+    var req = URLRequest(url: full)
+    req.httpMethod = "POST"
+    req.setValue("application/vnd.ms-sync.wbxml", forHTTPHeaderField: "Content-Type")
+    req.setValue(protocolVersion, forHTTPHeaderField: "MS-ASProtocolVersion")
+    if let auth = basicAuthHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
+    if let pk = policyKey, pk != "0" { req.setValue(pk, forHTTPHeaderField: "X-MS-PolicyKey") }
+    req.httpBody = body
+    let (data, response) = try await session.data(for: req)
+    guard let http = response as? HTTPURLResponse else {
+      throw NexusError.transport("EAS: keine HTTP-Antwort")
+    }
+    return (data, http)
+  }
+
+  /// OPTIONS-Anfrage zur EAS-Versions-/Command-Ermittlung (liefert die Antwort-Header).
+  func easOptions(_ url: URL) async throws -> HTTPURLResponse {
+    var req = URLRequest(url: url)
+    req.httpMethod = "OPTIONS"
+    req.timeoutInterval = 15
+    if let auth = basicAuthHeader { req.setValue(auth, forHTTPHeaderField: "Authorization") }
+    let (_, response) = try await session.data(for: req)
+    guard let http = response as? HTTPURLResponse else {
+      throw NexusError.transport("EAS: keine HTTP-Antwort (OPTIONS)")
+    }
+    return http
+  }
+
+  /// Standard-EAS-URL aus einem EWS-Host ableiten (`https://<host>/Microsoft-Server-ActiveSync`).
+  static func defaultEasUrl(forEwsHost host: String?) -> String {
+    guard let host = host, !host.isEmpty else { return "" }
+    return "https://\(host)/Microsoft-Server-ActiveSync"
+  }
+
+  /// Diagnose-Einstieg (dark): OPTIONS → Provision → FolderSync „0" gegen den EAS-Endpunkt.
+  /// `easUrl` leer ⇒ Standardpfad aus dem aktuellen EWS-Host. Nutzt die aktuelle Sitzung/Creds.
+  func easVerify(accountId: String, easUrl: String) async throws -> String {
+    let urlStr = easUrl.isEmpty ? Self.defaultEasUrl(forEwsHost: ewsUrl?.host) : easUrl
+    guard let url = URL(string: urlStr) else { throw NexusError.transport("EAS-URL ungültig") }
+    let user = currentUsername() ?? accountId
+    return try await EasClient.shared.verify(accountId: accountId, easUrl: url, user: user)
   }
 
   /// Mappt interne Ordner-IDs auf EWS-DistinguishedFolderId, sonst Durchreichen.

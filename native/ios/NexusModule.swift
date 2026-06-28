@@ -221,6 +221,16 @@ final class NexusModule: NSObject {
     }
   }
 
+  /// Diagnose (dark): EAS-Verbindung prüfen — OPTIONS → Provision → FolderSync „0".
+  /// `easUrl` leer ⇒ Standardpfad aus dem aktuellen EWS-Host. Liefert JSON mit Version/Status.
+  @objc(transportEasProbe:easUrl:resolver:rejecter:)
+  func transportEasProbe(_ accountId: String, easUrl: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.easVerify(accountId: accountId, easUrl: easUrl)) }
+      catch { reject("transport_eas_probe", "\(error)", error) }
+    }
+  }
+
   @objc(transportConfigurePinning:resolver:rejecter:)
   func transportConfigurePinning(_ pinsJson: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
     guarded("transport_pinning", reject) {

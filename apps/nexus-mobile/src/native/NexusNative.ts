@@ -59,6 +59,9 @@ export interface NexusNativeModule {
   transportSyncContacts(accountId: string, syncKey: string | null): Promise<string>;
   transportGetMessage(accountId: string, messageId: string): Promise<string>;
 
+  // — EAS (ActiveSync) Diagnose (dark): OPTIONS → Provision → FolderSync „0" —
+  transportEasProbe(accountId: string, easUrl: string): Promise<string>;
+
   // — TLS-Pinning & DirectPush —
   transportConfigurePinning(pinsJson: string): Promise<void>;
   transportPing(accountId: string, folderIdsJson: string, timeoutSec: number): Promise<string>;

@@ -48,6 +48,8 @@ RCT_EXTERN_METHOD(transportSyncContacts:(NSString *)accountId syncKey:(NSString 
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportGetMessage:(NSString *)accountId messageId:(NSString *)messageId
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportEasProbe:(NSString *)accountId easUrl:(NSString *)easUrl
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportConfigurePinning:(NSString *)pinsJson
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportPing:(NSString *)accountId folderIdsJson:(NSString *)folderIdsJson timeoutSec:(nonnull NSNumber *)timeoutSec
