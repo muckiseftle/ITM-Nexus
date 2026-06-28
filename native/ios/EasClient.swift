@@ -135,23 +135,82 @@ final class EasClient {
         deviceType: "iPhone", user: user))
     let finalKey = try await provision(accountId)
     setPolicyKey(accountId, finalKey)
-    let folderStatus = try await folderSyncProbe(accountId)
+    let folders = try await fetchFolders(accountId, syncKey: "0")  // Ende-zu-Ende
     let json = NexusJSON.string(from: [
-      "verified": true, "protocolVersion": version, "folderSyncStatus": folderStatus,
+      "verified": true, "protocolVersion": version, "folderCount": folders.created.count,
     ])
     return json ?? "{\"verified\":true}"
   }
 
-  /// Minimaler FolderSync (Key 0) als Ende-zu-Ende-Prüfung. Volle Ordner-Zuordnung folgt in P2.
-  private func folderSyncProbe(_ accountId: String) async throws -> String {
+  // MARK: FolderSync (Code-Page 7) → SyncDelta<MailFolder>
+
+  /// Vollständiger Ordnerabgleich. Liefert das `SyncDelta<MailFolder>`-JSON wie der EWS-Pfad.
+  func syncFolders(accountId: String, syncKey: String?) async throws -> String {
+    let r = try await fetchFolders(accountId, syncKey: syncKey ?? "0")
+    let json = NexusJSON.string(from: [
+      "syncKey": r.newKey, "created": r.created, "updated": [], "deletedIds": r.deleted,
+      "hasMore": false,
+    ])
+    return json ?? "{}"
+  }
+
+  private func fetchFolders(_ accountId: String, syncKey: String, retried: Bool = false)
+    async throws -> (newKey: String, created: [[String: Any]], deleted: [String])
+  {
     guard let st = getState(accountId) else { throw EasError.hard("EAS-Status fehlt") }
     let f = Wbxml.Page.folderHierarchy
-    let body = Wbxml.encode(Wbxml.el(f, "FolderSync", [Wbxml.txt(f, "SyncKey", "0")]))
+    let body = Wbxml.encode(Wbxml.el(f, "FolderSync", [Wbxml.txt(f, "SyncKey", syncKey)]))
     let (data, http) = try await NexusTransport.shared.easPost(
       st.easUrl, command: "FolderSync", deviceId: st.deviceId, deviceType: st.deviceType,
       user: st.user, protocolVersion: st.protocolVersion, policyKey: st.policyKey, body: body)
+    // 449 = Provisioning erforderlich → einmal provisionieren und neu versuchen.
+    if http.statusCode == 449, !retried {
+      _ = try await provision(accountId)
+      return try await fetchFolders(accountId, syncKey: syncKey, retried: true)
+    }
     guard http.statusCode == 200 else { throw EasError.hard("FolderSync HTTP \(http.statusCode)") }
     guard let root = try? Wbxml.decode(data) else { throw EasError.hard("FolderSync: WBXML defekt") }
-    return EasParse.text(root, page: f, tag: "Status") ?? "?"
+    let status = EasParse.text(root, page: f, tag: "Status") ?? "?"
+    // Status 9 = ungültiger FolderSyncKey → auf „0" zurücksetzen und einmal neu.
+    if status == "9", syncKey != "0", !retried {
+      return try await fetchFolders(accountId, syncKey: "0", retried: true)
+    }
+    guard status == "1" else { throw EasError.hard("FolderSync Status \(status)") }
+    let newKey = EasParse.text(root, page: f, tag: "SyncKey") ?? syncKey
+
+    var created: [[String: Any]] = []
+    var deleted: [String] = []
+    for node in EasParse.all(root, page: f, tag: "Add") + EasParse.all(root, page: f, tag: "Update") {
+      guard let serverId = EasParse.childText(node, page: f, tag: "ServerId") else { continue }
+      let name = EasParse.childText(node, page: f, tag: "DisplayName") ?? ""
+      let type = EasParse.childText(node, page: f, tag: "Type") ?? ""
+      created.append([
+        "id": serverId, "accountId": accountId, "displayName": name,
+        "type": Self.mapFolderType(type: type, name: name), "unreadCount": 0, "totalCount": 0,
+      ])
+    }
+    for node in EasParse.all(root, page: f, tag: "Delete") {
+      if let serverId = EasParse.childText(node, page: f, tag: "ServerId") { deleted.append(serverId) }
+    }
+    return (newKey, created, deleted)
+  }
+
+  /// EAS-Ordnertyp (numerisch) → NEXUS-Typ; sonst Namens-Heuristik (mehrsprachig).
+  private static func mapFolderType(type: String, name: String) -> String {
+    switch type {
+    case "2": return "inbox"
+    case "3": return "drafts"
+    case "4": return "deleted"
+    case "5": return "sent"
+    default: break
+    }
+    let n = name.lowercased()
+    if n.contains("junk") { return "junk" }
+    if n.contains("archiv") { return "archive" }
+    if n.contains("sent") || n.contains("gesendet") { return "sent" }
+    if n.contains("draft") || n.contains("entwür") { return "drafts" }
+    if n.contains("inbox") || n.contains("posteingang") { return "inbox" }
+    if n.contains("delete") || n.contains("gelösch") || n.contains("trash") { return "deleted" }
+    return "custom"
   }
 }

@@ -493,7 +493,22 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     ])
   }
 
+  // MARK: EAS-Routing (Hardfailure ⇒ EWS-Fallback). Global aus (easEnabled=false) bis P3 —
+  // dann pro Konto über persistierte Meta (capabilities.activeSync + useEas).
+  private static let easEnabled = false
+  private func useEas(_ accountId: String) -> Bool { Self.easEnabled }
+
   func syncFolders(accountId: String, syncKey: String?) async throws -> String {
+    if useEas(accountId) {
+      do { return try await EasClient.shared.syncFolders(accountId: accountId, syncKey: syncKey) }
+      catch let e as EasClient.EasError where e.isHard {
+        return try await syncFoldersEws(accountId: accountId, syncKey: syncKey)
+      }
+    }
+    return try await syncFoldersEws(accountId: accountId, syncKey: syncKey)
+  }
+
+  private func syncFoldersEws(accountId: String, syncKey: String?) async throws -> String {
     let xml = try await post(EwsSoap.findFolders())
     let created = EwsSoap.parseFolders(xml).map { (f) -> [String: Any] in
       [
