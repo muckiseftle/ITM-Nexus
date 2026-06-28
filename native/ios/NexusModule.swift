@@ -231,6 +231,26 @@ final class NexusModule: NSObject {
     }
   }
 
+  /// TOFU: Server-Zertifikat lesen (Fingerprint/Subject), ohne etwas zu vertrauen.
+  @objc(transportProbeCertificate:resolver:rejecter:)
+  func transportProbeCertificate(_ host: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.probeCertificate(host: host)) }
+      catch { reject("transport_cert_probe", "\(error)", error) }
+    }
+  }
+
+  /// TOFU: vom Nutzer bestätigten SPKI-Pin für den Host speichern + sofort aktivieren.
+  @objc(transportTrustCertificate:spki:resolver:rejecter:)
+  func transportTrustCertificate(_ host: String, spki: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do {
+        try await NexusTransport.shared.trustCertificate(host: host, spkiSha256: spki)
+        resolve(nil)
+      } catch { reject("transport_cert_trust", "\(error)", error) }
+    }
+  }
+
   @objc(transportConfigurePinning:resolver:rejecter:)
   func transportConfigurePinning(_ pinsJson: String, resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
     guarded("transport_pinning", reject) {

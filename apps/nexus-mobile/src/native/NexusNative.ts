@@ -64,6 +64,9 @@ export interface NexusNativeModule {
 
   // — TLS-Pinning & DirectPush —
   transportConfigurePinning(pinsJson: string): Promise<void>;
+  // TOFU: Zertifikat lesen (Fingerprint/Subject) bzw. vom Nutzer bestätigten Pin speichern.
+  transportProbeCertificate(host: string): Promise<string>;
+  transportTrustCertificate(host: string, spki: string): Promise<void>;
   transportPing(accountId: string, folderIdsJson: string, timeoutSec: number): Promise<string>;
 
   // — iOS-Hintergrund-Sync (BGTaskScheduler) —

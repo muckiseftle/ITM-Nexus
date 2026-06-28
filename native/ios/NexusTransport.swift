@@ -19,6 +19,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   private var _username: String?
   private var _password: String?
   private var _pinPolicies: [PinPolicy] = []
+  /// Aus JS gesetzte Basis-Pins (statische Policy); die effektiven `_pinPolicies` sind Basis +
+  /// TOFU-Pins (vom Nutzer beim ersten Login bestätigt, im Keychain persistiert).
+  private var _basePinPolicies: [PinPolicy] = []
   /// Pro Ordner gemerkte Signatur für DirectPush-Änderungserkennung (Ping/Long-Poll).
   private var _folderSignatures: [String: String] = [:]
 
@@ -274,22 +277,83 @@ final class NexusTransport: NSObject, URLSessionDelegate {
 
   // MARK: Certificate Pinning
 
-  /// Setzt die Pinning-Policy aus JSON (`{ policies: [{ host, pins, includeSubdomains }] }`).
+  /// Setzt die Basis-Pinning-Policy aus JSON (`{ policies: [{ host, pins, includeSubdomains }] }`)
+  /// und baut die effektiven Pins (Basis + TOFU) neu auf.
   func configurePinning(_ json: String) {
-    guard let obj = Self.jsonObject(json) as? [String: Any],
+    let parsed: [PinPolicy]
+    if let obj = Self.jsonObject(json) as? [String: Any],
       let policies = obj["policies"] as? [[String: Any]]
-    else {
-      locked { _pinPolicies = [] }
-      return
+    {
+      parsed = policies.compactMap { p in
+        guard let host = p["host"] as? String, let pins = p["pins"] as? [String], !pins.isEmpty
+        else { return nil }
+        return PinPolicy(
+          host: host.lowercased(), includeSubdomains: (p["includeSubdomains"] as? Bool) ?? false,
+          pins: pins)
+      }
+    } else {
+      parsed = []
     }
-    let parsed: [PinPolicy] = policies.compactMap { p in
-      guard let host = p["host"] as? String, let pins = p["pins"] as? [String], !pins.isEmpty
-      else { return nil }
-      return PinPolicy(
-        host: host.lowercased(), includeSubdomains: (p["includeSubdomains"] as? Bool) ?? false,
-        pins: pins)
+    locked { _basePinPolicies = parsed }
+    rebuildPinPolicies()
+  }
+
+  /// Effektive Pins = Basis-Policy + persistierte TOFU-Pins (Keychain).
+  private func rebuildPinPolicies() {
+    let base = locked { _basePinPolicies }
+    let tofu = Self.tofuPolicies()
+    locked { _pinPolicies = base + tofu }
+  }
+
+  // MARK: TOFU (Trust-on-First-Use) Zertifikat-Pinning
+
+  /// Liest das Server-Zertifikat (SPKI-Fingerprint + Subject), OHNE etwas zu vertrauen — der
+  /// Nutzer bestätigt es im Setup. Separate, kurzlebige URLSession (bricht in der Challenge ab).
+  func probeCertificate(host: String) async throws -> String {
+    let cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !cleanHost.isEmpty, let url = URL(string: "https://\(cleanHost)/") else {
+      throw NexusError.transport("Ungültiger Host")
     }
-    locked { _pinPolicies = parsed }
+    let probe = NexusCertProbe()
+    let cfg = URLSessionConfiguration.ephemeral
+    cfg.tlsMinimumSupportedProtocolVersion = .TLSv12
+    cfg.timeoutIntervalForRequest = 15
+    let probeSession = URLSession(configuration: cfg, delegate: probe, delegateQueue: nil)
+    defer { probeSession.invalidateAndCancel() }
+    var req = URLRequest(url: url)
+    req.httpMethod = "HEAD"
+    _ = try? await probeSession.data(for: req)  // bricht in der Challenge ab → Fehler ignorieren
+    guard !probe.spki.isEmpty else { throw NexusError.transport("Kein Zertifikat empfangen") }
+    return try Self.json(["host": cleanHost, "spkiSha256": probe.spki, "subject": probe.subject])
+  }
+
+  /// Speichert einen vom Nutzer bestätigten SPKI-Pin für den Host (Keychain) und aktiviert ihn
+  /// sofort. Ab dann wird TLS für diesen Host streng gegen den Pin geprüft (fail-closed).
+  func trustCertificate(host: String, spkiSha256: String) async throws {
+    let cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let pin = spkiSha256.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanHost.isEmpty, !pin.isEmpty else { throw NexusError.transport("Ungültige Pin-Daten") }
+    var store = Self.loadTofuStore()
+    var pins = store[cleanHost] ?? []
+    if !pins.contains(pin) { pins.append(pin) }
+    store[cleanHost] = pins
+    try Self.saveTofuStore(store)
+    rebuildPinPolicies()
+  }
+
+  private static func loadTofuStore() -> [String: [String]] {
+    guard let json = try? NexusSecureStore.get("nexus:tofu"), let raw = json,
+      let obj = Self.jsonObject(raw) as? [String: [String]]
+    else { return [:] }
+    return obj
+  }
+  private static func saveTofuStore(_ store: [String: [String]]) throws {
+    try NexusSecureStore.set("nexus:tofu", value: NexusJSON.string(from: store) ?? "{}")
+  }
+  private static func tofuPolicies() -> [PinPolicy] {
+    loadTofuStore().compactMap { (host, pins) in
+      pins.isEmpty ? nil : PinPolicy(host: host, includeSubdomains: false, pins: pins)
+    }
   }
 
   /// Findet die spezifischste passende Policy für `host` (exakt vor Subdomain-Wildcard).
