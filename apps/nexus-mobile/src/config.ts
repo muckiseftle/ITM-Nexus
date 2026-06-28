@@ -56,3 +56,9 @@ export const PUSH_TIMEOUT_MS = 300_000;
  */
 export const ENABLE_DIRECT_PUSH: boolean = false;
 export const ENABLE_BACKGROUND_TASKS: boolean = false;
+/**
+ * DIAGNOSE: Automatischen Vordergrund-Sync nach dem Anmelden auslösen? Vorübergehend AUS, um
+ * zu trennen, ob der Absturz im angemeldeten Zustand vom Sync (`runSync`) oder vom Rendern der
+ * Haupt-UI kommt. Bleibt die App mit Konto offen ⇒ Sync war die Ursache.
+ */
+export const ENABLE_FOREGROUND_SYNC: boolean = false;

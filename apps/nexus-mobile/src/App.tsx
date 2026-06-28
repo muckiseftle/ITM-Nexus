@@ -32,6 +32,7 @@ import {
   DEMO_INBOX_ID,
   ENABLE_BACKGROUND_TASKS,
   ENABLE_DIRECT_PUSH,
+  ENABLE_FOREGROUND_SYNC,
   PUSH_TIMEOUT_MS,
 } from './config';
 import { createContainer, type AppContainer } from './composition/container';
@@ -274,7 +275,10 @@ function AppInner(): React.JSX.Element {
 
     // Poll-Intervall aus den Einstellungen; `null` = Manuell → kein Timer (nur Push + Initial-Sync).
     const periodMs = syncIntervalMs(settings.syncInterval);
-    const interval = periodMs !== null ? setInterval(() => void runSync(), periodMs) : undefined;
+    const interval =
+      ENABLE_FOREGROUND_SYNC && periodMs !== null
+        ? setInterval(() => void runSync(), periodMs)
+        : undefined;
 
     // Abbrechbarer Backoff-Timer für die Push-Schleife (wird beim Unmount geleert).
     let pushDelayTimer: ReturnType<typeof setTimeout> | undefined;
@@ -316,8 +320,8 @@ function AppInner(): React.JSX.Element {
     // die kleine Verzögerung bleibt als Stabilitätspuffer, damit zuerst UI erscheint.
     const startTimer = setTimeout(() => {
       if (cancelled) return;
-      // KERN: Vordergrund-Sync lädt die Mails — läuft immer.
-      void runSync();
+      // KERN: Vordergrund-Sync lädt die Mails (DIAGNOSE: per Schalter abschaltbar).
+      if (ENABLE_FOREGROUND_SYNC) void runSync();
       // ENHANCEMENTS (Sideload: aus): BGTaskScheduler/DirectPush werfen ohne Background-
       // Entitlement NSExceptions, die die Bridge abstürzen lassen, und bringen dort keinen
       // Nutzen. Über die Stabilitäts-Schalter deaktiviert.
