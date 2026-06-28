@@ -15,7 +15,7 @@ import { radius, space, typography } from '@nexus/ui-kit';
 import { DEMO_INBOX_ID } from '../config';
 import type { AppContainer } from '../composition/container';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { GLYPH, IconButton } from '../components/Icon';
+import { IconButton } from '../components/Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
@@ -122,8 +122,8 @@ export function MailboxScreen({
     <View style={s.screen}>
       <ScreenHeader
         title={folderTitle}
-        left={<IconButton glyph={GLYPH.menu} color={t.c.textPrimary} onPress={onOpenDrawer} />}
-        right={<IconButton glyph={GLYPH.compose} color={t.c.brandPrimary} onPress={onCompose} />}
+        left={<IconButton name="menu" color={t.c.textPrimary} onPress={onOpenDrawer} />}
+        right={<IconButton name="edit" color={t.c.brandPrimary} onPress={onCompose} />}
         search={{ value: query, onChange: setQuery, placeholder: `In „${folderTitle}" suchen` }}
       />
       {syncError !== null ? (

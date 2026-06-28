@@ -3,6 +3,7 @@ import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } fr
 import { FolderType, type FolderId, type MailFolder } from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { SharedMailbox } from '../composition/sharedMailboxes';
+import { Icon, type IconName } from './Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
@@ -27,14 +28,14 @@ function initials(name: string): string {
     .join('');
 }
 
-const TYPE_GLYPH: Record<string, string> = {
-  [FolderType.Inbox]: '↧',
-  [FolderType.Sent]: '➤',
-  [FolderType.Drafts]: '✎',
-  [FolderType.Archive]: '▤',
-  [FolderType.Deleted]: '⌫',
-  [FolderType.Junk]: '⊘',
-  [FolderType.Outbox]: '↥',
+const TYPE_ICON: Record<string, IconName> = {
+  [FolderType.Inbox]: 'inbox',
+  [FolderType.Sent]: 'send',
+  [FolderType.Drafts]: 'edit',
+  [FolderType.Archive]: 'archive',
+  [FolderType.Deleted]: 'trash',
+  [FolderType.Junk]: 'shield',
+  [FolderType.Outbox]: 'send',
 };
 
 /**
@@ -80,7 +81,13 @@ export function FolderDrawer({
         ]}
         onPress={() => onSelectFolder(f.id)}
       >
-        <Text style={[s.fglyph, active ? s.fglyphActive : null]}>{TYPE_GLYPH[f.type] ?? '▸'}</Text>
+        <View style={s.fglyph}>
+          <Icon
+            name={TYPE_ICON[f.type] ?? 'folder'}
+            size={22}
+            color={active ? t.c.brandPrimary : t.c.textSecondary}
+          />
+        </View>
         <Text style={[s.fname, active ? s.fnameActive : null]} numberOfLines={1}>
           {f.displayName}
         </Text>
@@ -141,7 +148,9 @@ export function FolderDrawer({
                       style={({ pressed }) => [s.frow, pressed ? s.frowPressed : null]}
                       onPress={() => onOpenSharedMailbox?.(mb)}
                     >
-                      <Text style={s.fglyph}>{TYPE_GLYPH[FolderType.Inbox]}</Text>
+                      <View style={s.fglyph}>
+                        <Icon name="inbox" size={22} color={t.c.textSecondary} />
+                      </View>
                       <Text style={s.fname} numberOfLines={1}>
                         Posteingang
                       </Text>
@@ -171,13 +180,16 @@ function GroupHeader({
   readonly onPress: () => void;
   readonly s: Styles;
 }): React.JSX.Element {
+  const t = useTheme();
   return (
     <Pressable
       style={({ pressed }) => [s.group, pressed ? s.frowPressed : null]}
       onPress={onPress}
       hitSlop={4}
     >
-      <Text style={s.chevron}>{open ? '▾' : '▸'}</Text>
+      <View style={s.chevron}>
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={18} color={t.c.textSecondary} />
+      </View>
       <View style={s.groupBody}>
         <Text style={s.groupTitle} numberOfLines={1}>
           {title}
@@ -223,9 +235,8 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 2,
     },
     badgeText: { color: t.onBrand, fontSize: 12, fontWeight: '700', textAlign: 'center' },
-    chevron: { color: t.c.textSecondary, fontSize: typography.body.size, width: 18 },
-    fglyph: { color: t.c.textSecondary, fontSize: typography.headline.size, width: 28 },
-    fglyphActive: { color: t.c.brandPrimary },
+    chevron: { alignItems: 'center', width: 18 },
+    fglyph: { alignItems: 'center', width: 28 },
     fname: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
     fnameActive: { color: t.c.brandPrimary, fontWeight: '700' },
     frow: {

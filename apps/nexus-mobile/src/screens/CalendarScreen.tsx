@@ -4,7 +4,7 @@ import { type AccountId, type CalendarEvent } from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { GLYPH, IconButton } from '../components/Icon';
+import { IconButton } from '../components/Icon';
 import { paletteColor, useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
@@ -166,13 +166,13 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
       <>
         <View style={s.dayNav}>
           <IconButton
-            glyph={GLYPH.chevL}
+            name="chevronLeft"
             color={t.c.textPrimary}
             onPress={() => setSelected((d) => d - DAY)}
           />
           <Text style={s.dayNavTitle}>{longDay(selected)}</Text>
           <IconButton
-            glyph={GLYPH.chevR}
+            name="chevronRight"
             color={t.c.textPrimary}
             onPress={() => setSelected((d) => d + DAY)}
           />
@@ -302,7 +302,7 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
       <>
         <View style={s.dayNav}>
           <IconButton
-            glyph={GLYPH.chevL}
+            name="chevronLeft"
             color={t.c.textPrimary}
             onPress={() => {
               const n = new Date(selected);
@@ -312,7 +312,7 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
           />
           <Text style={s.dayNavTitle}>{monthName}</Text>
           <IconButton
-            glyph={GLYPH.chevR}
+            name="chevronRight"
             color={t.c.textPrimary}
             onPress={() => {
               const n = new Date(selected);
