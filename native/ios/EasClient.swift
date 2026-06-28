@@ -554,4 +554,44 @@ final class EasClient {
       }
     }
   }
+
+  // MARK: Ping / Direct Push (Code-Page 13)
+
+  /// Echtes EAS-Long-Poll: hält die Verbindung bis `HeartbeatInterval` oder bis sich ein Ordner
+  /// ändert. Liefert das `PingResult`-JSON (`{status, changedFolderIds}`). `folderIds` sind die
+  /// CollectionIds (FolderSync-ServerIds).
+  func ping(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws -> String {
+    let folders = (NexusJSON.object(from: folderIdsJson) as? [String]) ?? []
+    let heartbeat = Int(min(max(timeoutSec, 1), 600))
+    let p = Wbxml.Page.ping
+    var folderNodes: [Wbxml.Node] = []
+    for fid in folders {
+      folderNodes.append(
+        Wbxml.el(p, "Folder", [Wbxml.txt(p, "Id", fid), Wbxml.txt(p, "Class", "Email")]))
+    }
+    let req = Wbxml.el(
+      p, "Ping",
+      [Wbxml.txt(p, "HeartbeatInterval", String(heartbeat)), Wbxml.el(p, "Folders", folderNodes)])
+    let data = try await easSend(accountId, command: "Ping", body: Wbxml.encode(req))
+    let empty = [String]()
+    if data.isEmpty {
+      return NexusJSON.string(from: ["status": "timeout", "changedFolderIds": empty]) ?? "{}"
+    }
+    guard let root = try? Wbxml.decode(data) else {
+      return NexusJSON.string(from: ["status": "error", "changedFolderIds": empty]) ?? "{}"
+    }
+    let status = EasParse.text(root, page: p, tag: "Status") ?? "0"
+    switch status {
+    case "2":  // Änderungen — die Folder-Elemente enthalten die geänderten CollectionIds (als Text).
+      var changed: [String] = []
+      for f in EasParse.all(root, page: p, tag: "Folder") {
+        if let id = f.text, !id.isEmpty { changed.append(id) }
+      }
+      return NexusJSON.string(from: ["status": "changed", "changedFolderIds": changed]) ?? "{}"
+    case "1", "5", "7":  // Heartbeat abgelaufen / out-of-range / Hierarchie geändert → kein Item-Delta
+      return NexusJSON.string(from: ["status": "timeout", "changedFolderIds": empty]) ?? "{}"
+    default:
+      return NexusJSON.string(from: ["status": "error", "changedFolderIds": empty]) ?? "{}"
+    }
+  }
 }

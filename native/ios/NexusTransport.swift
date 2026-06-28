@@ -306,6 +306,21 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// `timeoutSec`. Änderungserkennung über eine FindItem-Signatur (Anzahl + neuste Item-ID).
   /// Der erste Aufruf setzt die Basislinie. (Vollwertiges EAS-Ping/WBXML folgt iterativ.)
   func ping(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws -> String {
+    if useEas(accountId) {
+      do {
+        return try await EasClient.shared.ping(
+          accountId: accountId, folderIdsJson: folderIdsJson, timeoutSec: timeoutSec)
+      } catch let e as EasClient.EasError where e.isHard {
+        return try await pingEws(accountId: accountId, folderIdsJson: folderIdsJson, timeoutSec: timeoutSec)
+      }
+    }
+    return try await pingEws(accountId: accountId, folderIdsJson: folderIdsJson, timeoutSec: timeoutSec)
+  }
+
+  /// EWS-Ersatz-Push (Long-Poll über FindItem-Signatur), Fallback wenn EAS-Ping nicht verfügbar.
+  private func pingEws(accountId: String, folderIdsJson: String, timeoutSec: Double) async throws
+    -> String
+  {
     let folders =
       (Self.jsonObject(folderIdsJson) as? [String]) ?? []
     // Timeout defensiv begrenzen (1 s … 10 min), damit ein fehlerhafter JS-Wert keinen
