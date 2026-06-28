@@ -6,11 +6,14 @@
 #import <fcntl.h>
 #import <os/log.h>
 
-// Absoluter Pfad der Log-Datei, einmalig bei install() gefüllt (C-String, damit der
-// Signal-Handler async-signal-sicher darauf zugreifen kann — kein Foundation im Handler).
-static char gLogPath[1024] = {0};
+// Signal-Handler-Pfad als C-String (async-signal-sicher — kein Foundation im Handler).
+static char gSignalLogPath[1024] = {0};
 static NSUncaughtExceptionHandler *gPreviousExceptionHandler = NULL;
 static volatile sig_atomic_t gHandlingSignal = 0;
+// Gesetzt, sobald der NSException-Handler den (reichhaltigen) Bericht geschrieben hat. Der
+// SIGABRT-Signal-Handler (abort() folgt jeder unbehandelten NSException) darf den Grund dann
+// NICHT mit einem mageren Signal-Bericht überschreiben.
+static volatile sig_atomic_t gExceptionWritten = 0;
 
 // Die Signale, die wir abfangen (Hermes-GC-Korruption ⇒ SIGSEGV/SIGBUS; abort ⇒ SIGABRT).
 static const int kHandledSignals[] = {SIGSEGV, SIGBUS, SIGABRT, SIGILL, SIGFPE, SIGTRAP};
@@ -19,12 +22,19 @@ static struct sigaction gPreviousActions[6];
 
 @implementation NexusCrashReporter
 
-+ (NSString *)logPath {
++ (NSString *)cachesDir {
   NSString *dir = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
-  if (dir == nil) {
-    dir = NSTemporaryDirectory();
-  }
-  return [dir stringByAppendingPathComponent:@"nexus-lastcrash.log"];
+  return dir ?: NSTemporaryDirectory();
+}
+
+// Reichhaltiger NSException-Bericht (Name + reason + Stack) — hat Vorrang.
++ (NSString *)exceptionLogPath {
+  return [[self cachesDir] stringByAppendingPathComponent:@"nexus-lastcrash-exc.log"];
+}
+
+// Signal-Bericht (Backtrace) — nur falls KEIN NSException-Bericht vorliegt.
++ (NSString *)signalLogPath {
+  return [[self cachesDir] stringByAppendingPathComponent:@"nexus-lastcrash-sig.log"];
 }
 
 // — Async-signal-sicherer Schreibhelfer (nur write(), keine Foundation/malloc) —
@@ -53,8 +63,11 @@ static void signalHandler(int signo, siginfo_t *info, void *context) {
   }
   gHandlingSignal = 1;
 
-  if (gLogPath[0] != '\0') {
-    int fd = open(gLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  // Nur schreiben, wenn NICHT bereits ein reichhaltiger NSException-Bericht existiert. Sonst
+  // würden wir den eigentlichen Grund (den abort() gerade ausgelöst hat) mit „SIGABRT"
+  // überschreiben — genau das passierte zuvor.
+  if (!gExceptionWritten && gSignalLogPath[0] != '\0') {
+    int fd = open(gSignalLogPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd >= 0) {
       rawWrite(fd, "NEXUS-CRASH\nkind=signal\nsignal=");
       const char *name = "?";
@@ -103,8 +116,12 @@ static void exceptionHandler(NSException *exception) {
     for (NSString *frame in exception.callStackSymbols) {
       [report appendFormat:@"%@\n", frame];
     }
-    NSString *path = [NexusCrashReporter logPath];
-    [report writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    [report writeToFile:[NexusCrashReporter exceptionLogPath]
+             atomically:YES
+               encoding:NSUTF8StringEncoding
+                  error:NULL];
+    // Markieren, BEVOR abort() den SIGABRT-Handler auslöst — sonst clobbert dieser den Grund.
+    gExceptionWritten = 1;
 
     // Live sichtbar (Console.app / idevicesyslog). Der Grund ist hier das Entscheidende.
     NSLog(@"🔴 NEXUS-CRASH (NSException) name=%@ reason=%@", exception.name, exception.reason);
@@ -122,8 +139,7 @@ static void exceptionHandler(NSException *exception) {
 + (void)install {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    NSString *path = [self logPath];
-    strncpy(gLogPath, path.fileSystemRepresentation, sizeof(gLogPath) - 1);
+    strncpy(gSignalLogPath, [self signalLogPath].fileSystemRepresentation, sizeof(gSignalLogPath) - 1);
 
     gPreviousExceptionHandler = NSGetUncaughtExceptionHandler();
     NSSetUncaughtExceptionHandler(&exceptionHandler);
@@ -131,12 +147,12 @@ static void exceptionHandler(NSException *exception) {
     struct sigaction action;
     memset(&action, 0, sizeof(action));
     sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    action.sa_flags = SA_SIGINFO;
     action.sa_sigaction = &signalHandler;
     for (int i = 0; i < kHandledSignalCount; i++) {
       sigaction(kHandledSignals[i], &action, &gPreviousActions[i]);
     }
-    NSLog(@"NEXUS-CRASH-Recorder aktiv (%@)", path);
+    NSLog(@"NEXUS-CRASH-Recorder aktiv");
   });
 }
 
@@ -145,20 +161,26 @@ static void exceptionHandler(NSException *exception) {
   [self install];
 }
 
-+ (NSString *)lastReport {
-  NSString *path = [self logPath];
++ (NSString *)readReportAtPath:(NSString *)path {
   if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
     return nil;
   }
   NSString *content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:NULL];
-  if (content.length == 0) {
-    return nil;
+  return content.length > 0 ? content : nil;
+}
+
++ (NSString *)lastReport {
+  // NSException-Bericht hat Vorrang (enthält den eigentlichen Grund); sonst Signal-Bericht.
+  NSString *exc = [self readReportAtPath:[self exceptionLogPath]];
+  if (exc != nil) {
+    return exc;
   }
-  return content;
+  return [self readReportAtPath:[self signalLogPath]];
 }
 
 + (void)clearReport {
-  [[NSFileManager defaultManager] removeItemAtPath:[self logPath] error:NULL];
+  [[NSFileManager defaultManager] removeItemAtPath:[self exceptionLogPath] error:NULL];
+  [[NSFileManager defaultManager] removeItemAtPath:[self signalLogPath] error:NULL];
 }
 
 @end
