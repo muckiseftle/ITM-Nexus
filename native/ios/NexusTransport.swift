@@ -342,8 +342,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   private static func loadTofuStore() -> [String: [String]] {
-    guard let json = try? NexusSecureStore.get("nexus:tofu"), let raw = json,
-      let obj = Self.jsonObject(raw) as? [String: [String]]
+    // `try?` flacht das optionale Ergebnis von get() bereits ab → `json` ist String (nicht String??).
+    guard let json = try? NexusSecureStore.get("nexus:tofu"),
+      let obj = Self.jsonObject(json) as? [String: [String]]
     else { return [:] }
     return obj
   }
