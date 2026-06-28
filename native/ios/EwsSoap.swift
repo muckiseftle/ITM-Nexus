@@ -80,6 +80,31 @@ enum EwsSoap {
     """)
   }
 
+  /// GetItem für den LISTEN-Sync: Metadaten + Anhang-Infos + **Text-Body** (KEIN HTML).
+  ///
+  /// Bewusst kein `BodyType=HTML`: HTML-Mails enthalten oft eingebettete Bilder als
+  /// `data:`-Base64 (mehrere MB je Mail). Beim Sync von bis zu 100 Mails würde dieser Inhalt
+  /// gleich mehrfach gleichzeitig im Speicher liegen (nativ → JSON-String → JS → erneut JSON →
+  /// SQLite) und iOS killt den Prozess (Jetsam, oft OHNE Crash-Report). Der Text-Body ist klein
+  /// und reicht für Vorschau/Liste/Suche. Der reiche HTML-Body wird erst beim Öffnen einzeln
+  /// nachgeladen (`getItems`/`getMessage`) und lokal gecacht.
+  static func getItemsSync(ids: [String]) -> String {
+    let refs = ids.map { "<t:ItemId Id=\"\(xmlEscape($0))\"/>" }.joined()
+    return envelope("""
+      <m:GetItem>
+        <m:ItemShape>
+          <t:BaseShape>Default</t:BaseShape>
+          <t:BodyType>Text</t:BodyType>
+          <t:AdditionalProperties>
+            <t:FieldURI FieldURI="item:Attachments"/>
+            <t:FieldURI FieldURI="item:HasAttachments"/>
+          </t:AdditionalProperties>
+        </m:ItemShape>
+        <m:ItemIds>\(refs)</m:ItemIds>
+      </m:GetItem>
+    """)
+  }
+
   /// GetItem nur mit Id-/Text-Shape (für Kalender/Kontakte, ohne HTML/Anhänge).
   static func getItemsLight(ids: [String]) -> String {
     let refs = ids.map { "<t:ItemId Id=\"\(xmlEscape($0))\"/>" }.joined()

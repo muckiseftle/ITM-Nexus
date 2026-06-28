@@ -64,10 +64,35 @@ export function MessageScreen({
       .then((m) => {
         if (!active) return;
         setMessage(m);
-        if (m !== undefined && isUnread(m)) {
+        if (m === undefined) return;
+        if (isUnread(m)) {
           void setRead(container, account, m)
             .then((updated) => {
-              if (active) setMessage(updated);
+              // Bereits nachgeladenen HTML-Body NICHT durch den (evtl. älteren) Text-Body ersetzen.
+              if (active) setMessage((prev) => (prev ? { ...updated, body: prev.body } : updated));
+            })
+            .catch(() => undefined);
+        }
+        // Der Listen-Sync hält Nachrichten schlank (nur Text-Vorschau), damit große HTML-Mails
+        // den Speicher beim Sync nicht sprengen. Den vollständigen HTML-Body daher erst beim
+        // Öffnen einzeln vom Server holen und lokal cachen (Offline + schnelleres Wieder-Öffnen).
+        // Schlägt der Abruf fehl (offline/Demo), bleibt die gecachte Text-Vorschau bestehen.
+        if (m.body?.type !== BodyType.Html) {
+          void container.transport
+            .getMessage(account, messageId)
+            .then((full) => {
+              if (!active || full.body === undefined) return;
+              const enriched: MailMessage = {
+                ...m,
+                body: full.body,
+                attachments: full.attachments.length > 0 ? full.attachments : m.attachments,
+              };
+              setMessage((prev) =>
+                prev === undefined
+                  ? enriched
+                  : { ...prev, body: enriched.body, attachments: enriched.attachments },
+              );
+              void container.mailStore.upsertMessages([enriched]).catch(() => undefined);
             })
             .catch(() => undefined);
         }

@@ -346,7 +346,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       // In Blöcken holen (große Erst-Syncs nicht in einen Riesen-Request packen).
       for chunk in stride(from: 0, to: changes.upsertIds.count, by: 20) {
         let slice = Array(changes.upsertIds[chunk..<min(chunk + 20, changes.upsertIds.count)])
-        let itemsXml = try await post(EwsSoap.getItems(ids: slice))
+        // Listen-Sync bewusst mit Text-Body (klein) — der HTML-Body wird beim Öffnen je Mail
+        // einzeln nachgeladen. Verhindert den Speicher-Spike/Jetsam bei HTML-Mails mit Inline-Bildern.
+        let itemsXml = try await post(EwsSoap.getItemsSync(ids: slice))
         created.append(
           contentsOf: EwsSoap.parseItems(itemsXml).map {
             Self.messageJson($0, accountId: accountId, folderId: folderId)
