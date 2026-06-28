@@ -423,13 +423,27 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
     if useEas(accountId) {
       do {
-        return try await EasClient.shared.syncMessages(
+        let result = try await EasClient.shared.syncMessages(
           accountId: accountId, folderId: folderId, syncKey: syncKey)
+        recordProtocol("eas", for: accountId)
+        return result
       } catch let e as EasClient.EasError where e.isHard {
+        recordProtocol("ews", for: accountId)  // EAS-Hardfailure → automatischer EWS-Fallback
         return try await syncMessagesEws(accountId: accountId, folderId: folderId, syncKey: syncKey)
       }
     }
+    recordProtocol("ews", for: accountId)
     return try await syncMessagesEws(accountId: accountId, folderId: folderId, syncKey: syncKey)
+  }
+
+  /// Zuletzt tatsächlich genutztes Mail-Protokoll je Konto (für die UI-Anzeige).
+  private var _lastProtocol: [String: String] = [:]
+  private func recordProtocol(_ proto: String, for accountId: String) {
+    locked { _lastProtocol[accountId] = proto }
+  }
+  /// „eas" | „ews" | „unbekannt" (noch kein Sync gelaufen).
+  func activeProtocol(accountId: String) async throws -> String {
+    try Self.json(["protocol": locked { _lastProtocol[accountId] } ?? "unbekannt"])
   }
 
   private func syncMessagesEws(accountId: String, folderId: String, syncKey: String?) async throws

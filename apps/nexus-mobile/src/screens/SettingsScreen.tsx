@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -38,6 +38,8 @@ interface Props {
   readonly onVerifyAppLock?: () => Promise<boolean>;
   /** Lokalen Daten-Cache leeren (DB) ohne Logout — neu laden via Sync. Nur Live-Modus. */
   readonly onClearCache?: () => Promise<void>;
+  /** Liefert das zuletzt genutzte Mail-Protokoll ('eas'|'ews'|'unbekannt'). Nur Live-Modus. */
+  readonly onGetProtocol?: () => Promise<string>;
   /** Freigegebene Postfächer des aktiven Kontos (serverseitig berechtigungsgeprüft). */
   readonly sharedMailboxes: readonly { readonly email: string; readonly displayName: string }[];
   /** Postfach hinzufügen — prüft serverseitig die Berechtigung; wirft bei fehlendem Recht. */
@@ -52,6 +54,12 @@ interface Props {
 }
 
 type Sheet = 'none' | 'interval' | 'window' | 'password';
+
+function protocolLabel(p: string): string {
+  if (p === 'eas') return 'EAS (ActiveSync)';
+  if (p === 'ews') return 'EWS';
+  return 'noch kein Sync';
+}
 
 function initials(name: string): string {
   return name
@@ -79,6 +87,7 @@ export function SettingsScreen({
   onChangePassword,
   onVerifyAppLock,
   onClearCache,
+  onGetProtocol,
   sharedMailboxes,
   onAddSharedMailbox,
   onRemoveSharedMailbox,
@@ -87,6 +96,21 @@ export function SettingsScreen({
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const [cacheBusy, setCacheBusy] = useState(false);
+  const [protocol, setProtocol] = useState<string | null>(null);
+
+  // Zuletzt genutztes Mail-Protokoll (EAS/EWS) für die Konto-Detailseite laden.
+  useEffect(() => {
+    if (onGetProtocol === undefined) return undefined;
+    let active = true;
+    void onGetProtocol()
+      .then((p) => {
+        if (active) setProtocol(p);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [onGetProtocol]);
 
   // Lokalen Cache leeren (mit Bestätigung): löscht nur die lokale DB, Login bleibt erhalten.
   const confirmClearCache = (): void => {
@@ -236,6 +260,15 @@ export function SettingsScreen({
               </View>
               <Text style={s.itemValue}>{accountEmail.split('@')[1] ?? '—'}</Text>
             </Row>
+            {protocol !== null ? (
+              <Row t={t}>
+                <View style={s.grow}>
+                  <Text style={s.itemTitle}>Protokoll</Text>
+                  <Text style={s.itemSub}>Aktiver Mail-Connector</Text>
+                </View>
+                <Text style={s.itemValue}>{protocolLabel(protocol)}</Text>
+              </Row>
+            ) : null}
             <Pressable onPress={() => setSheet('window')}>
               <Row t={t}>
                 <View style={s.grow}>

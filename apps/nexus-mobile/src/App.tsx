@@ -731,6 +731,9 @@ function AppInner(): React.JSX.Element {
             {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
             {...(verifyAppLock !== undefined ? { onVerifyAppLock: verifyAppLock } : {})}
             {...(clearCache !== undefined ? { onClearCache: clearCache } : {})}
+            {...(container.activeProtocol !== undefined && account !== null
+              ? { onGetProtocol: () => container.activeProtocol!(account) }
+              : {})}
           />
         )}
       </View>

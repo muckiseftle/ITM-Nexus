@@ -52,6 +52,8 @@ RCT_EXTERN_METHOD(transportEasProbe:(NSString *)accountId easUrl:(NSString *)eas
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportConfigurePinning:(NSString *)pinsJson
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportActiveProtocol:(NSString *)accountId
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportProbeCertificate:(NSString *)host
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportTrustCertificate:(NSString *)host spki:(NSString *)spki

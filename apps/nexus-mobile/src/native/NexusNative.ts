@@ -64,6 +64,8 @@ export interface NexusNativeModule {
 
   // — TLS-Pinning & DirectPush —
   transportConfigurePinning(pinsJson: string): Promise<void>;
+  // Zuletzt genutztes Mail-Protokoll des Kontos (eas/ews/unbekannt) für die UI-Anzeige.
+  transportActiveProtocol(accountId: string): Promise<string>;
   // TOFU: Zertifikat lesen (Fingerprint/Subject) bzw. vom Nutzer bestätigten Pin speichern.
   transportProbeCertificate(host: string): Promise<string>;
   transportTrustCertificate(host: string, spki: string): Promise<void>;

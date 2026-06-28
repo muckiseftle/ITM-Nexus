@@ -129,6 +129,8 @@ export interface AppContainer {
   ) => Promise<{ host: string; spkiSha256: string; subject: string }>;
   /** Speichert den vom Nutzer bestätigten SPKI-Pin (fail-closed ab dann). Nur Live-Modus. */
   readonly trustCertificate?: (host: string, spki: string) => Promise<void>;
+  /** Zuletzt tatsächlich genutztes Mail-Protokoll des Kontos ('eas' | 'ews' | 'unbekannt'). */
+  readonly activeProtocol?: (accountId: AccountId) => Promise<string>;
 }
 
 const systemClock: Clock = { now: () => Date.now() };
@@ -212,6 +214,9 @@ export async function createContainer(): Promise<AppContainer> {
         subject: string;
       },
     trustCertificate: (host, spki) => NexusNative.transportTrustCertificate(host, spki),
+    activeProtocol: async (accountId) =>
+      (JSON.parse(await NexusNative.transportActiveProtocol(accountId)) as { protocol: string })
+        .protocol,
     openAttachment: (accountId, attachmentId) =>
       NexusNative.transportPresentAttachment(accountId, attachmentId),
     clearCache: async () => {

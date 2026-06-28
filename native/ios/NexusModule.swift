@@ -231,6 +231,15 @@ final class NexusModule: NSObject {
     }
   }
 
+  /// Zuletzt genutztes Mail-Protokoll des Kontos („eas" | „ews" | „unbekannt") für die UI.
+  @objc(transportActiveProtocol:resolver:rejecter:)
+  func transportActiveProtocol(_ accountId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.activeProtocol(accountId: accountId)) }
+      catch { reject("transport_protocol", "\(error)", error) }
+    }
+  }
+
   /// TOFU: Server-Zertifikat lesen (Fingerprint/Subject), ohne etwas zu vertrauen.
   @objc(transportProbeCertificate:resolver:rejecter:)
   func transportProbeCertificate(_ host: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
