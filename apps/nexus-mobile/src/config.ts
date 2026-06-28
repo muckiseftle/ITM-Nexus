@@ -54,15 +54,16 @@ export const PUSH_TIMEOUT_MS = 300_000;
  * Bewusst als `: boolean` typisiert (nicht als Literal), damit die abhängigen Bedingungen nicht
  * als „immer falsch" gewertet werden.
  */
-// DirectPush ist jetzt echtes EAS-`Ping` (Vordergrund-Long-Poll, KEIN Background-Entitlement
-// nötig) → aktiv. Zusätzlich pro Konto über die Einstellung „Push" gegated.
-export const ENABLE_DIRECT_PUSH: boolean = true;
-// BGTaskScheduler braucht ein Background-Entitlement, das Sideload-Builds fehlt → bleibt AUS
-// (auch sicher in NexusBGTasks @try/@catch gekapselt, liefe dort aber ohnehin nicht).
+// DIAGNOSE: Push-Long-Poll nach dem Login vorerst AUS, bis der EAS-Pfad am Gerät verifiziert
+// ist (Crash direkt nach Login, keine .ips → Verdacht EAS-Sync/Push). Manuelles Pull-to-Refresh
+// testet EAS kontrolliert, ohne dass ein Crash beim Login die App aussperrt.
+export const ENABLE_DIRECT_PUSH: boolean = false;
+// BGTaskScheduler braucht ein Background-Entitlement, das Sideload-Builds fehlt → bleibt AUS.
 export const ENABLE_BACKGROUND_TASKS: boolean = false;
 /**
- * Automatischer Vordergrund-Sync direkt nach dem Anmelden („Mails beim Login"). Aktiv, seit der
- * Sync schlank ist (EAS BodyPreference-Truncation bzw. EWS Text-Body + HTML-on-open) — kein
- * Speicher-Spike/Jetsam mehr.
+ * DIAGNOSE: Automatischen Vordergrund-Sync nach dem Login vorerst AUS — so bleibt die App nach
+ * dem Anmelden stabil offen (zeigt den lokalen Cache), und der EAS-Sync wird gezielt per
+ * Pull-to-Refresh getestet. `easEnabled` (nativ) bleibt AN: manuelles Refresh nutzt EAS,
+ * fällt bei EAS-Hardfailure auf EWS zurück. Wieder AN, sobald EAS am Gerät bestätigt ist.
  */
 export const ENABLE_FOREGROUND_SYNC: boolean = true;
