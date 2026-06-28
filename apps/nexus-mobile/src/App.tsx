@@ -265,14 +265,9 @@ function AppInner(): React.JSX.Element {
       }
     };
 
-    // SOFORT einmal synchronisieren (nicht erst nach dem Intervall) → Mails erscheinen zügig.
-    void runSync();
     // Poll-Intervall aus den Einstellungen; `null` = Manuell → kein Timer (nur Push + Initial-Sync).
     const periodMs = syncIntervalMs(settings.syncInterval);
     const interval = periodMs !== null ? setInterval(() => void runSync(), periodMs) : undefined;
-
-    // iOS-Hintergrund-Sync nur planen, wenn der Schalter „Hintergrund-Aktualisierung" an ist.
-    if (settings.background) void c.scheduleBackgroundSync?.();
 
     // Abbrechbarer Backoff-Timer für die Push-Schleife (wird beim Unmount geleert).
     let pushDelayTimer: ReturnType<typeof setTimeout> | undefined;
@@ -309,11 +304,20 @@ function AppInner(): React.JSX.Element {
         }
       }
     };
-    // DirectPush-Long-Poll nur starten, wenn der Schalter „Push" an ist.
-    if (settings.push) void pushLoop();
+    // Den nativen Start-Burst (Initial-Sync, Hintergrund-Planung, Push-Long-Poll) NICHT sofort
+    // beim Mounten auslösen: erst kurz warten, damit der JS-/Rendering-Hochlauf (Fabric-Mount,
+    // Hermes-Warmup) nicht mit massiver nativer Last (Transport/DB/TLS) kollidiert — das hat sich
+    // als Start-Instabilität (Heap-Druck) gezeigt. Der Timer wird beim Unmount geleert.
+    const startTimer = setTimeout(() => {
+      if (cancelled) return;
+      void runSync();
+      if (settings.background) void c.scheduleBackgroundSync?.();
+      if (settings.push) void pushLoop();
+    }, 2500);
 
     return () => {
       cancelled = true;
+      clearTimeout(startTimer);
       if (interval !== undefined) clearInterval(interval);
       if (pushDelayTimer !== undefined) clearTimeout(pushDelayTimer);
     };
