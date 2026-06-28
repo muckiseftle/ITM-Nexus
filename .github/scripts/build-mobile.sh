@@ -69,8 +69,8 @@ npm install --legacy-peer-deps
 # daher müssen diese hier installiert werden, damit RN-Autolinking sie beim `pod install` findet.
 npm install --legacy-peer-deps \
   react-native-svg@^15.8.0 \
-  react-native-reanimated@~3.16.1 \
-  react-native-gesture-handler@^2.20.2
+  react-native-reanimated@~3.17.0 \
+  react-native-gesture-handler@^2.22.0
 echo "::endgroup::"
 
 echo "::group::Gebaute @nexus-Pakete in node_modules verlinken"
