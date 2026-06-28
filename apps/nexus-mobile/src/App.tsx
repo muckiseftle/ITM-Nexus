@@ -800,6 +800,15 @@ function AppInner(): React.JSX.Element {
           setMailRoute({ name: 'list' });
           setDrawerOpen(false);
         }}
+        sharedMailboxes={sharedMailboxes}
+        {...(container.sharedMailboxes !== undefined
+          ? {
+              onOpenSharedMailbox: (mb: SharedMailbox) => {
+                setDrawerOpen(false);
+                openSharedMailbox(mb);
+              },
+            }
+          : {})}
       />
     </SafeAreaView>
   );

@@ -50,6 +50,8 @@ export function MailboxScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [syncError, setSyncError] = useState<string | null>(null);
+  // Filter „nur ungelesene Mails" (Kopf-Umschalter).
+  const [unreadOnly, setUnreadOnly] = useState(false);
 
   const load = useCallback(async () => {
     const items = await container.mailStore.listFolder(account, folderId, 100, 0);
@@ -96,16 +98,18 @@ export function MailboxScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, folderId]);
 
+  const unreadCount = useMemo(() => messages.filter((m) => isUnread(m)).length, [messages]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (needle.length === 0) return messages;
-    return messages.filter(
+    const base = unreadOnly ? messages.filter((m) => isUnread(m)) : messages;
+    if (needle.length === 0) return base;
+    return base.filter(
       (m) =>
         m.subject.toLowerCase().includes(needle) ||
         m.preview.toLowerCase().includes(needle) ||
         (m.from.displayName ?? m.from.address).toLowerCase().includes(needle),
     );
-  }, [messages, query]);
+  }, [messages, query, unreadOnly]);
 
   const onOpen = useCallback((id: MessageId) => onOpenMessage(id), [onOpenMessage]);
   const keyExtractor = useCallback((m: MailMessage) => m.id, []);
@@ -129,6 +133,22 @@ export function MailboxScreen({
           </Text>
         </Pressable>
       ) : null}
+      <View style={s.filterBar}>
+        <Pressable
+          style={[s.filterChip, !unreadOnly ? s.filterChipActive : null]}
+          onPress={() => setUnreadOnly(false)}
+        >
+          <Text style={[s.filterChipText, !unreadOnly ? s.filterChipTextActive : null]}>Alle</Text>
+        </Pressable>
+        <Pressable
+          style={[s.filterChip, unreadOnly ? s.filterChipActive : null]}
+          onPress={() => setUnreadOnly(true)}
+        >
+          <Text style={[s.filterChipText, unreadOnly ? s.filterChipTextActive : null]}>
+            Ungelesen{unreadCount > 0 ? ` (${String(unreadCount)})` : ''}
+          </Text>
+        </Pressable>
+      </View>
       <FlatList
         data={filtered}
         keyExtractor={keyExtractor}
@@ -195,6 +215,25 @@ function makeStyles(t: AppTheme) {
       marginBottom: space.xs,
       padding: space.sm,
     },
+    filterBar: {
+      flexDirection: 'row',
+      gap: space.xs,
+      paddingHorizontal: space.md,
+      paddingBottom: space.xs,
+    },
+    filterChip: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.pill,
+      paddingHorizontal: space.md,
+      paddingVertical: 6,
+    },
+    filterChipActive: { backgroundColor: t.c.brandPrimary },
+    filterChipText: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      fontWeight: '600',
+    },
+    filterChipTextActive: { color: t.onBrand },
     bannerText: { color: t.c.danger, fontSize: typography.caption.size },
     dot: {
       backgroundColor: t.c.brandPrimary,

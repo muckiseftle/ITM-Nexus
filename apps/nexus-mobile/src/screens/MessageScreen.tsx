@@ -82,17 +82,19 @@ export function MessageScreen({
             .getMessage(account, messageId)
             .then((full) => {
               if (!active || full.body === undefined) return;
-              const enriched: MailMessage = {
-                ...m,
-                body: full.body,
-                attachments: full.attachments.length > 0 ? full.attachments : m.attachments,
-              };
-              setMessage((prev) =>
-                prev === undefined
-                  ? enriched
-                  : { ...prev, body: enriched.body, attachments: enriched.attachments },
-              );
-              void container.mailStore.upsertMessages([enriched]).catch(() => undefined);
+              // Auf den AKTUELLEN Stand mergen (prev), NICHT auf das vor `setRead` geladene `m` —
+              // sonst würde der gerade gesetzte Gelesen-Status wieder überschrieben (Mail bliebe
+              // „ungelesen" / verschwände aus dem Ungelesen-Filter). prev enthält den read-Flag.
+              setMessage((prev) => {
+                const base: MailMessage = prev ?? m;
+                const enriched: MailMessage = {
+                  ...base,
+                  body: full.body,
+                  attachments: full.attachments.length > 0 ? full.attachments : base.attachments,
+                };
+                void container.mailStore.upsertMessages([enriched]).catch(() => undefined);
+                return enriched;
+              });
             })
             .catch(() => undefined);
         }
