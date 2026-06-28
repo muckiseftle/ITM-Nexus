@@ -60,7 +60,12 @@ export function MailboxScreen({
     setRefreshing(true);
     setSyncError(null);
     try {
-      await container.sync.syncMessages(account, folderId);
+      // Delta-bewusst: den persistierten Cursor mitgeben (statt jedes Mal Voll-Sync) und den
+      // neuen Cursor zurückschreiben — konsistent mit dem Hintergrund-Sync.
+      const ck = `${account}:messages:${folderId}`;
+      const cursor = await container.cursors.getCursor(ck);
+      const res = await container.sync.syncMessages(account, folderId, cursor);
+      if (res.syncKey !== '') await container.cursors.setCursor(ck, res.syncKey);
       await container.outbox.drain(account);
       await load();
     } catch (e: unknown) {

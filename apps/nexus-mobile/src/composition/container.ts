@@ -6,6 +6,7 @@ import type {
   MailTransport,
   PushTransport,
   SecureStore,
+  SyncCursorStore,
   SyncTarget,
 } from '@nexus/core-transport';
 import {
@@ -59,6 +60,8 @@ export interface AppContainer {
   readonly transport: MailTransport;
   readonly setup: AccountSetupService;
   readonly sync: SyncService;
+  /** Persistente Sync-Cursor (für delta-bewusstes Pull-to-Refresh). */
+  readonly cursors: SyncCursorStore;
   readonly outbox: OutboxProcessor;
   readonly search: SearchService;
   readonly compose: ComposeService;
@@ -170,6 +173,7 @@ export async function createContainer(): Promise<AppContainer> {
     transport,
     setup,
     sync,
+    cursors,
     outbox,
     search: new SearchService(mailStore, transport),
     compose: new ComposeService(outbox, systemClock),

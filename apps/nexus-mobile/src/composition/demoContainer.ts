@@ -18,6 +18,7 @@ const demoClock: Clock = { now: () => Date.now() };
 export async function createDemoContainer(): Promise<AppContainer> {
   const c = createInMemoryContainer();
   await seedDemoData(c);
+  const cursors = new InMemorySyncCursorStore();
 
   return {
     secureStore: c.secureStore,
@@ -27,6 +28,7 @@ export async function createDemoContainer(): Promise<AppContainer> {
     transport: c.transport,
     setup: c.setup,
     sync: c.sync,
+    cursors,
     outbox: c.outbox,
     search: c.search,
     compose: c.compose,
@@ -42,7 +44,7 @@ export async function createDemoContainer(): Promise<AppContainer> {
       c.outbox,
       demoClock,
       defaultSyncTargets(),
-      new InMemorySyncCursorStore(),
+      cursors,
     ),
   };
 }

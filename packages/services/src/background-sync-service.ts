@@ -73,16 +73,30 @@ export class BackgroundSyncService {
     return result.changedFolderIds;
   }
 
+  /** Obergrenze für die Paging-Schleife (Schutz gegen Endlos-Sync bei fehlerhaftem `hasMore`). */
+  private static readonly MAX_SYNC_PAGES = 20;
+
   /** Führt ein Sync-Ziel inkrementell aus (lädt vorigen Cursor, speichert den neuen). */
   private async runTarget(accountId: AccountId, target: SyncTarget): Promise<void> {
     const ck = this.cursorKey(accountId, targetKey(target));
     const cursor = await this.cursors.getCursor(ck);
+
+    if (target.kind === 'messages') {
+      if (target.folderId === undefined) return;
+      // Paging: weiterblättern, solange der Server `hasMore` meldet — nach jeder Seite den
+      // neuen Cursor persistieren (Fortschritt überlebt Abbrüche). Begrenzt gegen Endlosläufe.
+      let next = cursor;
+      for (let page = 0; page < BackgroundSyncService.MAX_SYNC_PAGES; page += 1) {
+        const res = await this.messages.syncMessages(accountId, target.folderId, next);
+        if (res.syncKey !== '') await this.cursors.setCursor(ck, res.syncKey);
+        if (!res.hasMore) break;
+        next = res.syncKey;
+      }
+      return;
+    }
+
     let syncKey: string | undefined;
     switch (target.kind) {
-      case 'messages':
-        if (target.folderId === undefined) return;
-        syncKey = (await this.messages.syncMessages(accountId, target.folderId, cursor)).syncKey;
-        break;
       case 'folders':
         syncKey = (await this.folders.sync(accountId, cursor)).syncKey;
         break;
