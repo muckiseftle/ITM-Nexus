@@ -193,12 +193,9 @@ final class NexusDatabase {
     let flags = (msg["flags"] as? [String]) ?? []
     let isRead = flags.contains("read") ? 1 : 0
     let flagged = flags.contains("flagged") ? 1 : 0
-    // JSONSerialization kann eine NSException werfen (NaN/ungültiger Typ) — abfangen.
-    var payloadData = Data()
-    _ = NexusExceptionGuard.run {
-      payloadData = (try? JSONSerialization.data(withJSONObject: msg)) ?? Data()
-    }
-    let payload = String(decoding: payloadData, as: UTF8.self)
+    // Serialisierung über NexusJSON (reines Obj-C @try/@catch) — JSONSerialization kann sonst
+    // eine NSException werfen (NaN/ungültiger Typ), die über Swift-Frames nicht fangbar ist.
+    let payload = NexusJSON.string(fromObject: msg) ?? "{}"
     try queue.sync {
       try _exec(
         """
@@ -229,12 +226,10 @@ final class NexusDatabase {
   /// ein JSON-Array aus `{ "sql": "...", "params": [...] }`. Spart N fsyncs und N Bridge-Übergänge
   /// beim Massen-Upsert. Bei einem Fehler wird die gesamte Transaktion zurückgerollt (atomar).
   func execBatch(json: String) throws {
-    var parsed: Any?
-    let ex = NexusExceptionGuard.run {
-      parsed = try? JSONSerialization.jsonObject(with: Data(json.utf8))
-    }
-    if ex != nil { throw NexusError.database("execBatch: JSON ungültig") }
-    guard let statements = parsed as? [[String: Any]] else {
+    // Parsen über NexusJSON (reines Obj-C @try/@catch) — siehe NexusJSON.h.
+    guard let parsed = NexusJSON.object(fromString: json),
+      let statements = parsed as? [[String: Any]]
+    else {
       throw NexusError.database("execBatch: erwarte Array aus {sql, params}")
     }
     try queue.sync {

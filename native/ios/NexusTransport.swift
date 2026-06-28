@@ -741,37 +741,20 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     "publicFolders": true, "delegation": true, "serverSearch": true,
   ]
 
+  /// Serialisiert über `NexusJSON` (REINES Obj-C @try/@catch). `JSONSerialization` wirft bei
+  /// ungültigen Werten (NaN/Infinity, nicht serialisierbarer Typ) eine NSException — die über
+  /// einen Swift-Closure-Guard NICHT zuverlässig fangbar ist (→ abort). Im reinen Obj-C-Frame
+  /// wird sie sicher gefangen; hier kommt dann `nil` an → sauberer Swift-Fehler statt Crash.
   private static func json(_ value: Any) throws -> String {
-    // JSONSerialization wirft für ungültige Werte (NaN/Infinity, nicht-serialisierbarer Typ)
-    // eine Objective-C-NSException — die Swift `try` NICHT abfängt. Erreicht eine solche
-    // NSException die React-Native-Bridge, stürzt deren NSException→JSError-Konverter ab
-    // (SIGSEGV). Daher in einem Obj-C-@try/@catch ausführen und in einen Swift-Fehler wandeln.
-    var out: String?
-    var swiftError: Error?
-    let exception = NexusExceptionGuard.run {
-      do {
-        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
-        out = String(decoding: data, as: UTF8.self)
-      } catch {
-        swiftError = error
-      }
-    }
-    if exception != nil {
+    guard let out = NexusJSON.string(fromObject: value) else {
       throw NexusError.transport("JSON-Serialisierung fehlgeschlagen (ungültiger Wert)")
     }
-    if let swiftError = swiftError { throw swiftError }
-    return out ?? "null"
+    return out
   }
 
-  /// Parst einen JSON-String defensiv. `JSONSerialization.jsonObject` kann — wie `.data` —
-  /// eine Objective-C-NSException werfen, die Swift `try`/`try?` NICHT abfängt und die die
-  /// RN-Bridge zum Absturz bringt. Daher in NexusExceptionGuard ausführen; bei jeder Art von
-  /// Fehler (NSException ODER Swift-Fehler) `nil`. Aufrufer casten das Ergebnis selbst.
+  /// Parst einen JSON-String absturzsicher über `NexusJSON` (reines Obj-C @try/@catch).
+  /// Bei jedem Fehler `nil`. Aufrufer casten das Ergebnis selbst.
   private static func jsonObject(_ string: String) -> Any? {
-    var result: Any?
-    _ = NexusExceptionGuard.run {
-      result = try? JSONSerialization.jsonObject(with: Data(string.utf8))
-    }
-    return result
+    NexusJSON.object(fromString: string)
   }
 }
