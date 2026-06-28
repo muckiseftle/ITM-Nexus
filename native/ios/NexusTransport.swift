@@ -430,12 +430,33 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     return try Self.json(["messages": messages])
   }
 
-  func getAttachment(accountId: String, attachmentId: String) async throws -> String {
+  /// Holt den Anhangs-Inhalt — EAS via ItemOperations:Fetch(FileReference), sonst EWS GetAttachment.
+  private func attachmentContent(accountId: String, attachmentId: String) async throws -> (
+    name: String, contentType: String, base64: String
+  ) {
+    if useEas(accountId) {
+      do {
+        let json = try await EasClient.shared.getAttachment(
+          accountId: accountId, attachmentId: attachmentId)
+        let obj = (Self.jsonObject(json) as? [String: Any]) ?? [:]
+        return (
+          obj["name"] as? String ?? "Anhang",
+          obj["contentType"] as? String ?? "application/octet-stream",
+          obj["base64"] as? String ?? ""
+        )
+      } catch let e as EasClient.EasError where e.isHard { /* EWS-Fallback unten */ }
+    }
     let xml = try await post(EwsSoap.getAttachment(id: attachmentId))
     let a = EwsSoap.parseAttachmentContent(xml)
+    return (a.name, a.contentType, a.base64)
+  }
+
+  func getAttachment(accountId: String, attachmentId: String) async throws -> String {
+    let c = try await attachmentContent(accountId: accountId, attachmentId: attachmentId)
+    let size = c.base64.isEmpty ? 0 : (c.base64.count * 3) / 4
     return try Self.json([
-      "id": attachmentId, "name": a.name, "contentType": a.contentType,
-      "sizeBytes": a.size, "base64": a.base64,
+      "id": attachmentId, "name": c.name, "contentType": c.contentType,
+      "sizeBytes": size, "base64": c.base64,
     ])
   }
 
@@ -443,8 +464,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// → kleinerer Speicher-Footprint) und öffnet das System-Teilen-Blatt (H9). So lassen sich
   /// Anhänge tatsächlich ansehen/speichern/weitergeben, statt nur eine Meldung anzuzeigen.
   func presentAttachment(accountId: String, attachmentId: String) async throws {
-    let xml = try await post(EwsSoap.getAttachment(id: attachmentId))
-    let a = EwsSoap.parseAttachmentContent(xml)
+    let a = try await attachmentContent(accountId: accountId, attachmentId: attachmentId)
     guard let data = Data(base64Encoded: a.base64) else {
       throw NexusError.transport("Anhang konnte nicht dekodiert werden")
     }
@@ -716,6 +736,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func searchServer(accountId: String, query: String) async throws -> String {
+    // EAS-Konten: Server-Suche liefert LongIds, die nicht zu den lokal gesyncten ServerIds
+    // passen (Öffnen aus Treffer nicht eindeutig). Daher hier leer — die lokale FTS5-Suche
+    // (SqlMailStore.searchLocal) deckt die Offline-Suche bereits ab.
+    if useEas(accountId) { return try Self.json([[String: Any]]()) }
     let xml = try await post(EwsSoap.findItem(folderId: "inbox", query: query))
     let hits = EwsSoap.extractItemIds(xml).enumerated().map { (i, id) -> [String: Any] in
       ["messageId": id, "rank": Double(1000 - i), "source": "server"]

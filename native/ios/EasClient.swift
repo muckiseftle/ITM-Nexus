@@ -594,4 +594,31 @@ final class EasClient {
       return NexusJSON.string(from: ["status": "error", "changedFolderIds": empty]) ?? "{}"
     }
   }
+
+  // MARK: Anhang laden (ItemOperations:Fetch per FileReference)
+
+  func getAttachment(accountId: String, attachmentId: String) async throws -> String {
+    let io = Wbxml.Page.itemOperations
+    let b = Wbxml.Page.airSyncBase
+    let fetch = Wbxml.el(
+      io, "Fetch", [Wbxml.txt(io, "Store", "Mailbox"), Wbxml.txt(b, "FileReference", attachmentId)])
+    let req = Wbxml.el(io, "ItemOperations", [fetch])
+    let data = try await easSend(accountId, command: "ItemOperations", body: Wbxml.encode(req))
+    guard let root = try? Wbxml.decode(data),
+      let fetchNode = EasParse.first(root, page: io, tag: "Fetch")
+    else { throw EasError.hard("ItemOperations(att): Antwort unvollständig") }
+    let props = EasParse.first(fetchNode, page: io, tag: "Properties")
+    // Data kann unter ItemOperations (Page 20) ODER AirSyncBase (Page 17) liegen — beides prüfen.
+    let base64 =
+      (props.flatMap { EasParse.text($0, page: io, tag: "Data") })
+      ?? (props.flatMap { EasParse.text($0, page: b, tag: "Data") })
+      ?? EasParse.text(fetchNode, page: io, tag: "Data")
+      ?? EasParse.text(fetchNode, page: b, tag: "Data") ?? ""
+    let contentType =
+      (props.flatMap { EasParse.text($0, page: b, tag: "ContentType") })
+      ?? "application/octet-stream"
+    return NexusJSON.string(from: [
+      "id": attachmentId, "name": "Anhang", "contentType": contentType, "base64": base64,
+    ]) ?? "{}"
+  }
 }
