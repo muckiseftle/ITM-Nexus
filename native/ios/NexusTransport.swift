@@ -643,9 +643,11 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   // MARK: EAS-Routing (Hardfailure ⇒ EWS-Fallback)
-  // EAS bevorzugt, sobald ein Konto geladen ist (bekannter Host). Unterstützt der Server kein EAS,
-  // wirft `ensureState`/`negotiate` einen Hardfailure → der Router fällt automatisch auf EWS zurück.
-  private static let easEnabled = true
+  // VORERST AUS: Der EAS-Pfad (ensureState/ping/sync) löst eine ObjC-NSException aus, die über die
+  // RN-New-Architecture-Bridge nicht fangbar ist → objc_exception_rethrow → SIGABRT (siehe .ips).
+  // Bis die Bridge-Anbindung gehärtet ist, läuft alles über den stabilen EWS-Pfad. Der gesamte
+  // EAS-Code bleibt vorhanden und wird über diesen einen Schalter wieder aktiviert.
+  private static let easEnabled = false
   private func useEas(_ accountId: String) -> Bool {
     Self.easEnabled && ewsUrl?.host != nil
   }
