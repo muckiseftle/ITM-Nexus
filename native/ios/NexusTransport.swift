@@ -746,7 +746,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// einen Swift-Closure-Guard NICHT zuverlässig fangbar ist (→ abort). Im reinen Obj-C-Frame
   /// wird sie sicher gefangen; hier kommt dann `nil` an → sauberer Swift-Fehler statt Crash.
   private static func json(_ value: Any) throws -> String {
-    guard let out = NexusJSON.string(fromObject: value) else {
+    guard let out = NexusJSON.string(from: value) else {
       throw NexusError.transport("JSON-Serialisierung fehlgeschlagen (ungültiger Wert)")
     }
     return out
@@ -755,6 +755,6 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// Parst einen JSON-String absturzsicher über `NexusJSON` (reines Obj-C @try/@catch).
   /// Bei jedem Fehler `nil`. Aufrufer casten das Ergebnis selbst.
   private static func jsonObject(_ string: String) -> Any? {
-    NexusJSON.object(fromString: string)
+    NexusJSON.object(from: string)
   }
 }
