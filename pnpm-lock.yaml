@@ -38,6 +38,8 @@ importers:
 
   packages/domain: {}
 
+  packages/eas-wbxml: {}
+
   packages/services:
     dependencies:
       '@nexus/core-transport':

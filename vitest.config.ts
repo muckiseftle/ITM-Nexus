@@ -11,6 +11,7 @@ export default defineConfig({
       '@nexus/core-transport': pkg('core-transport'),
       '@nexus/services': pkg('services'),
       '@nexus/ui-kit': pkg('ui-kit'),
+      '@nexus/eas-wbxml': pkg('eas-wbxml'),
     },
   },
   test: {
