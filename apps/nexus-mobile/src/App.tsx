@@ -9,6 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   buildComposePrefill,
   createMailAddress,
@@ -48,6 +50,7 @@ import {
   type AppSettings,
 } from './composition/settings';
 import { ThemeProvider, useTheme, type AppTheme } from './theme/ThemeContext';
+import { BrandMark } from './components/BrandMark';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { type IconName } from './components/Icon';
 import { LockScreen } from './components/LockScreen';
@@ -128,14 +131,20 @@ function deriveName(email: string): string {
 }
 
 export default function App(): React.JSX.Element {
+  // GestureHandlerRootView MUSS den gesamten Baum umschließen (gesture-handler-Vorgabe) — Basis
+  // für Wisch-Gesten (Archivieren/Löschen, Zurück-Wischen) und zugleich Smoke-Test der Einbindung.
   return (
-    <ThemeProvider>
-      <ErrorBoundary>
-        <AppInner />
-      </ErrorBoundary>
-    </ThemeProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <ThemeProvider>
+        <ErrorBoundary>
+          <AppInner />
+        </ErrorBoundary>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({ root: { flex: 1 } });
 
 /**
  * App-Wurzel mit schlanker State-Navigation (ohne react-navigation): Icon-Tableiste
@@ -609,9 +618,14 @@ function AppInner(): React.JSX.Element {
   }
 
   if (container === null || restoring) {
+    // Start-Splash mit weichem Einblenden (reanimated-Worklet → verifiziert zugleich, dass das
+    // Reanimated-Babel-Plugin im Build vorhanden ist) und Vektor-Markenzeichen (svg-Smoke-Test).
     return (
       <SafeAreaView style={s.centered}>
-        <ActivityIndicator color={t.c.brandPrimary} />
+        <Animated.View entering={FadeIn.duration(t.motion.duration.slow)} style={s.splash}>
+          <BrandMark size={84} />
+          <ActivityIndicator color={t.c.brandPrimary} />
+        </Animated.View>
       </SafeAreaView>
     );
   }
@@ -825,5 +839,6 @@ function makeStyles(t: AppTheme) {
     },
     error: { color: t.c.danger, padding: space.lg, textAlign: 'center' },
     root: { backgroundColor: t.c.bgCanvas, flex: 1 },
+    splash: { alignItems: 'center', gap: space.lg },
   });
 }

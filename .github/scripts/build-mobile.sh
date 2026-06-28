@@ -34,6 +34,10 @@ rm -f App.tsx
 cp -R "$ROOT/apps/nexus-mobile/src" ./src
 cp "$ROOT/apps/nexus-mobile/index.js" ./index.js
 cp "$ROOT/apps/nexus-mobile/app.json" ./app.json
+# babel.config.js MIT übernehmen — enthält das reanimated/plugin (Worklet-Transform). Ohne diese
+# Datei nutzt Metro die Scaffold-Default-Config OHNE Plugin: kompiliert grün, crasht am Gerät.
+# metro.config.js bewusst NICHT kopieren (dessen watchFolders zeigt auf den hier fehlenden Monorepo-Root).
+cp "$ROOT/apps/nexus-mobile/babel.config.js" ./babel.config.js
 echo "::endgroup::"
 
 echo "::group::App-Icon einspielen"
@@ -58,9 +62,15 @@ fi
 echo "::endgroup::"
 
 echo "::group::Laufzeit-Abhängigkeiten installieren"
-# Die Demo-App nutzt nur react/react-native (Navigation ist schlank in App.tsx) — daher
-# keine zusätzlichen nativen Abhängigkeiten nötig.
+# Basis (react/react-native aus dem Scaffold) installieren …
 npm install --legacy-peer-deps
+# … und die UI-Abhängigkeiten des Redesigns explizit nachinstallieren. WICHTIG: Das Scaffold
+# liest NICHT die App-package.json (nur src/index.js/app.json/babel.config.js werden kopiert),
+# daher müssen diese hier installiert werden, damit RN-Autolinking sie beim `pod install` findet.
+npm install --legacy-peer-deps \
+  react-native-svg@^15.8.0 \
+  react-native-reanimated@~3.16.1 \
+  react-native-gesture-handler@^2.20.2
 echo "::endgroup::"
 
 echo "::group::Gebaute @nexus-Pakete in node_modules verlinken"

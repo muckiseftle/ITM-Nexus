@@ -15,7 +15,10 @@
     "@nexus/services": "workspace:*",
     "@nexus/ui-kit": "workspace:*",
     "react": "19.0.0",
-    "react-native": "0.78.0"
+    "react-native": "0.78.0",
+    "react-native-gesture-handler": "^2.20.2",
+    "react-native-reanimated": "~3.16.1",
+    "react-native-svg": "^15.8.0"
   },
   "devDependencies": {
     "@react-native/babel-preset": "0.78.0",
