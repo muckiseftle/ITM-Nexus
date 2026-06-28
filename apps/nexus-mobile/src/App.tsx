@@ -216,26 +216,33 @@ function AppInner(): React.JSX.Element {
       try {
         const report = await NexusNative.crashLastReport();
         if (!active || report === null || report.length === 0) return;
-        // Kompakte Kurzfassung (Grund) oben, vollständiger Bericht in der Konsole/im os_log.
+        // Vollständiger Bericht in Konsole/os_log (per USB live sichtbar).
         console.warn('[NEXUS] Letzter nativer Absturz:\n' + report);
-        const reasonLine =
-          report.split('\n').find((l) => l.startsWith('reason=') || l.startsWith('signal=')) ??
-          report.slice(0, 200);
-        const reason = reasonLine.replace(/^reason=|^signal=/, '');
-        Alert.alert(
-          'Letzter Absturz erkannt',
-          'Die App wurde beim letzten Mal unerwartet beendet.\n\nGrund:\n' +
-            reason +
-            '\n\nBitte diesen Text per Screenshot an den Support senden — damit lässt sich die Ursache gezielt beheben.',
-          [
-            {
-              text: 'Verwerfen',
-              style: 'destructive',
-              onPress: () => void NexusNative.crashClearReport(),
-            },
-            { text: 'OK', style: 'default' },
-          ],
-        );
+        const lines = report.split('\n');
+        const pick = (prefix: string): string | undefined =>
+          lines.find((l) => l.startsWith(prefix))?.slice(prefix.length);
+        const reason = pick('reason=') ?? pick('signal=') ?? report.slice(0, 200);
+        const name = pick('name=');
+        // Erste Stack-Zeilen, die unseren App-Code (NEXUS) nennen — zeigen die Codestelle.
+        const appFrames = lines
+          .filter((l) => l.includes('NEXUS') && /\d/.test(l))
+          .slice(0, 4)
+          .map((l) => l.trim());
+        const detail =
+          'Die App wurde beim letzten Mal unerwartet beendet.\n\n' +
+          (name !== undefined ? 'Typ: ' + name + '\n' : '') +
+          'Grund:\n' +
+          reason +
+          (appFrames.length > 0 ? '\n\nStelle:\n' + appFrames.join('\n') : '') +
+          '\n\nBitte diesen Text per Screenshot an den Support senden.';
+        Alert.alert('Letzter Absturz erkannt', detail, [
+          {
+            text: 'Verwerfen',
+            style: 'destructive',
+            onPress: () => void NexusNative.crashClearReport(),
+          },
+          { text: 'OK', style: 'default' },
+        ]);
       } catch {
         /* Methode fehlt (älterer Build) oder kein Bericht → ignorieren. */
       }

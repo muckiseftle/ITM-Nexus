@@ -8,7 +8,7 @@ Pod::Spec.new do |s|
   s.author       = { 'ITM Technologies' => 'support@itm-technologies.de' }
   s.platform     = :ios, '15.1'
   s.source       = { :path => '.' }
-  s.source_files = '*.{swift,h,m}'
+  s.source_files = '*.{swift,h,m,mm}'
   s.swift_version = '5.0'
 
   # React-Native-Bridge.
