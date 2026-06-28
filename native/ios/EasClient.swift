@@ -213,4 +213,176 @@ final class EasClient {
     if n.contains("delete") || n.contains("gelösch") || n.contains("trash") { return "deleted" }
     return "custom"
   }
+
+  // MARK: ServerId → CollectionId (für ItemOperations:Fetch beim Öffnen)
+
+  private var collectionForServerId: [String: String] = [:]
+
+  private func cacheCollection(_ serverId: String, _ collectionId: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    collectionForServerId[serverId] = collectionId
+  }
+  private func collection(forServerId serverId: String) -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return collectionForServerId[serverId]
+  }
+
+  // MARK: Generischer EAS-Request (mit 449-Provisioning-Retry)
+
+  /// POSTet einen WBXML-Body und liefert die rohen Antwort-Bytes (kann bei „keine Änderungen"
+  /// LEER sein — das ist gültig und wird vom Aufrufer behandelt).
+  private func easSend(_ accountId: String, command: String, body: Data, retried: Bool = false)
+    async throws -> Data
+  {
+    guard let st = getState(accountId) else { throw EasError.hard("EAS-Status fehlt") }
+    let (data, http) = try await NexusTransport.shared.easPost(
+      st.easUrl, command: command, deviceId: st.deviceId, deviceType: st.deviceType,
+      user: st.user, protocolVersion: st.protocolVersion, policyKey: st.policyKey, body: body)
+    if http.statusCode == 449, !retried {
+      _ = try await provision(accountId)
+      return try await easSend(accountId, command: command, body: body, retried: true)
+    }
+    if http.statusCode == 401 || http.statusCode == 403 {
+      throw EasError.auth("EAS-Anmeldung abgelehnt (HTTP \(http.statusCode))")
+    }
+    guard http.statusCode == 200 else { throw EasError.hard("\(command) HTTP \(http.statusCode)") }
+    return data
+  }
+
+  // MARK: Sync (Code-Pages 0/2/17) → syncMessages
+
+  func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
+    let startKey: String
+    if let sk = syncKey, !sk.isEmpty, sk != "0" {
+      startKey = sk
+    } else {
+      startKey = try await primeCollection(accountId, collectionId: folderId)
+    }
+    let r = try await syncCollection(accountId, collectionId: folderId, syncKey: startKey)
+    let json = NexusJSON.string(from: [
+      "syncKey": r.newKey, "created": r.created, "updated": [], "deletedIds": r.deleted,
+      "hasMore": r.hasMore,
+    ])
+    return json ?? "{}"
+  }
+
+  /// Erst-Sync Schritt 1: SyncKey „0" → neuer SyncKey (ohne Items).
+  private func primeCollection(_ accountId: String, collectionId: String) async throws -> String {
+    let a = Wbxml.Page.airSync
+    let req = Wbxml.el(
+      a, "Sync",
+      [
+        Wbxml.el(
+          a, "Collections",
+          [
+            Wbxml.el(
+              a, "Collection",
+              [Wbxml.txt(a, "SyncKey", "0"), Wbxml.txt(a, "CollectionId", collectionId)])
+          ])
+      ])
+    let data = try await easSend(accountId, command: "Sync", body: Wbxml.encode(req))
+    guard let root = try? Wbxml.decode(data), let coll = EasParse.first(root, page: a, tag: "Collection")
+    else { throw EasError.hard("Sync(init): WBXML/Collection fehlt") }
+    let status = EasParse.text(coll, page: a, tag: "Status") ?? "?"
+    guard status == "1" else { throw EasError.hard("Sync(init) Status \(status)") }
+    return EasParse.text(coll, page: a, tag: "SyncKey") ?? "0"
+  }
+
+  private func syncCollection(
+    _ accountId: String, collectionId: String, syncKey: String, retried: Bool = false
+  ) async throws -> (newKey: String, created: [[String: Any]], deleted: [String], hasMore: Bool) {
+    let a = Wbxml.Page.airSync
+    let b = Wbxml.Page.airSyncBase
+    // BodyPreference: gekürztes HTML (32 KB) — Speicher-schonend; voller Body beim Öffnen (Fetch).
+    let options = Wbxml.el(
+      a, "Options",
+      [
+        Wbxml.el(
+          b, "BodyPreference",
+          [Wbxml.txt(b, "Type", "2"), Wbxml.txt(b, "TruncationSize", "32768")])
+      ])
+    let collection = Wbxml.el(
+      a, "Collection",
+      [
+        Wbxml.txt(a, "SyncKey", syncKey),
+        Wbxml.txt(a, "CollectionId", collectionId),
+        Wbxml.txt(a, "DeletesAsMoves", "1"),
+        Wbxml.txt(a, "GetChanges", "1"),
+        Wbxml.txt(a, "WindowSize", "50"),
+        options,
+      ])
+    let req = Wbxml.el(a, "Sync", [Wbxml.el(a, "Collections", [collection])])
+    let data = try await easSend(accountId, command: "Sync", body: Wbxml.encode(req))
+    // Leere Antwort = keine Änderungen → SyncKey behalten.
+    if data.isEmpty { return (syncKey, [], [], false) }
+    guard let root = try? Wbxml.decode(data), let coll = EasParse.first(root, page: a, tag: "Collection")
+    else { throw EasError.hard("Sync: WBXML/Collection fehlt") }
+    let status = EasParse.text(coll, page: a, tag: "Status") ?? "?"
+    // Status 3 = ungültiger SyncKey → neu primen und einmal wiederholen.
+    if status == "3", !retried {
+      let fresh = try await primeCollection(accountId, collectionId: collectionId)
+      return try await syncCollection(
+        accountId, collectionId: collectionId, syncKey: fresh, retried: true)
+    }
+    guard status == "1" else { throw EasError.hard("Sync Status \(status)") }
+    let newKey = EasParse.text(coll, page: a, tag: "SyncKey") ?? syncKey
+    let hasMore = EasParse.first(coll, page: a, tag: "MoreAvailable") != nil
+
+    var created: [[String: Any]] = []
+    var deleted: [String] = []
+    let addTok = EasParse.token(a, "Add")
+    let changeTok = EasParse.token(a, "Change")
+    let deleteTok = EasParse.token(a, "Delete")
+    let softTok = EasParse.token(a, "SoftDelete")
+    if let commands = EasParse.first(coll, page: a, tag: "Commands") {
+      for cmd in commands.children where cmd.page == a {
+        if cmd.token == addTok || cmd.token == changeTok {
+          guard let serverId = EasParse.childText(cmd, page: a, tag: "ServerId"),
+            let appData = EasParse.first(cmd, page: a, tag: "ApplicationData")
+          else { continue }
+          created.append(
+            EasParse.message(
+              scope: appData, serverId: serverId, accountId: accountId, folderId: collectionId))
+          cacheCollection(serverId, collectionId)
+        } else if cmd.token == deleteTok || cmd.token == softTok {
+          if let serverId = EasParse.childText(cmd, page: a, tag: "ServerId") {
+            deleted.append(serverId)
+          }
+        }
+      }
+    }
+    return (newKey, created, deleted, hasMore)
+  }
+
+  // MARK: getMessage (voller HTML-Body via ItemOperations:Fetch, Code-Page 20)
+
+  func getMessage(accountId: String, messageId: String) async throws -> String {
+    guard let collId = collection(forServerId: messageId) else {
+      // Collection unbekannt (z. B. nach Neustart) → EWS-Fallback im Router.
+      throw EasError.hard("Unbekannte Collection für \(messageId)")
+    }
+    let io = Wbxml.Page.itemOperations
+    let a = Wbxml.Page.airSync
+    let b = Wbxml.Page.airSyncBase
+    let fetch = Wbxml.el(
+      io, "Fetch",
+      [
+        Wbxml.txt(io, "Store", "Mailbox"),
+        Wbxml.txt(a, "CollectionId", collId),
+        Wbxml.txt(a, "ServerId", messageId),
+        Wbxml.el(io, "Options", [Wbxml.el(b, "BodyPreference", [Wbxml.txt(b, "Type", "2")])]),
+      ])
+    let req = Wbxml.el(io, "ItemOperations", [fetch])
+    let data = try await easSend(accountId, command: "ItemOperations", body: Wbxml.encode(req))
+    guard let root = try? Wbxml.decode(data),
+      let fetchNode = EasParse.first(root, page: io, tag: "Fetch"),
+      let props = EasParse.first(fetchNode, page: io, tag: "Properties")
+    else { throw EasError.hard("ItemOperations: Antwort unvollständig") }
+    let serverId = EasParse.text(fetchNode, page: a, tag: "ServerId") ?? messageId
+    let msg = EasParse.message(
+      scope: props, serverId: serverId, accountId: accountId, folderId: collId)
+    return NexusJSON.string(from: msg) ?? "{}"
+  }
 }

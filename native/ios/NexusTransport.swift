@@ -341,6 +341,20 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   // MARK: EWS-Operationen
 
   func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
+    if useEas(accountId) {
+      do {
+        return try await EasClient.shared.syncMessages(
+          accountId: accountId, folderId: folderId, syncKey: syncKey)
+      } catch let e as EasClient.EasError where e.isHard {
+        return try await syncMessagesEws(accountId: accountId, folderId: folderId, syncKey: syncKey)
+      }
+    }
+    return try await syncMessagesEws(accountId: accountId, folderId: folderId, syncKey: syncKey)
+  }
+
+  private func syncMessagesEws(accountId: String, folderId: String, syncKey: String?) async throws
+    -> String
+  {
     let syncXml = try await post(EwsSoap.syncFolderItems(folderId: mapFolder(folderId), syncState: syncKey))
     let changes = EwsSoap.parseSyncChanges(syncXml)
     let newState = EwsSoap.extractSyncState(syncXml) ?? (syncKey ?? "")
@@ -555,6 +569,16 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func getMessage(accountId: String, messageId: String) async throws -> String {
+    if useEas(accountId) {
+      do { return try await EasClient.shared.getMessage(accountId: accountId, messageId: messageId) }
+      catch let e as EasClient.EasError where e.isHard {
+        return try await getMessageEws(accountId: accountId, messageId: messageId)
+      }
+    }
+    return try await getMessageEws(accountId: accountId, messageId: messageId)
+  }
+
+  private func getMessageEws(accountId: String, messageId: String) async throws -> String {
     let items = EwsSoap.parseItems(try await post(EwsSoap.getItems(ids: [messageId])))
     guard let item = items.first else { throw NexusError.transport("Nachricht nicht gefunden") }
     return try Self.json(Self.messageJson(item, accountId: accountId, folderId: "inbox"))
