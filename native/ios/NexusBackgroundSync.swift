@@ -14,30 +14,22 @@ public enum NexusBackgroundSync {
 
   /// Registriert den Task-Handler. iOS ruft den Handler später (vom System getaktet) auf.
   /// Wird vom App-Target (AppDelegate) aufgerufen ⇒ `public`.
+  ///
+  /// Die BGTaskScheduler-Aufrufe laufen über `NexusBGTasks` (REINES Obj-C @try/@catch): eine
+  /// etwaige NSException (z. B. fehlendes Background-Entitlement bei Sideload) MUSS im selben
+  /// Obj-C-Frame gefangen werden — über Swift-Frames hinweg ist sie nicht zuverlässig fangbar
+  /// und führt zu `std::terminate`/SIGABRT.
   public static func register() {
-    // BGTaskScheduler kann eine NSException werfen, wenn das Background-Entitlement fehlt
-    // (typisch bei Sideload mit kostenloser Apple-ID). Swift kann NSExceptions nicht fangen
-    // → Obj-C-Guard, damit der App-Start NICHT abstürzt (Hintergrund-Sync ist dann inaktiv).
-    _ = NexusExceptionGuard.run {
-      BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
-        guard let refresh = task as? BGAppRefreshTask else {
-          task.setTaskCompleted(success: false)
-          return
-        }
-        handle(refresh)
-      }
+    NexusBGTasks.registerRefresh(withIdentifier: taskIdentifier) { task in
+      handle(task)
     }
   }
 
   /// Plant den nächsten Lauf (frühestens in ~15 min). Den realen Zeitpunkt bestimmt iOS.
+  /// `submit()` wirft ohne Background-Entitlement eine NSException — sicher in `NexusBGTasks`
+  /// (Obj-C) gefangen, daher hier ein gefahrloser No-op bei Sideload-Builds.
   public static func schedule() {
-    let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
-    request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-    // `submit()` wirft auf Builds ohne Background-Entitlement eine NSException (kein Swift-
-    // Error → `try?` greift nicht). Obj-C-Guard verhindert den Crash; bleibt dann ein No-op.
-    _ = NexusExceptionGuard.run {
-      try? BGTaskScheduler.shared.submit(request)
-    }
+    NexusBGTasks.submitRefresh(withIdentifier: taskIdentifier, earliestInterval: 15 * 60)
   }
 
   private static func handle(_ task: BGAppRefreshTask) {

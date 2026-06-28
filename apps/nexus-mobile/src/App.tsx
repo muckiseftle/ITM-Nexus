@@ -304,27 +304,19 @@ function AppInner(): React.JSX.Element {
         }
       }
     };
-    // DIAGNOSE-Staffelung: Der Absturz tritt im Start-Burst auf. Die drei Operationen werden
-    // zeitlich VERSETZT ausgelöst, damit der Absturz-ZEITPUNKT den Auslöser eindeutig verrät:
-    //   ≈ 3 s  ⇒ Vordergrund-Sync (runSync / EWS-Sync der Ordner)
-    //   ≈ 6 s  ⇒ iOS-Hintergrund-Planung (BGTaskScheduler)
-    //   ≈ 9 s  ⇒ DirectPush-Long-Poll (ping)
-    // Zusätzlich entfällt so die gleichzeitige native Last beim Start (mögliche Race-Ursache).
-    const t1 = setTimeout(() => {
-      if (!cancelled) void runSync();
-    }, 3000);
-    const t2 = setTimeout(() => {
-      if (!cancelled && settings.background) void c.scheduleBackgroundSync?.();
-    }, 6000);
-    const t3 = setTimeout(() => {
-      if (!cancelled && settings.push) void pushLoop();
-    }, 9000);
+    // Start-Burst kurz nach dem Mounten auslösen (nicht synchron mit dem JS-/Render-Hochlauf).
+    // Die eigentliche Crash-Ursache (NSException aus BGTaskScheduler.submit) ist nativ behoben;
+    // die kleine Verzögerung bleibt als Stabilitätspuffer, damit zuerst UI erscheint.
+    const startTimer = setTimeout(() => {
+      if (cancelled) return;
+      void runSync();
+      if (settings.background) void c.scheduleBackgroundSync?.();
+      if (settings.push) void pushLoop();
+    }, 1000);
 
     return () => {
       cancelled = true;
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
+      clearTimeout(startTimer);
       if (interval !== undefined) clearInterval(interval);
       if (pushDelayTimer !== undefined) clearTimeout(pushDelayTimer);
     };

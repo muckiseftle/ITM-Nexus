@@ -425,10 +425,13 @@ export class SqlSyncCursorStore implements SyncCursorStore {
     return typeof c === 'string' ? c : undefined;
   }
   async setCursor(key: string, cursor: string): Promise<void> {
+    // `cursor` kann zur Laufzeit undefined sein (native Sync-Antwort ohne syncKey). Ein undefined
+    // im params-Array würde beim nativen NSArray-Bridging zu `nil` → NSException → SIGABRT führen.
+    // Daher defensiv auf einen leeren String normalisieren.
     await NexusNative.dbExec(
       `INSERT INTO sync_cursors (key, cursor) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET cursor = excluded.cursor`,
-      [key, cursor],
+      [key, cursor ?? ''],
     );
   }
   async clear(accountId: AccountId): Promise<void> {
