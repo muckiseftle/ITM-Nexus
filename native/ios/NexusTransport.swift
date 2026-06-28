@@ -203,9 +203,12 @@ final class NexusTransport: NSObject, URLSessionDelegate {
 
     // 3) EWS-Direkt-Fallbacks, falls Autodiscover nichts liefert (Standardpfade).
     let fallbacks = [
-      "https://\(domain)/EWS/Exchange.asmx",
-      "https://autodiscover.\(domain)/EWS/Exchange.asmx",
       "https://mail.\(domain)/EWS/Exchange.asmx",
+      "https://autodiscover.\(domain)/EWS/Exchange.asmx",
+      "https://exchange.\(domain)/EWS/Exchange.asmx",
+      "https://webmail.\(domain)/EWS/Exchange.asmx",
+      "https://owa.\(domain)/EWS/Exchange.asmx",
+      "https://\(domain)/EWS/Exchange.asmx",
     ]
     for fb in fallbacks {
       guard let url = URL(string: fb) else { continue }
@@ -233,7 +236,11 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       let status = (response as? HTTPURLResponse)?.statusCode ?? 0
       return status == 200 || status == 401 || status == 403
     } catch {
-      return false
+      // -999 „cancelled" entsteht, wenn der Server eine Auth-Challenge schickt (Basic/NTLM/
+      // Negotiate) und der Handler nach einem Fehlversuch abbricht — d. h. ein EWS-Endpunkt
+      // existiert dort. Als Treffer werten, damit der Server trotzdem gefunden wird.
+      let ns = error as NSError
+      return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
     }
   }
 

@@ -49,10 +49,15 @@ export function classifyError(error: unknown): ErrorInfo {
   const technical = errorText(error) || 'Unbekannter Fehler';
   const text = technical.toLowerCase();
 
+  // Hinweis: Ein abgebrochener Request (-999 „cancelled") entsteht in NEXUS NUR, wenn der
+  // TLS-/Auth-Challenge-Handler die Verbindung beendet — praktisch immer eine abgelehnte
+  // Anmeldung (nach dem ersten Fehlversuch, Schutz vor Account-Sperre). Daher als Auth werten.
   const isAuth =
     code === 'auth' ||
     code.includes('auth') ||
-    /\b401\b|unauthor|anmeld|kennwort|passwort|credential|forbidden|\b403\b/.test(text);
+    /\b401\b|unauthor|anmeld|kennwort|passwort|credential|forbidden|\b403\b|cancelled|canceled|-999|nsurlerrorcancelled/.test(
+      text,
+    );
   const isAutodiscover = code.includes('autodiscover') || text.includes('autodiscover');
   const isTls =
     code.includes('tls') ||
