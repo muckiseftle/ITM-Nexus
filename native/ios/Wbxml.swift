@@ -33,6 +33,7 @@ enum Wbxml {
     static let airSyncBase = 17
     static let settings = 18
     static let itemOperations = 20
+    static let composeMail = 21
     static let email2 = 22
   }
 
@@ -110,8 +111,15 @@ enum Wbxml {
     "ConversationId": 0x18, "MoveAlways": 0x19,
   ]
 
+  private static let composeMailTags: [String: UInt8] = [
+    "SendMail": 0x05, "SmartForward": 0x06, "SmartReply": 0x07, "SaveInSentItems": 0x08,
+    "ReplaceMime": 0x09, "Source": 0x0b, "FolderId": 0x0c, "ItemId": 0x0d, "LongId": 0x0e,
+    "InstanceId": 0x0f, "Mime": 0x10, "ClientId": 0x11, "Status": 0x12, "AccountId": 0x13,
+  ]
+
   static let tags: [Int: [String: UInt8]] = [
     Page.airSync: airSyncTags,
+    Page.composeMail: composeMailTags,
     Page.email: emailTags,
     Page.move: moveTags,
     Page.folderHierarchy: folderTags,

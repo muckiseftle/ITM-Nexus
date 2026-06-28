@@ -28,6 +28,7 @@ export const PAGE = {
   AirSyncBase: 17,
   Settings: 18,
   ItemOperations: 20,
+  ComposeMail: 21,
   Email2: 22,
 } as const;
 
@@ -228,6 +229,23 @@ const TAGS_BY_PAGE: Readonly<Record<number, Readonly<Record<string, number>>>> =
     BodyPartPreference: 0x19,
     BodyPart: 0x1a,
     Status: 0x1b,
+  },
+  // Code Page 21 — ComposeMail ([MS-ASWBXML] 2.1.2.1.22) — SendMail/SmartForward/SmartReply
+  [PAGE.ComposeMail]: {
+    SendMail: 0x05,
+    SmartForward: 0x06,
+    SmartReply: 0x07,
+    SaveInSentItems: 0x08,
+    ReplaceMime: 0x09,
+    Source: 0x0b,
+    FolderId: 0x0c,
+    ItemId: 0x0d,
+    LongId: 0x0e,
+    InstanceId: 0x0f,
+    Mime: 0x10,
+    ClientId: 0x11,
+    Status: 0x12,
+    AccountId: 0x13,
   },
   // Code Page 20 — ItemOperations ([MS-ASWBXML] 2.1.2.1.21)
   [PAGE.ItemOperations]: {

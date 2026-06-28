@@ -229,6 +229,22 @@ final class EasClient {
     return collectionForServerId[serverId]
   }
 
+  // Aktueller SyncKey je Collection. EAS-Änderungen (Read/Flag/Delete) sind Sync-Commands und
+  // brauchen den jeweils gültigen SyncKey. Native gehaltene Autorität (JS-Cursor wird beim
+  // nächsten Sync versöhnt). Nach Neustart leer → wird bei Bedarf neu geprimt.
+  private var syncKeyForCollection: [String: String] = [:]
+
+  private func setSyncKey(_ collectionId: String, _ key: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    syncKeyForCollection[collectionId] = key
+  }
+  private func currentSyncKey(_ collectionId: String) -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return syncKeyForCollection[collectionId]
+  }
+
   // MARK: Generischer EAS-Request (mit 449-Provisioning-Retry)
 
   /// POSTet einen WBXML-Body und liefert die rohen Antwort-Bytes (kann bei „keine Änderungen"
@@ -287,7 +303,9 @@ final class EasClient {
     else { throw EasError.hard("Sync(init): WBXML/Collection fehlt") }
     let status = EasParse.text(coll, page: a, tag: "Status") ?? "?"
     guard status == "1" else { throw EasError.hard("Sync(init) Status \(status)") }
-    return EasParse.text(coll, page: a, tag: "SyncKey") ?? "0"
+    let key = EasParse.text(coll, page: a, tag: "SyncKey") ?? "0"
+    setSyncKey(collectionId, key)
+    return key
   }
 
   private func syncCollection(
@@ -328,6 +346,7 @@ final class EasClient {
     }
     guard status == "1" else { throw EasError.hard("Sync Status \(status)") }
     let newKey = EasParse.text(coll, page: a, tag: "SyncKey") ?? syncKey
+    setSyncKey(collectionId, newKey)
     let hasMore = EasParse.first(coll, page: a, tag: "MoreAvailable") != nil
 
     var created: [[String: Any]] = []
@@ -384,5 +403,155 @@ final class EasClient {
     let msg = EasParse.message(
       scope: props, serverId: serverId, accountId: accountId, folderId: collId)
     return NexusJSON.string(from: msg) ?? "{}"
+  }
+
+  // MARK: SendMail (ComposeMail Page 21)
+
+  func sendMessage(accountId: String, messageJson: String) async throws -> String {
+    guard let msg = NexusJSON.object(from: messageJson) as? [String: Any] else {
+      throw EasError.hard("Ungültige Nachricht")
+    }
+    return try await sendMime(accountId, msg)
+  }
+
+  private func sendMime(_ accountId: String, _ msg: [String: Any]) async throws -> String {
+    let mime = MimeBuilder.build(msg)
+    let cm = Wbxml.Page.composeMail
+    let req = Wbxml.el(
+      cm, "SendMail",
+      [
+        Wbxml.txt(cm, "ClientId", UUID().uuidString),
+        Wbxml.el(cm, "SaveInSentItems", []),
+        Wbxml.txt(cm, "Mime", mime),
+      ])
+    let data = try await easSend(accountId, command: "SendMail", body: Wbxml.encode(req))
+    // Leere Antwort = Erfolg; nicht-leer ⇒ Status prüfen.
+    if !data.isEmpty, let root = try? Wbxml.decode(data),
+      let status = EasParse.text(root, page: cm, tag: "Status"), status != "1"
+    {
+      throw EasError.hard("SendMail Status \(status)")
+    }
+    return NexusJSON.string(from: "sent-\(UUID().uuidString)") ?? "\"sent\""
+  }
+
+  // MARK: applyOperation (Read/Flag/Categories/Delete/Move/Send)
+
+  func applyOperation(operationJson: String) async throws {
+    guard let op = NexusJSON.object(from: operationJson) as? [String: Any],
+      let command = op["command"] as? [String: Any], let type = command["type"] as? String
+    else { throw EasError.hard("Ungültige Operation") }
+    let accountId = op["accountId"] as? String ?? ""
+    let itemId = command["messageId"] as? String ?? ""
+    let e = Wbxml.Page.email
+
+    switch type {
+    case "markRead":
+      let read = (command["read"] as? Bool) ?? true
+      try await changeItem(accountId, serverId: itemId, fields: [Wbxml.txt(e, "Read", read ? "1" : "0")])
+    case "flag":
+      let on = (command["value"] as? Bool) ?? true
+      let flag =
+        on
+        ? Wbxml.el(e, "Flag", [Wbxml.txt(e, "FlagStatus", "2"), Wbxml.txt(e, "FlagType", "Flag for follow up")])
+        : Wbxml.el(e, "Flag", [])
+      try await changeItem(accountId, serverId: itemId, fields: [flag])
+    case "setCategories":
+      let cats = (command["categories"] as? [String]) ?? []
+      let nodes = cats.map { Wbxml.txt(e, "Category", $0) }
+      try await changeItem(accountId, serverId: itemId, fields: [Wbxml.el(e, "Categories", nodes)])
+    case "delete":
+      try await deleteItem(accountId, serverId: itemId)
+    case "move":
+      try await moveItem(
+        accountId, serverId: itemId, targetFolderId: command["targetFolderId"] as? String ?? "")
+    case "send":
+      guard let message = command["message"] as? [String: Any] else {
+        throw EasError.hard("send: message fehlt")
+      }
+      _ = try await sendMime(accountId, message)
+    default:
+      throw EasError.hard("Unbekannte Operation \(type)")
+    }
+  }
+
+  private func changeItem(_ accountId: String, serverId: String, fields: [Wbxml.Node]) async throws {
+    guard let coll = collection(forServerId: serverId) else {
+      throw EasError.hard("Unbekannte Collection für \(serverId)")
+    }
+    let a = Wbxml.Page.airSync
+    let change = Wbxml.el(
+      a, "Change", [Wbxml.txt(a, "ServerId", serverId), Wbxml.el(a, "ApplicationData", fields)])
+    try await syncCommands(accountId, collectionId: coll, commands: [change])
+  }
+
+  private func deleteItem(_ accountId: String, serverId: String) async throws {
+    guard let coll = collection(forServerId: serverId) else {
+      throw EasError.hard("Unbekannte Collection für \(serverId)")
+    }
+    let a = Wbxml.Page.airSync
+    let del = Wbxml.el(a, "Delete", [Wbxml.txt(a, "ServerId", serverId)])
+    try await syncCommands(accountId, collectionId: coll, commands: [del], deletesAsMoves: true)
+  }
+
+  /// Sendet Sync-`Commands` (Change/Delete) auf einer Collection; Status 3 → neu primen + 1 Retry.
+  private func syncCommands(
+    _ accountId: String, collectionId: String, commands: [Wbxml.Node],
+    deletesAsMoves: Bool = false, retried: Bool = false
+  ) async throws {
+    let a = Wbxml.Page.airSync
+    let key: String
+    if let cached = currentSyncKey(collectionId) {
+      key = cached
+    } else {
+      key = try await primeCollection(accountId, collectionId: collectionId)
+    }
+    var collChildren: [Wbxml.Node] = [
+      Wbxml.txt(a, "SyncKey", key), Wbxml.txt(a, "CollectionId", collectionId),
+    ]
+    if deletesAsMoves { collChildren.append(Wbxml.txt(a, "DeletesAsMoves", "1")) }
+    collChildren.append(Wbxml.el(a, "Commands", commands))
+    let req = Wbxml.el(a, "Sync", [Wbxml.el(a, "Collections", [Wbxml.el(a, "Collection", collChildren)])])
+    let data = try await easSend(accountId, command: "Sync", body: Wbxml.encode(req))
+    if data.isEmpty { return }
+    guard let root = try? Wbxml.decode(data), let coll = EasParse.first(root, page: a, tag: "Collection")
+    else { throw EasError.hard("Sync(cmd): WBXML/Collection fehlt") }
+    let status = EasParse.text(coll, page: a, tag: "Status") ?? "?"
+    if status == "3", !retried {
+      _ = try await primeCollection(accountId, collectionId: collectionId)
+      return try await syncCommands(
+        accountId, collectionId: collectionId, commands: commands, deletesAsMoves: deletesAsMoves,
+        retried: true)
+    }
+    guard status == "1" else { throw EasError.hard("Sync(cmd) Status \(status)") }
+    if let newKey = EasParse.text(coll, page: a, tag: "SyncKey") { setSyncKey(collectionId, newKey) }
+  }
+
+  /// MoveItems (Code-Page 5). `targetFolderId` ist die Ziel-CollectionId (FolderSync-ServerId).
+  /// Logische Namen (z. B. „archive") lassen sich hier nicht auflösen → Hardfailure.
+  private func moveItem(_ accountId: String, serverId: String, targetFolderId: String) async throws {
+    guard let srcColl = collection(forServerId: serverId) else {
+      throw EasError.hard("Unbekannte Collection für \(serverId)")
+    }
+    let m = Wbxml.Page.move
+    let req = Wbxml.el(
+      m, "MoveItems",
+      [
+        Wbxml.el(
+          m, "Move",
+          [
+            Wbxml.txt(m, "SrcMsgId", serverId),
+            Wbxml.txt(m, "SrcFldId", srcColl),
+            Wbxml.txt(m, "DstFldId", targetFolderId),
+          ])
+      ])
+    let data = try await easSend(accountId, command: "MoveItems", body: Wbxml.encode(req))
+    if data.isEmpty { return }
+    if let root = try? Wbxml.decode(data) {
+      let status = EasParse.text(root, page: m, tag: "Status") ?? "3"
+      guard status == "3" else { throw EasError.hard("MoveItems Status \(status)") }  // 3 = Erfolg
+      if let dstId = EasParse.text(root, page: m, tag: "DstMsgId") {
+        cacheCollection(dstId, targetFolderId)
+      }
+    }
   }
 }

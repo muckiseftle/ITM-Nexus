@@ -471,6 +471,20 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func applyOperation(operationJson: String) async throws {
+    let accountId = (Self.jsonObject(operationJson) as? [String: Any])?["accountId"] as? String ?? ""
+    if useEas(accountId) {
+      do {
+        try await EasClient.shared.applyOperation(operationJson: operationJson)
+        return
+      } catch let e as EasClient.EasError where e.isHard {
+        try await applyOperationEws(operationJson: operationJson)
+        return
+      }
+    }
+    try await applyOperationEws(operationJson: operationJson)
+  }
+
+  private func applyOperationEws(operationJson: String) async throws {
     let op = Self.jsonObject(operationJson) as? [String: Any]
     guard let command = op?["command"] as? [String: Any], let type = command["type"] as? String else {
       throw NexusError.transport("Ungültige Operation")
@@ -597,6 +611,16 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   func sendMessage(accountId: String, messageJson: String) async throws -> String {
+    if useEas(accountId) {
+      do { return try await EasClient.shared.sendMessage(accountId: accountId, messageJson: messageJson) }
+      catch let e as EasClient.EasError where e.isHard {
+        return try await sendMessageEws(accountId: accountId, messageJson: messageJson)
+      }
+    }
+    return try await sendMessageEws(accountId: accountId, messageJson: messageJson)
+  }
+
+  private func sendMessageEws(accountId: String, messageJson: String) async throws -> String {
     let msg = (Self.jsonObject(messageJson) as? [String: Any]) ?? [:]
     try await deliver(msg)
     return try Self.json("sent-\(UUID().uuidString)")
