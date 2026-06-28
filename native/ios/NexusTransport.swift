@@ -643,11 +643,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   }
 
   // MARK: EAS-Routing (Hardfailure ⇒ EWS-Fallback)
-  // VORERST AUS: Der EAS-Pfad (ensureState/ping/sync) löst eine ObjC-NSException aus, die über die
-  // RN-New-Architecture-Bridge nicht fangbar ist → objc_exception_rethrow → SIGABRT (siehe .ips).
-  // Bis die Bridge-Anbindung gehärtet ist, läuft alles über den stabilen EWS-Pfad. Der gesamte
-  // EAS-Code bleibt vorhanden und wird über diesen einen Schalter wieder aktiviert.
-  private static let easEnabled = false
+  // EAS ist AKTIV: Pro Methode wird zuerst EAS versucht; bei EasError.hard (EAS gesperrt,
+  // Provisioning abgelehnt, keine unterstützte Version, kaputtes WBXML) fällt das Konto
+  // automatisch auf den EWS-Pfad zurück. Der frühere „Crash nach Login" lag NICHT an EAS,
+  // sondern an einem JS-`null` für einen NSString-Bridge-Parameter (-[NSNull length]) — behoben.
+  // Sollte im EAS-Pfad doch eine NSException/ein Trap auftreten, hält der Crash-Recorder
+  // (NexusCrashReporter) den exakten Grund fest.
+  private static let easEnabled = true
   private func useEas(_ accountId: String) -> Bool {
     Self.easEnabled && ewsUrl?.host != nil
   }
