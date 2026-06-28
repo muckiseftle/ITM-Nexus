@@ -304,20 +304,27 @@ function AppInner(): React.JSX.Element {
         }
       }
     };
-    // Den nativen Start-Burst (Initial-Sync, Hintergrund-Planung, Push-Long-Poll) NICHT sofort
-    // beim Mounten auslösen: erst kurz warten, damit der JS-/Rendering-Hochlauf (Fabric-Mount,
-    // Hermes-Warmup) nicht mit massiver nativer Last (Transport/DB/TLS) kollidiert — das hat sich
-    // als Start-Instabilität (Heap-Druck) gezeigt. Der Timer wird beim Unmount geleert.
-    const startTimer = setTimeout(() => {
-      if (cancelled) return;
-      void runSync();
-      if (settings.background) void c.scheduleBackgroundSync?.();
-      if (settings.push) void pushLoop();
-    }, 2500);
+    // DIAGNOSE-Staffelung: Der Absturz tritt im Start-Burst auf. Die drei Operationen werden
+    // zeitlich VERSETZT ausgelöst, damit der Absturz-ZEITPUNKT den Auslöser eindeutig verrät:
+    //   ≈ 3 s  ⇒ Vordergrund-Sync (runSync / EWS-Sync der Ordner)
+    //   ≈ 6 s  ⇒ iOS-Hintergrund-Planung (BGTaskScheduler)
+    //   ≈ 9 s  ⇒ DirectPush-Long-Poll (ping)
+    // Zusätzlich entfällt so die gleichzeitige native Last beim Start (mögliche Race-Ursache).
+    const t1 = setTimeout(() => {
+      if (!cancelled) void runSync();
+    }, 3000);
+    const t2 = setTimeout(() => {
+      if (!cancelled && settings.background) void c.scheduleBackgroundSync?.();
+    }, 6000);
+    const t3 = setTimeout(() => {
+      if (!cancelled && settings.push) void pushLoop();
+    }, 9000);
 
     return () => {
       cancelled = true;
-      clearTimeout(startTimer);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       if (interval !== undefined) clearInterval(interval);
       if (pushDelayTimer !== undefined) clearTimeout(pushDelayTimer);
     };
