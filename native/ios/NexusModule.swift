@@ -18,6 +18,14 @@ final class NexusModule: NSObject {
     }
   }
 
+  /// Normalisiert einen Bridge-String: leer ⇒ `nil`. JS übergibt für „kein syncKey" bewusst "" und
+  /// NICHT null (JS-null würde als `NSString *`-Parameter zu `NSNull` und die RN-Bridge stürzte bei
+  /// `-[NSNull length]` ab). Nativ ist "" damit gleichbedeutend mit „Erst-Sync" (= nil).
+  private static func nilIfEmpty(_ s: String?) -> String? {
+    guard let s, !s.isEmpty else { return nil }
+    return s
+  }
+
   // MARK: Secure-Storage
 
   @objc(secureSet:value:resolver:rejecter:)
@@ -135,7 +143,7 @@ final class NexusModule: NSObject {
   @objc(transportSyncMessages:folderId:syncKey:resolver:rejecter:)
   func transportSyncMessages(_ accountId: String, folderId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {
-      do { resolve(try await NexusTransport.shared.syncMessages(accountId: accountId, folderId: folderId, syncKey: syncKey)) }
+      do { resolve(try await NexusTransport.shared.syncMessages(accountId: accountId, folderId: folderId, syncKey: Self.nilIfEmpty(syncKey))) }
       catch { reject("transport_sync", "\(error)", error) }
     }
   }
@@ -192,7 +200,7 @@ final class NexusModule: NSObject {
   @objc(transportSyncFolders:syncKey:resolver:rejecter:)
   func transportSyncFolders(_ accountId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {
-      do { resolve(try await NexusTransport.shared.syncFolders(accountId: accountId, syncKey: syncKey)) }
+      do { resolve(try await NexusTransport.shared.syncFolders(accountId: accountId, syncKey: Self.nilIfEmpty(syncKey))) }
       catch { reject("transport_folders", "\(error)", error) }
     }
   }
@@ -200,7 +208,7 @@ final class NexusModule: NSObject {
   @objc(transportSyncCalendar:syncKey:resolver:rejecter:)
   func transportSyncCalendar(_ accountId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {
-      do { resolve(try await NexusTransport.shared.syncCalendar(accountId: accountId, syncKey: syncKey)) }
+      do { resolve(try await NexusTransport.shared.syncCalendar(accountId: accountId, syncKey: Self.nilIfEmpty(syncKey))) }
       catch { reject("transport_calendar", "\(error)", error) }
     }
   }
@@ -208,7 +216,7 @@ final class NexusModule: NSObject {
   @objc(transportSyncContacts:syncKey:resolver:rejecter:)
   func transportSyncContacts(_ accountId: String, syncKey: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     Task {
-      do { resolve(try await NexusTransport.shared.syncContacts(accountId: accountId, syncKey: syncKey)) }
+      do { resolve(try await NexusTransport.shared.syncContacts(accountId: accountId, syncKey: Self.nilIfEmpty(syncKey))) }
       catch { reject("transport_contacts", "\(error)", error) }
     }
   }

@@ -277,7 +277,12 @@ export class NativeMailTransport implements MailTransport, PushTransport {
     folderId: FolderId,
     syncKey?: string,
   ): Promise<SyncDelta<MailMessage>> {
-    const json = await NexusNative.transportSyncMessages(accountId, folderId, syncKey ?? null);
+    // WICHTIG: leeren String (nicht null) übergeben. JS-`null` für einen als `NSString *`
+    // deklarierten Bridge-Parameter wird in der RN-New-Architecture zu `NSNull` → beim
+    // Konvertieren ruft die Bridge `-[NSNull length]` auf → `unrecognized selector` → Crash
+    // (genau der Absturz direkt nach dem Login beim Erst-Sync). Nativ wird "" wie „kein
+    // syncKey" behandelt.
+    const json = await NexusNative.transportSyncMessages(accountId, folderId, syncKey ?? '');
     return parseBridge<SyncDelta<MailMessage>>(json);
   }
 
@@ -301,17 +306,17 @@ export class NativeMailTransport implements MailTransport, PushTransport {
   }
 
   async syncFolders(accountId: AccountId, syncKey?: string): Promise<SyncDelta<MailFolder>> {
-    const json = await NexusNative.transportSyncFolders(accountId, syncKey ?? null);
+    const json = await NexusNative.transportSyncFolders(accountId, syncKey ?? '');
     return parseBridge<SyncDelta<MailFolder>>(json);
   }
 
   async syncCalendar(accountId: AccountId, syncKey?: string): Promise<SyncDelta<CalendarEvent>> {
-    const json = await NexusNative.transportSyncCalendar(accountId, syncKey ?? null);
+    const json = await NexusNative.transportSyncCalendar(accountId, syncKey ?? '');
     return parseBridge<SyncDelta<CalendarEvent>>(json);
   }
 
   async syncContacts(accountId: AccountId, syncKey?: string): Promise<SyncDelta<Contact>> {
-    const json = await NexusNative.transportSyncContacts(accountId, syncKey ?? null);
+    const json = await NexusNative.transportSyncContacts(accountId, syncKey ?? '');
     return parseBridge<SyncDelta<Contact>>(json);
   }
 

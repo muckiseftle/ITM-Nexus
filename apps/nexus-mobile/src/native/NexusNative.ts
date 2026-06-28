@@ -36,11 +36,9 @@ export interface NexusNativeModule {
   transportUpdatePassword(email: string, password: string): Promise<string>;
   /** Stellt die Sitzung aus dem Keychain wieder her (kein Netz). Liefert accountId oder null. */
   transportRestore(): Promise<string | null>;
-  transportSyncMessages(
-    accountId: string,
-    folderId: string,
-    syncKey: string | null,
-  ): Promise<string>;
+  // syncKey: leerer String "" = Erst-Sync (NIE null — JS-null würde als NSString-Parameter zu
+  // NSNull und die RN-Bridge stürzte bei -[NSNull length] ab).
+  transportSyncMessages(accountId: string, folderId: string, syncKey: string): Promise<string>;
   transportApplyOperation(operationJson: string): Promise<void>;
   transportSendMessage(accountId: string, messageJson: string): Promise<string>;
   /** Speichert die Nachricht als Entwurf (EWS SaveOnly → Ordner „Entwürfe"). Liefert JSON {id}. */
@@ -54,9 +52,9 @@ export interface NexusNativeModule {
   }>;
   transportSearchServer(accountId: string, query: string): Promise<string>;
   transportLoadAccount(accountId: string): Promise<string>;
-  transportSyncFolders(accountId: string, syncKey: string | null): Promise<string>;
-  transportSyncCalendar(accountId: string, syncKey: string | null): Promise<string>;
-  transportSyncContacts(accountId: string, syncKey: string | null): Promise<string>;
+  transportSyncFolders(accountId: string, syncKey: string): Promise<string>;
+  transportSyncCalendar(accountId: string, syncKey: string): Promise<string>;
+  transportSyncContacts(accountId: string, syncKey: string): Promise<string>;
   transportGetMessage(accountId: string, messageId: string): Promise<string>;
 
   // — EAS (ActiveSync) Diagnose (dark): OPTIONS → Provision → FolderSync „0" —
