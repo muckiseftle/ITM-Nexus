@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { themeColors, type ColorScheme, type ThemeColors } from '@nexus/ui-kit';
+import {
+  avatarPalette,
+  motion,
+  themeColors,
+  type ColorScheme,
+  type ThemeColors,
+} from '@nexus/ui-kit';
 
 /**
  * App-Theme: erweitert die plattformunabhängigen {@link ThemeColors} um ein paar von der UI
@@ -19,6 +25,10 @@ export interface AppTheme {
   readonly onBrand: string;
   /** Farbpalette für farbige Kalender-Einträge. */
   readonly calPalette: readonly string[];
+  /** Avatar-/Label-Farbpalette (stabil je Kennung via {@link paletteColor}). */
+  readonly avatarPalette: readonly string[];
+  /** Bewegungs-Tokens (Dauern/Easing/Spring) für die Animations-Primitive. */
+  readonly motion: typeof motion;
 }
 
 function buildTheme(mode: ColorScheme): AppTheme {
@@ -31,6 +41,8 @@ function buildTheme(mode: ColorScheme): AppTheme {
     rowActive: dark ? '#1C232B' : '#EEF1F5',
     onBrand: '#FFFFFF',
     calPalette: [c.brandPrimary, c.accent, c.success, c.warning, c.danger],
+    avatarPalette,
+    motion,
   };
 }
 
