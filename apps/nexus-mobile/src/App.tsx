@@ -26,7 +26,14 @@ import {
 import { classifyError } from '@nexus/core-transport';
 import { type StoredAccount } from '@nexus/services';
 import { space } from '@nexus/ui-kit';
-import { APP_MODE, DEMO_ACCOUNT_ID, DEMO_INBOX_ID, PUSH_TIMEOUT_MS } from './config';
+import {
+  APP_MODE,
+  DEMO_ACCOUNT_ID,
+  DEMO_INBOX_ID,
+  ENABLE_BACKGROUND_TASKS,
+  ENABLE_DIRECT_PUSH,
+  PUSH_TIMEOUT_MS,
+} from './config';
 import { createContainer, type AppContainer } from './composition/container';
 import { createDemoContainer } from './composition/demoContainer';
 import { type SharedMailbox } from './composition/sharedMailboxes';
@@ -309,9 +316,13 @@ function AppInner(): React.JSX.Element {
     // die kleine Verzögerung bleibt als Stabilitätspuffer, damit zuerst UI erscheint.
     const startTimer = setTimeout(() => {
       if (cancelled) return;
+      // KERN: Vordergrund-Sync lädt die Mails — läuft immer.
       void runSync();
-      if (settings.background) void c.scheduleBackgroundSync?.();
-      if (settings.push) void pushLoop();
+      // ENHANCEMENTS (Sideload: aus): BGTaskScheduler/DirectPush werfen ohne Background-
+      // Entitlement NSExceptions, die die Bridge abstürzen lassen, und bringen dort keinen
+      // Nutzen. Über die Stabilitäts-Schalter deaktiviert.
+      if (ENABLE_BACKGROUND_TASKS && settings.background) void c.scheduleBackgroundSync?.();
+      if (ENABLE_DIRECT_PUSH && settings.push) void pushLoop();
     }, 1000);
 
     return () => {

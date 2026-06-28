@@ -42,3 +42,17 @@ export const SYNC_INTERVALS = {
 
 /** Timeout für einen DirectPush-Long-Poll (ms). */
 export const PUSH_TIMEOUT_MS = 300_000;
+
+/**
+ * Stabilitäts-Schalter für die Start-Operationen. Auf Sideload-Builds (kostenlose Apple-ID,
+ * KEIN Background-Entitlement) werfen `BGTaskScheduler` und der DirectPush-Long-Poll
+ * NSExceptions, welche die RN-Bridge zum Absturz bringen — und sie bringen dort ohnehin keinen
+ * Nutzen. Daher vorerst AUS: Der Kern (sichere Ablage, verschlüsselte DB, Vordergrund-EWS-Sync)
+ * bleibt voll funktionsfähig. Für einen ordentlich signierten Build (mit Entitlements) können
+ * diese Schalter wieder aktiviert werden.
+ *
+ * Bewusst als `: boolean` typisiert (nicht als Literal), damit die abhängigen Bedingungen nicht
+ * als „immer falsch" gewertet werden.
+ */
+export const ENABLE_DIRECT_PUSH: boolean = false;
+export const ENABLE_BACKGROUND_TASKS: boolean = false;
