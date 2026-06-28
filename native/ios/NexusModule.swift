@@ -328,6 +328,27 @@ final class NexusModule: NSObject {
     }
   }
 
+  // MARK: Crash-Diagnose (On-Device, kein Cloud)
+
+  /// Letzter nativer Crash-Bericht (NSException-`reason` bzw. Signal-Backtrace) oder `nil`.
+  /// Wird beim App-Start ausgelesen und dem Nutzer angezeigt — so wird der bislang im
+  /// `.ips` unsichtbare Grund endlich sichtbar.
+  @objc(crashLastReport:rejecter:)
+  func crashLastReport(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    guarded("crash_last", reject) {
+      resolve(NexusCrashReporter.lastReport())
+    }
+  }
+
+  /// Löscht den gespeicherten Crash-Bericht (nach dem Anzeigen).
+  @objc(crashClearReport:rejecter:)
+  func crashClearReport(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    guarded("crash_clear", reject) {
+      NexusCrashReporter.clearReport()
+      resolve(nil)
+    }
+  }
+
   // MARK: App-Sperre (Biometrie / Face ID / Touch ID)
 
   /// Liefert, ob Geräte-Biometrie verfügbar ist und welcher Typ (faceID/touchID/none).

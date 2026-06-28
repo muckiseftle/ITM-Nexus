@@ -85,6 +85,12 @@ export interface NexusNativeModule {
   /** Liest (nur lesend) den Posteingang eines freigegebenen Postfachs. Rejectet ohne Berechtigung. */
   transportSyncSharedInbox(accountId: string, owner: string): Promise<string>;
 
+  // — Crash-Diagnose (On-Device, kein Cloud) —
+  /** Letzter nativer Crash-Bericht (NSException-`reason`/Signal-Backtrace) oder null. */
+  crashLastReport(): Promise<string | null>;
+  /** Löscht den gespeicherten Crash-Bericht (nach dem Anzeigen). */
+  crashClearReport(): Promise<void>;
+
   // — Netzwerkstatus (für „Nur über WLAN") —
   /** Aktueller Verbindungstyp: 'wifi' | 'cellular' | 'none'. */
   networkStatus(): Promise<string>;

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   SafeAreaView,
   StatusBar,
@@ -202,6 +203,46 @@ function AppInner(): React.JSX.Element {
         setError(e instanceof Error ? e.message : 'Initialisierung fehlgeschlagen');
         setRestoring(false);
       });
+  }, []);
+
+  // Crash-Diagnose: Wurde die App beim letzten Mal durch einen nativen Absturz beendet, hat der
+  // Crash-Recorder den Grund (NSException-`reason` bzw. Signal-Backtrace) in eine Datei
+  // geschrieben. Hier beim Start auslesen und dem Nutzer anzeigen — so wird der bislang im
+  // System-`.ips` unsichtbare Grund endlich sichtbar (kein Mac/Cloud nötig). Danach löschen.
+  useEffect(() => {
+    if (APP_MODE !== 'live') return;
+    let active = true;
+    void (async () => {
+      try {
+        const report = await NexusNative.crashLastReport();
+        if (!active || report === null || report.length === 0) return;
+        // Kompakte Kurzfassung (Grund) oben, vollständiger Bericht in der Konsole/im os_log.
+        console.warn('[NEXUS] Letzter nativer Absturz:\n' + report);
+        const reasonLine =
+          report.split('\n').find((l) => l.startsWith('reason=') || l.startsWith('signal=')) ??
+          report.slice(0, 200);
+        const reason = reasonLine.replace(/^reason=|^signal=/, '');
+        Alert.alert(
+          'Letzter Absturz erkannt',
+          'Die App wurde beim letzten Mal unerwartet beendet.\n\nGrund:\n' +
+            reason +
+            '\n\nBitte diesen Text per Screenshot an den Support senden — damit lässt sich die Ursache gezielt beheben.',
+          [
+            {
+              text: 'Verwerfen',
+              style: 'destructive',
+              onPress: () => void NexusNative.crashClearReport(),
+            },
+            { text: 'OK', style: 'default' },
+          ],
+        );
+      } catch {
+        /* Methode fehlt (älterer Build) oder kein Bericht → ignorieren. */
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Ordnerstruktur für das Schubfach laden (und bei Konto-/Sync-Wechsel aktualisieren).
