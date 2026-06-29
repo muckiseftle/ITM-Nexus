@@ -8,12 +8,16 @@ import { IconButton } from '../components/Icon';
 import { Segmented } from '../components/Segmented';
 import { paletteColor, useTheme, type AppTheme } from '../theme/ThemeContext';
 
+type CalView = 'list' | 'day' | 'week' | 'month';
+
 interface Props {
   readonly container: AppContainer;
   readonly account: AccountId;
+  /** Zuletzt gespeicherte Ansicht (aus den Einstellungen) — Startwert. */
+  readonly initialView?: CalView;
+  /** Wird bei jedem Ansichtswechsel aufgerufen, damit die Wahl persistiert werden kann. */
+  readonly onViewChange?: (view: CalView) => void;
 }
-
-type CalView = 'list' | 'day' | 'week' | 'month';
 
 const DAY = 86_400_000;
 const VIEWS: readonly { readonly key: CalView; readonly label: string }[] = [
@@ -45,12 +49,25 @@ const longDay = (ms: number): string =>
   new Date(ms).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
 /** Kalender mit vier Ansichten und farbigen Terminen (Farbe je Organisator). */
-export function CalendarScreen({ container, account }: Props): React.JSX.Element {
+export function CalendarScreen({
+  container,
+  account,
+  initialView,
+  onViewChange,
+}: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const today = useMemo(() => dStart(Date.now()), []);
 
-  const [view, setView] = useState<CalView>('list');
+  const [view, setViewState] = useState<CalView>(initialView ?? 'list');
+  // Ansicht wechseln UND die Wahl persistieren (über den Eltern-Callback).
+  const setView = useCallback(
+    (next: CalView) => {
+      setViewState(next);
+      onViewChange?.(next);
+    },
+    [onViewChange],
+  );
   const [selected, setSelected] = useState<number>(today);
   const [events, setEvents] = useState<readonly CalendarEvent[]>([]);
   const [query, setQuery] = useState('');

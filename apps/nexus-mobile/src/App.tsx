@@ -780,7 +780,12 @@ function AppInner(): React.JSX.Element {
               />
             )
           ) : tab === 'calendar' ? (
-            <CalendarScreen container={container} account={account} />
+            <CalendarScreen
+              container={container}
+              account={account}
+              initialView={settings.calendarView}
+              onViewChange={(v) => updateSettings({ ...settings, calendarView: v })}
+            />
           ) : tab === 'contacts' ? (
             <ContactsScreen container={container} account={account} />
           ) : (

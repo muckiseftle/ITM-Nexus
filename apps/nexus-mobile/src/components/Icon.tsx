@@ -39,6 +39,7 @@ export type IconName =
   | 'lock'
   | 'clock'
   | 'user'
+  | 'image'
   | 'dot';
 
 interface IconProps {
@@ -228,6 +229,14 @@ function shape(name: IconName): React.JSX.Element {
         <>
           <Circle cx={12} cy={12} r={8.5} />
           <Polyline points="12 7 12 12 15.5 14" />
+        </>
+      );
+    case 'image':
+      return (
+        <>
+          <Rect x={3} y={4.5} width={18} height={15} rx={2.5} />
+          <Circle cx={8.5} cy={9.5} r={1.6} />
+          <Path d="M4 17l4.5-4.5 3.5 3.5 3-3 5 5" />
         </>
       );
     case 'dot':

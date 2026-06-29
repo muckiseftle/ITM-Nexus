@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { radius, space, typography } from '@nexus/ui-kit';
+import { Icon } from './Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface BottomSheetProps {
@@ -107,7 +108,7 @@ export function OptionSheet({
               <Text style={[s.optLabel, active ? s.optLabelActive : null]}>{o.label}</Text>
               {o.sub !== undefined ? <Text style={s.optSub}>{o.sub}</Text> : null}
             </View>
-            {active ? <Text style={s.check}>✓</Text> : null}
+            {active ? <Icon name="check" size={20} color={t.c.brandPrimary} /> : null}
           </Pressable>
         );
       })}

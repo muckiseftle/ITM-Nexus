@@ -14,7 +14,7 @@ import { classifyError } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
 import { DEMO_INBOX_ID } from '../config';
 import type { AppContainer } from '../composition/container';
-import { archive, remove } from '../actions/messageActions';
+import { archive, remove, setRead } from '../actions/messageActions';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Icon, IconButton } from '../components/Icon';
 import { Avatar } from '../components/Avatar';
@@ -161,6 +161,15 @@ export function MailboxScreen({
     },
     [container, account, load],
   );
+  // Wischen von links nach rechts: Mail wieder als ungelesen markieren (offline-first via setRead).
+  const onMarkUnreadMsg = useCallback(
+    (m: MailMessage) => {
+      void setRead(container, account, m, false)
+        .then(load)
+        .catch(() => undefined);
+    },
+    [container, account, load],
+  );
 
   const keyExtractor = useCallback((m: MailMessage) => m.id, []);
   const renderItem = useCallback(
@@ -172,9 +181,10 @@ export function MailboxScreen({
         onOpen={onOpen}
         onArchive={onArchiveMsg}
         onDelete={onDeleteMsg}
+        onMarkUnread={onMarkUnreadMsg}
       />
     ),
-    [s, t, onOpen, onArchiveMsg, onDeleteMsg],
+    [s, t, onOpen, onArchiveMsg, onDeleteMsg, onMarkUnreadMsg],
   );
 
   return (
@@ -239,6 +249,7 @@ const MessageRow = React.memo(function MessageRow({
   onOpen,
   onArchive,
   onDelete,
+  onMarkUnread,
 }: {
   readonly item: MailMessage;
   readonly s: Styles;
@@ -246,12 +257,18 @@ const MessageRow = React.memo(function MessageRow({
   readonly onOpen: (id: MessageId) => void;
   readonly onArchive: (m: MailMessage) => void;
   readonly onDelete: (m: MailMessage) => void;
+  readonly onMarkUnread: (m: MailMessage) => void;
 }): React.JSX.Element {
   const unread = isUnread(item);
   const sender = item.from.displayName ?? item.from.address;
   return (
-    <SwipeableRow onArchive={() => onArchive(item)} onDelete={() => onDelete(item)}>
+    <SwipeableRow
+      onArchive={() => onArchive(item)}
+      onDelete={() => onDelete(item)}
+      {...(unread ? {} : { onMarkUnread: () => onMarkUnread(item) })}
+    >
       <Press onPress={() => onOpen(item.id)} style={s.row}>
+        <View style={s.lead}>{unread ? <View style={s.unreadDot} /> : null}</View>
         <Avatar name={sender} colorKey={item.from.address} size={46} />
         <View style={s.rowBody}>
           <View style={s.rowTop}>
@@ -267,12 +284,11 @@ const MessageRow = React.memo(function MessageRow({
             {item.preview}
           </Text>
         </View>
-        <View style={s.rowRight}>
-          {unread ? <View style={s.unreadDot} /> : null}
-          {hasFlag(item, MessageFlag.Flagged) ? (
+        {hasFlag(item, MessageFlag.Flagged) ? (
+          <View style={s.rowRight}>
             <Icon name="flag" size={15} color={t.c.warning} />
-          ) : null}
-        </View>
+          </View>
+        ) : null}
       </Press>
     </SwipeableRow>
   );
@@ -291,6 +307,7 @@ function makeStyles(t: AppTheme) {
     bannerText: { color: t.c.danger, fontSize: typography.caption.size },
     empty: { color: t.c.textSecondary, fontSize: typography.body.size, textAlign: 'center' },
     emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
+    lead: { alignItems: 'center', height: 46, justifyContent: 'center', width: 10 },
     listContent: { paddingBottom: 96 },
     preview: {
       color: t.c.textSecondary,

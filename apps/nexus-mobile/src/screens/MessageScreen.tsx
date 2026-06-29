@@ -30,6 +30,19 @@ function formatSize(bytes: number): string {
   return `${bytes} B`;
 }
 
+/** Vollständiges Datum + Uhrzeit der E-Mail (z. B. „Montag, 29. Juni 2026, 14:32"). */
+function fullDateTime(ms: number): string {
+  const d = new Date(ms);
+  const date = d.toLocaleDateString('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return `${date}, ${time}`;
+}
+
 interface Props {
   readonly container: AppContainer;
   readonly account: AccountId;
@@ -224,6 +237,7 @@ export function MessageScreen({
                     {message.from.address}
                   </Text>
                 ) : null}
+                <Text style={s.dateTime}>{fullDateTime(message.sentAt ?? message.receivedAt)}</Text>
               </View>
             </View>
             {message.categories.length > 0 ? (
@@ -387,6 +401,7 @@ function makeStyles(t: AppTheme) {
     },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
     content: { padding: space.md, paddingBottom: space.lg },
+    dateTime: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: 2 },
     htmlWrap: { marginTop: space.lg },
     meta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
     senderAddr: { color: t.c.textSecondary, fontSize: typography.caption.size },

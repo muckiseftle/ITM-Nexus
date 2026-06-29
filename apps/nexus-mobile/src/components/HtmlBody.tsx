@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { parseHtmlBlocks, type HtmlBlock, type HtmlSpan } from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
+import { Icon } from './Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
@@ -61,7 +62,8 @@ export function HtmlBody({
     <View>
       {hasRemoteImages && loadRemoteImages !== true ? (
         <Pressable style={s.banner} onPress={onRequestRemoteImages}>
-          <Text style={s.bannerText}>🛡 Externe Bilder blockiert · Tippen zum Laden</Text>
+          <Icon name="shield" size={15} color={t.c.brandPrimary} />
+          <Text style={s.bannerText}>Externe Bilder blockiert · Tippen zum Laden</Text>
         </Pressable>
       ) : null}
 
@@ -112,9 +114,10 @@ function BlockView({
     case 'image':
       if (block.remote && !loadRemoteImages) {
         return (
-          <Text style={styles.imagePlaceholder}>
-            🖼 {block.alt.length > 0 ? block.alt : 'Bild'} (extern, blockiert)
-          </Text>
+          <ImagePlaceholder
+            styles={styles}
+            label={`${block.alt.length > 0 ? block.alt : 'Bild'} (extern, blockiert)`}
+          />
         );
       }
       if (block.remote || block.src.startsWith('data:')) {
@@ -122,13 +125,30 @@ function BlockView({
       }
       // cid:/unbekannt → eingebettet, hier (noch) nicht aufgelöst.
       return (
-        <Text style={styles.imagePlaceholder}>
-          🖼 {block.alt.length > 0 ? block.alt : 'Eingebettetes Bild'}
-        </Text>
+        <ImagePlaceholder
+          styles={styles}
+          label={block.alt.length > 0 ? block.alt : 'Eingebettetes Bild'}
+        />
       );
     default:
       return null;
   }
+}
+
+function ImagePlaceholder({
+  styles,
+  label,
+}: {
+  readonly styles: ReturnType<typeof makeStyles>;
+  readonly label: string;
+}): React.JSX.Element {
+  const t = useTheme();
+  return (
+    <View style={styles.imagePlaceholder}>
+      <Icon name="image" size={15} color={t.c.textSecondary} />
+      <Text style={styles.imagePlaceholderText}>{label}</Text>
+    </View>
+  );
 }
 
 function RemoteImage({
@@ -164,8 +184,11 @@ function RemoteImage({
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     banner: {
+      alignItems: 'center',
       backgroundColor: t.c.bgElevated,
       borderRadius: radius.sm,
+      flexDirection: 'row',
+      gap: space.xs,
       marginBottom: space.sm,
       paddingHorizontal: space.md,
       paddingVertical: space.sm,
@@ -182,10 +205,16 @@ function makeStyles(t: AppTheme) {
       width: '100%',
     },
     imagePlaceholder: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: space.xs,
+      marginVertical: space.xs,
+    },
+    imagePlaceholderText: {
       color: t.c.textSecondary,
+      flex: 1,
       fontSize: typography.caption.size,
       fontStyle: 'italic',
-      marginVertical: space.xs,
     },
     italic: { fontStyle: 'italic' },
     link: { color: t.c.brandPrimary, textDecorationLine: 'underline' },

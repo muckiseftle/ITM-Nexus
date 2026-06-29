@@ -12,20 +12,40 @@ interface Props {
   readonly onArchive?: () => void;
   /** Aktion „Löschen" (rechte Wischfläche, Rot). */
   readonly onDelete?: () => void;
+  /** Aktion „Als ungelesen markieren" (linke Wischfläche — Wischen von links nach rechts). */
+  readonly onMarkUnread?: () => void;
 }
 
 /**
- * Zeile mit Wisch-Aktionen (gesture-handler): nach links wischen enthüllt Archivieren/Löschen.
- * Antippen der Aktionsfläche führt sie aus und schließt die Zeile. Nutzt die bestehenden
- * Mail-Aktionen (archive/remove).
+ * Zeile mit Wisch-Aktionen (gesture-handler): nach links wischen enthüllt Archivieren/Löschen,
+ * nach rechts (von links) wischen markiert als ungelesen. Antippen der Aktionsfläche führt sie
+ * aus und schließt die Zeile. Nutzt die bestehenden Mail-Aktionen (archive/remove/setRead).
  */
-export function SwipeableRow({ children, onArchive, onDelete }: Props): React.JSX.Element {
+export function SwipeableRow({
+  children,
+  onArchive,
+  onDelete,
+  onMarkUnread,
+}: Props): React.JSX.Element {
   const t = useTheme();
   const ref = useRef<SwipeableMethods>(null);
   const run = (fn?: () => void): void => {
     ref.current?.close();
     fn?.();
   };
+
+  const renderLeft = (): React.JSX.Element => (
+    <View style={styles.actions}>
+      {onMarkUnread !== undefined ? (
+        <Pressable
+          style={[styles.action, { backgroundColor: t.c.accent }]}
+          onPress={() => run(onMarkUnread)}
+        >
+          <Icon name="mail" size={22} color="#FFFFFF" />
+        </Pressable>
+      ) : null}
+    </View>
+  );
 
   const renderRight = (): React.JSX.Element => (
     <View style={styles.actions}>
@@ -52,8 +72,11 @@ export function SwipeableRow({ children, onArchive, onDelete }: Props): React.JS
     <ReanimatedSwipeable
       ref={ref}
       friction={2}
+      leftThreshold={40}
       rightThreshold={40}
+      overshootLeft={false}
       overshootRight={false}
+      {...(onMarkUnread !== undefined ? { renderLeftActions: renderLeft } : {})}
       renderRightActions={renderRight}
     >
       {children}

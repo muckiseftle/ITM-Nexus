@@ -5,6 +5,9 @@ import type { SecureStore } from '@nexus/core-transport';
  * Demo-Modus). Bewusst schlank: nur Werte, die das Verhalten/die Anzeige steuern. Der
  * Aktualisierungs-Intervall steuert den Vordergrund-Sync tatsächlich (siehe App.tsx).
  */
+/** Gespeicherte Kalenderansicht (zuletzt gewählt; wird beim Neustart wiederhergestellt). */
+export type CalendarView = 'list' | 'day' | 'week' | 'month';
+
 export interface AppSettings {
   /** Schlüssel aus {@link INTERVAL_OPTS}; steuert den Vordergrund-Sync-Intervall. */
   readonly syncInterval: string;
@@ -18,7 +21,11 @@ export interface AppSettings {
   readonly background: boolean;
   /** Nur über WLAN synchronisieren (kein Sync/Push über Mobilfunk). */
   readonly wifiOnly: boolean;
+  /** Zuletzt gewählte Kalenderansicht — beim nächsten Start wiederhergestellt. */
+  readonly calendarView: CalendarView;
 }
+
+const CALENDAR_VIEWS: readonly CalendarView[] = ['list', 'day', 'week', 'month'];
 
 export const INTERVAL_OPTS = [
   { key: '1m', label: 'Alle 1 Minute' },
@@ -43,6 +50,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   push: true,
   background: true,
   wifiOnly: false,
+  calendarView: 'list',
 };
 
 const SETTINGS_KEY = 'nexus:settings';
@@ -88,6 +96,10 @@ export async function loadSettings(secureStore: SecureStore): Promise<AppSetting
       background:
         typeof parsed.background === 'boolean' ? parsed.background : DEFAULT_SETTINGS.background,
       wifiOnly: typeof parsed.wifiOnly === 'boolean' ? parsed.wifiOnly : DEFAULT_SETTINGS.wifiOnly,
+      calendarView:
+        typeof parsed.calendarView === 'string' && CALENDAR_VIEWS.includes(parsed.calendarView)
+          ? parsed.calendarView
+          : DEFAULT_SETTINGS.calendarView,
     };
   } catch {
     return DEFAULT_SETTINGS;
