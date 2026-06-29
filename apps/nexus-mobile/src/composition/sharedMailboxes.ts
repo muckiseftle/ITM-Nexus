@@ -1,5 +1,5 @@
 import type { SecureStore } from '@nexus/core-transport';
-import type { MailMessage } from '@nexus/domain';
+import type { CalendarEvent, MailMessage } from '@nexus/domain';
 import { NexusNative } from '../native/NexusNative';
 
 /**
@@ -139,6 +139,23 @@ export async function loadSharedInbox(
     const json = await NexusNative.transportSyncSharedInbox(account, email);
     const result = parse<{ messages?: unknown }>(json, {});
     return Array.isArray(result.messages) ? (result.messages as MailMessage[]) : [];
+  } catch (e: unknown) {
+    throw classify(e);
+  }
+}
+
+/**
+ * Lädt (nur lesend) die Termine eines freigegebenen Kalenders. Wie beim Posteingang erzwingt der
+ * Server die Berechtigung erneut — bei fehlendem Recht wirft dies einen {@link SharedMailboxError}.
+ */
+export async function loadSharedCalendar(
+  account: string,
+  email: string,
+): Promise<readonly CalendarEvent[]> {
+  try {
+    const json = await NexusNative.transportSyncSharedCalendar(account, email);
+    const result = parse<{ events?: unknown }>(json, {});
+    return Array.isArray(result.events) ? (result.events as CalendarEvent[]) : [];
   } catch (e: unknown) {
     throw classify(e);
   }

@@ -388,6 +388,14 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportSyncSharedCalendar:owner:resolver:rejecter:)
+  func transportSyncSharedCalendar(_ accountId: String, owner: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.syncSharedCalendar(owner: owner)) }
+      catch { reject("shared_calendar", "\(error)", error) }
+    }
+  }
+
   // MARK: Netzwerkstatus (für „Nur über WLAN")
 
   /// Aktueller Verbindungstyp: "wifi" | "cellular" | "none".

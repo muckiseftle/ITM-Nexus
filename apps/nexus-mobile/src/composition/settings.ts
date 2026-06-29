@@ -23,6 +23,8 @@ export interface AppSettings {
   readonly wifiOnly: boolean;
   /** Zuletzt gewählte Kalenderansicht — beim nächsten Start wiederhergestellt. */
   readonly calendarView: CalendarView;
+  /** Aktivierte freigegebene Kalender (E-Mail-Adressen), die im Kalender überlagert werden. */
+  readonly calendarSources: readonly string[];
 }
 
 const CALENDAR_VIEWS: readonly CalendarView[] = ['list', 'day', 'week', 'month'];
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   background: true,
   wifiOnly: false,
   calendarView: 'list',
+  calendarSources: [],
 };
 
 const SETTINGS_KEY = 'nexus:settings';
@@ -100,6 +103,11 @@ export async function loadSettings(secureStore: SecureStore): Promise<AppSetting
         typeof parsed.calendarView === 'string' && CALENDAR_VIEWS.includes(parsed.calendarView)
           ? parsed.calendarView
           : DEFAULT_SETTINGS.calendarView,
+      calendarSources:
+        Array.isArray(parsed.calendarSources) &&
+        parsed.calendarSources.every((x) => typeof x === 'string')
+          ? parsed.calendarSources
+          : DEFAULT_SETTINGS.calendarSources,
     };
   } catch {
     return DEFAULT_SETTINGS;

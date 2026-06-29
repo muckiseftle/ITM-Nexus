@@ -525,6 +525,25 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     return try Self.json(["messages": messages])
   }
 
+  /// Liest (nur lesend) die Termine eines freigegebenen Kalenders (Delegation). Der Server
+  /// erzwingt die Rechte erneut (ErrorAccessDenied ⇒ FORBIDDEN). Liefert JSON {events:[…]}.
+  func syncSharedCalendar(owner: String) async throws -> String {
+    let mb = owner.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard mb.contains("@") else { throw NexusError.transport("INVALID: Ungültige Adresse") }
+    let findXml = try await post(EwsSoap.findItem(folderId: "calendar", query: "", mailbox: mb))
+    guard EwsSoap.isSuccess(findXml) else {
+      throw NexusError.transport("FORBIDDEN: \(EwsSoap.responseCode(findXml) ?? "ErrorAccessDenied")")
+    }
+    let ids = Array(EwsSoap.extractItemIds(findXml).prefix(100))
+    var events: [[String: Any]] = []
+    if !ids.isEmpty {
+      events = EwsSoap.parseEvents(try await post(EwsSoap.getCalendarItems(ids: ids))).map {
+        Self.eventJson($0, accountId: "shared:\(mb)")
+      }
+    }
+    return try Self.json(["events": events])
+  }
+
   /// Holt den Anhangs-Inhalt — EAS via ItemOperations:Fetch(FileReference), sonst EWS GetAttachment.
   private func attachmentContent(accountId: String, attachmentId: String) async throws -> (
     name: String, contentType: String, base64: String

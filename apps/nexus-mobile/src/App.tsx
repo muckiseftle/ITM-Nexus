@@ -786,6 +786,11 @@ function AppInner(): React.JSX.Element {
               accountEmail={accountEmail}
               initialView={settings.calendarView}
               onViewChange={(v) => updateSettings({ ...settings, calendarView: v })}
+              sharedMailboxes={sharedMailboxes}
+              calendarSources={settings.calendarSources}
+              onCalendarSourcesChange={(next) =>
+                updateSettings({ ...settings, calendarSources: next })
+              }
             />
           ) : tab === 'contacts' ? (
             <ContactsScreen container={container} account={account} />

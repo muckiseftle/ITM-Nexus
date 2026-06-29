@@ -101,6 +101,8 @@ export interface NexusNativeModule {
   transportVerifySharedMailbox(accountId: string, owner: string): Promise<string>;
   /** Liest (nur lesend) den Posteingang eines freigegebenen Postfachs. Rejectet ohne Berechtigung. */
   transportSyncSharedInbox(accountId: string, owner: string): Promise<string>;
+  /** Liest die Termine eines freigegebenen Kalenders (Delegation). Liefert JSON {events:[…]}. */
+  transportSyncSharedCalendar(accountId: string, owner: string): Promise<string>;
 
   // — Crash-Diagnose (On-Device, kein Cloud) —
   /** Letzter nativer Crash-Bericht (NSException-`reason`/Signal-Backtrace) oder null. */

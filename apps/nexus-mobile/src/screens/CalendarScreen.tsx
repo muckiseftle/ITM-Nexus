@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, ScrollView, Text, View } from 'react-native';
 import { type AccountId, type CalendarEvent } from '@nexus/domain';
 import { space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
+import type { SharedMailbox } from '../composition/sharedMailboxes';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { IconButton } from '../components/Icon';
+import { Icon, IconButton } from '../components/Icon';
+import { BottomSheet } from '../components/BottomSheet';
 import { Segmented } from '../components/Segmented';
 import { Press } from '../components/Press';
 import { FAB } from '../components/FAB';
@@ -28,6 +30,12 @@ interface Props {
   readonly initialView?: CalView;
   /** Wird bei jedem Ansichtswechsel aufgerufen, damit die Wahl persistiert werden kann. */
   readonly onViewChange?: (view: CalView) => void;
+  /** Freigegebene Postfächer des Kontos — als wählbare Kalenderquellen. */
+  readonly sharedMailboxes?: readonly SharedMailbox[];
+  /** Aktivierte freigegebene Kalender (E-Mail-Adressen). */
+  readonly calendarSources?: readonly string[];
+  /** Auswahl der freigegebenen Kalender ändern (persistiert). */
+  readonly onCalendarSourcesChange?: (next: readonly string[]) => void;
 }
 
 const DAY = 86_400_000;
@@ -66,12 +74,21 @@ export function CalendarScreen({
   accountEmail,
   initialView,
   onViewChange,
+  sharedMailboxes,
+  calendarSources,
+  onCalendarSourcesChange,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const today = useMemo(() => dStart(Date.now()), []);
   const [route, setRoute] = useState<EventRoute>({ name: 'calendar' });
   const canEdit = container.createEvent !== undefined;
+  const shared = sharedMailboxes ?? [];
+  const sources = calendarSources ?? [];
+  const loadCalendar = container.sharedMailboxes?.loadCalendar;
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [sharedEvents, setSharedEvents] = useState<readonly CalendarEvent[]>([]);
+  const sourcesKey = sources.join(',');
 
   const [view, setViewState] = useState<CalView>(initialView ?? 'list');
   // Ansicht wechseln UND die Wahl persistieren (über den Eltern-Callback).
@@ -96,6 +113,41 @@ export function CalendarScreen({
   useEffect(() => {
     void load().catch(() => undefined);
   }, [load]);
+
+  // Termine der aktivierten freigegebenen Kalender laden und überlagern.
+  useEffect(() => {
+    if (loadCalendar === undefined || sources.length === 0) {
+      setSharedEvents([]);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const all: CalendarEvent[] = [];
+      for (const email of sources) {
+        try {
+          const evs = await loadCalendar(account, email);
+          all.push(...evs);
+        } catch {
+          /* fehlende Berechtigung/Fehler → diese Quelle überspringen */
+        }
+      }
+      if (active) setSharedEvents(all);
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, sourcesKey, loadCalendar]);
+
+  const toggleSource = useCallback(
+    (email: string): void => {
+      const next = sources.includes(email)
+        ? sources.filter((e) => e !== email)
+        : [...sources, email];
+      onCalendarSourcesChange?.(next);
+    },
+    [sources, onCalendarSourcesChange],
+  );
 
   const openDetail = useCallback((e: CalendarEvent) => setRoute({ name: 'detail', event: e }), []);
 
@@ -147,13 +199,15 @@ export function CalendarScreen({
     [t.calPalette],
   );
 
+  // Eigene + freigegebene Termine zusammenführen (Quelle färbt über Organisator-Palette).
+  const merged = useMemo(() => [...events, ...sharedEvents], [events, sharedEvents]);
   const filtered = useMemo(() => {
     const n = query.trim().toLowerCase();
-    if (n.length === 0) return events;
-    return events.filter(
+    if (n.length === 0) return merged;
+    return merged.filter(
       (e) => e.subject.toLowerCase().includes(n) || (e.location ?? '').toLowerCase().includes(n),
     );
-  }, [events, query]);
+  }, [merged, query]);
 
   // Termine EINMAL nach Tagesbeginn bucketen (statt 42× O(events)-Scan pro Monats-Render).
   const byDay = useMemo(() => {
@@ -464,9 +518,19 @@ export function CalendarScreen({
       <ScreenHeader
         title="Kalender"
         right={
-          <Pressable hitSlop={6} onPress={() => setSelected(today)}>
-            <Text style={s.todayBtn}>Heute</Text>
-          </Pressable>
+          <View style={s.headerRight}>
+            {loadCalendar !== undefined && shared.length > 0 ? (
+              <IconButton
+                name="folder"
+                color={sources.length > 0 ? t.c.brandPrimary : t.c.textSecondary}
+                onPress={() => setSourcesOpen(true)}
+                size={22}
+              />
+            ) : null}
+            <Pressable hitSlop={6} onPress={() => setSelected(today)}>
+              <Text style={s.todayBtn}>Heute</Text>
+            </Pressable>
+          </View>
         }
         search={{ value: query, onChange: setQuery, placeholder: 'Termine durchsuchen' }}
       >
@@ -478,6 +542,36 @@ export function CalendarScreen({
       {canEdit ? (
         <FAB icon="plus" onPress={() => setRoute({ name: 'edit', day: selected })} />
       ) : null}
+
+      <BottomSheet
+        visible={sourcesOpen}
+        onClose={() => setSourcesOpen(false)}
+        title="Kalender anzeigen"
+      >
+        <View style={s.srcRow}>
+          <Icon name="calendar" size={20} color={t.c.brandPrimary} />
+          <Text style={s.srcLabel}>Mein Kalender</Text>
+          <Switch value disabled trackColor={{ true: t.c.brandPrimary, false: t.border }} />
+        </View>
+        {shared.map((mb) => (
+          <View key={mb.email} style={s.srcRow}>
+            <Icon name="calendar" size={20} color={t.c.textSecondary} />
+            <View style={s.srcBody}>
+              <Text style={s.srcLabel} numberOfLines={1}>
+                {mb.displayName}
+              </Text>
+              <Text style={s.srcSub} numberOfLines={1}>
+                {mb.email}
+              </Text>
+            </View>
+            <Switch
+              value={sources.includes(mb.email)}
+              onValueChange={() => toggleSource(mb.email)}
+              trackColor={{ true: t.c.brandPrimary, false: t.border }}
+            />
+          </View>
+        ))}
+      </BottomSheet>
     </View>
   );
 }
@@ -492,6 +586,16 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 5,
     },
     allDayText: { color: t.onBrand, fontSize: typography.caption.size, fontWeight: '600' },
+    headerRight: { alignItems: 'center', flexDirection: 'row', gap: space.xs },
+    srcBody: { flex: 1, minWidth: 0 },
+    srcLabel: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
+    srcRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: space.sm,
+      paddingVertical: space.sm,
+    },
+    srcSub: { color: t.c.textSecondary, fontSize: typography.caption.size },
     block: {
       borderLeftWidth: 3,
       borderRadius: 6,

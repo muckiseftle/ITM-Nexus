@@ -37,6 +37,7 @@ import { NexusNative } from '../native/NexusNative';
 import {
   addSharedMailbox,
   listSharedMailboxes,
+  loadSharedCalendar,
   loadSharedInbox,
   removeSharedMailbox,
   type SharedMailbox,
@@ -142,6 +143,8 @@ export interface AppContainer {
     readonly add: (account: AccountId, email: string) => Promise<SharedMailbox>;
     readonly remove: (account: AccountId, email: string) => Promise<void>;
     readonly loadInbox: (account: AccountId, email: string) => Promise<readonly MailMessage[]>;
+    /** Termine eines freigegebenen Kalenders (Delegation, nur lesend). */
+    readonly loadCalendar: (account: AccountId, email: string) => Promise<readonly CalendarEvent[]>;
   };
   /** Öffnet den System-Dateiauswähler für einen Anhang. `null` bei Abbruch. Nur Live-Modus. */
   readonly pickAttachment?: () => Promise<OutgoingAttachment | null>;
@@ -313,6 +316,7 @@ export async function createContainer(): Promise<AppContainer> {
       add: (account, email) => addSharedMailbox(secureStore, account, email),
       remove: (account, email) => removeSharedMailbox(secureStore, account, email),
       loadInbox: (account, email) => loadSharedInbox(account, email),
+      loadCalendar: (account, email) => loadSharedCalendar(account, email),
     },
     pickAttachment: async () => {
       try {
