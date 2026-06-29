@@ -681,10 +681,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   private func syncFoldersEws(accountId: String, syncKey: String?) async throws -> String {
     let xml = try await post(EwsSoap.findFolders())
     let created = EwsSoap.parseFolders(xml).map { (f) -> [String: Any] in
-      [
+      var dict: [String: Any] = [
         "id": f.id, "accountId": accountId, "displayName": f.displayName,
         "type": Self.folderType(f.displayName), "unreadCount": f.unread, "totalCount": f.total,
       ]
+      // Eltern-Ordner-Id für die Baumdarstellung (nur wenn vom Server geliefert).
+      if !f.parentId.isEmpty { dict["parentId"] = f.parentId }
+      return dict
     }
     return try Self.json([
       "syncKey": syncKey ?? "", "created": created, "updated": [], "deletedIds": [], "hasMore": false,

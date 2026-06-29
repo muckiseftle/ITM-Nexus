@@ -1,10 +1,39 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { FolderType, type FolderId, type MailFolder } from '@nexus/domain';
+import {
+  buildFolderTree,
+  FolderType,
+  type FolderId,
+  type FolderNode,
+  type MailFolder,
+} from '@nexus/domain';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { SharedMailbox } from '../composition/sharedMailboxes';
 import { Icon, type IconName } from './Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
+
+/** Eine Baumzeile, flachgeklopft für die Liste: Ordner + Tiefe + ob Unterordner vorhanden. */
+interface FlatFolder {
+  readonly folder: MailFolder;
+  readonly depth: number;
+  readonly hasChildren: boolean;
+}
+
+/** Tiefendurchlauf des Ordnerbaums; eingeklappte Knoten blenden ihre Kinder aus. */
+function flattenTree(
+  nodes: readonly FolderNode[],
+  depth: number,
+  collapsed: ReadonlySet<string>,
+  acc: FlatFolder[],
+): void {
+  for (const node of nodes) {
+    const hasChildren = node.children.length > 0;
+    acc.push({ folder: node.folder, depth, hasChildren });
+    if (hasChildren && !collapsed.has(node.folder.id)) {
+      flattenTree(node.children, depth + 1, collapsed, acc);
+    }
+  }
+}
 
 interface Props {
   readonly visible: boolean;
@@ -69,34 +98,51 @@ export function FolderDrawer({
 
   const shared = sharedMailboxes ?? [];
 
-  const renderFolderRow = (f: MailFolder): React.JSX.Element => {
+  // Flache Ordnerliste → Hierarchiebaum → für die Anzeige flachgeklopft (eingeklappte Knoten
+  // blenden ihre Kinder aus). So wird die echte Ordner-Verschachtelung sichtbar.
+  const flatFolders = useMemo(() => {
+    const tree = buildFolderTree(folders);
+    const acc: FlatFolder[] = [];
+    flattenTree(tree, 0, collapsed, acc);
+    return acc;
+  }, [folders, collapsed]);
+
+  const renderFolderRow = ({ folder: f, depth, hasChildren }: FlatFolder): React.JSX.Element => {
     const active = f.id === currentFolderId;
+    const expanded = !collapsed.has(f.id);
     return (
-      <Pressable
-        key={f.id}
-        style={({ pressed }) => [
-          s.frow,
-          active ? s.frowActive : null,
-          pressed ? s.frowPressed : null,
-        ]}
-        onPress={() => onSelectFolder(f.id)}
-      >
-        <View style={s.fglyph}>
-          <Icon
-            name={TYPE_ICON[f.type] ?? 'folder'}
-            size={22}
-            color={active ? t.c.brandPrimary : t.c.textSecondary}
-          />
-        </View>
-        <Text style={[s.fname, active ? s.fnameActive : null]} numberOfLines={1}>
-          {f.displayName}
-        </Text>
-        {f.unreadCount > 0 ? (
-          <View style={s.badge}>
-            <Text style={s.badgeText}>{f.unreadCount}</Text>
+      <View key={f.id} style={[s.frow, active ? s.frowActive : null]}>
+        {/* Einrückung je Ebene; Aufklapp-Pfeil nur bei Unterordnern. */}
+        <View style={{ width: space.md + depth * 18 }} />
+        {hasChildren ? (
+          <Pressable style={s.disclosure} hitSlop={8} onPress={() => toggle(f.id)}>
+            <Icon
+              name={expanded ? 'chevronDown' : 'chevronRight'}
+              size={16}
+              color={t.c.textSecondary}
+            />
+          </Pressable>
+        ) : (
+          <View style={s.disclosure} />
+        )}
+        <Pressable style={s.frowMain} onPress={() => onSelectFolder(f.id)}>
+          <View style={s.fglyph}>
+            <Icon
+              name={TYPE_ICON[f.type] ?? 'folder'}
+              size={20}
+              color={active ? t.c.brandPrimary : t.c.textSecondary}
+            />
           </View>
-        ) : null}
-      </Pressable>
+          <Text style={[s.fname, active ? s.fnameActive : null]} numberOfLines={1}>
+            {f.displayName}
+          </Text>
+          {f.unreadCount > 0 ? (
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{f.unreadCount}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </View>
     );
   };
 
@@ -128,7 +174,7 @@ export function FolderDrawer({
               onPress={() => toggle('self')}
               s={s}
             />
-            {!collapsed.has('self') ? folders.map(renderFolderRow) : null}
+            {!collapsed.has('self') ? flatFolders.map(renderFolderRow) : null}
 
             {/* Freigegebene Postfächer — je ein eigener, einklappbarer Abschnitt */}
             {shared.map((mb) => {
@@ -144,17 +190,18 @@ export function FolderDrawer({
                     s={s}
                   />
                   {open ? (
-                    <Pressable
-                      style={({ pressed }) => [s.frow, pressed ? s.frowPressed : null]}
-                      onPress={() => onOpenSharedMailbox?.(mb)}
-                    >
-                      <View style={s.fglyph}>
-                        <Icon name="inbox" size={22} color={t.c.textSecondary} />
-                      </View>
-                      <Text style={s.fname} numberOfLines={1}>
-                        Posteingang
-                      </Text>
-                    </Pressable>
+                    <View style={s.frow}>
+                      <View style={{ width: space.md }} />
+                      <View style={s.disclosure} />
+                      <Pressable style={s.frowMain} onPress={() => onOpenSharedMailbox?.(mb)}>
+                        <View style={s.fglyph}>
+                          <Icon name="inbox" size={20} color={t.c.textSecondary} />
+                        </View>
+                        <Text style={s.fname} numberOfLines={1}>
+                          Posteingang
+                        </Text>
+                      </Pressable>
+                    </View>
                   ) : null}
                 </View>
               );
@@ -236,18 +283,24 @@ function makeStyles(t: AppTheme) {
     },
     badgeText: { color: t.onBrand, fontSize: 12, fontWeight: '700', textAlign: 'center' },
     chevron: { alignItems: 'center', width: 18 },
-    fglyph: { alignItems: 'center', width: 28 },
+    disclosure: { alignItems: 'center', justifyContent: 'center', width: 22 },
+    fglyph: { alignItems: 'center', width: 26 },
     fname: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
     fnameActive: { color: t.c.brandPrimary, fontWeight: '700' },
     frow: {
       alignItems: 'center',
       flexDirection: 'row',
-      gap: space.sm,
-      paddingHorizontal: space.md,
-      paddingLeft: space.lg,
-      paddingVertical: 15,
+      paddingRight: space.md,
     },
     frowActive: { backgroundColor: t.mode === 'dark' ? '#1B2740' : '#EAF0FE' },
+    frowMain: {
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      gap: space.sm,
+      minWidth: 0,
+      paddingVertical: 12,
+    },
     frowPressed: { backgroundColor: t.rowActive },
     group: {
       alignItems: 'center',

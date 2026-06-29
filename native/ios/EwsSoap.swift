@@ -310,6 +310,7 @@ enum EwsSoap {
 
   struct ParsedFolder {
     var id = ""
+    var parentId = ""
     var displayName = ""
     var unread = 0
     var total = 0
@@ -626,6 +627,8 @@ private final class FolderParser: NSObject, XMLParserDelegate {
     text = ""
     if name == "Folder" { current = EwsSoap.ParsedFolder() }
     if name == "FolderId", let id = attrs["Id"] { current?.id = id }
+    // ParentFolderId steht (Default-Shape) als eigenes Element je Ordner — für die Baumstruktur.
+    if name == "ParentFolderId", let id = attrs["Id"] { current?.parentId = id }
   }
   func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
   func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
