@@ -20,6 +20,8 @@ import type { AppContainer } from '../composition/container';
 import { archive, moveToFolder, remove, setRead, toggleFlag } from '../actions/messageActions';
 import { OptionSheet, type SheetOption } from '../components/BottomSheet';
 import { HtmlBody } from '../components/HtmlBody';
+import { Avatar } from '../components/Avatar';
+import { Icon, type IconName } from '../components/Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 function formatSize(bytes: number): string {
@@ -53,6 +55,7 @@ export function MessageScreen({
   const [message, setMessage] = useState<MailMessage | undefined>(undefined);
   const [folders, setFolders] = useState<readonly MailFolder[]>([]);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   // Externe Bilder pro geöffneter Nachricht erst nach ausdrücklicher Freigabe laden (Tracking-Schutz).
   const [showRemoteImages, setShowRemoteImages] = useState(false);
 
@@ -163,18 +166,66 @@ export function MessageScreen({
     }
   };
 
+  const flagged = message !== undefined && hasFlag(message, MessageFlag.Flagged);
+  const moreOptions: SheetOption[] =
+    message === undefined
+      ? []
+      : [
+          { key: 'move', label: 'In Ordner verschieben' },
+          {
+            key: 'read',
+            label: isUnread(message) ? 'Als gelesen markieren' : 'Als ungelesen markieren',
+          },
+          ...(onEdit !== undefined ? [{ key: 'edit', label: 'Bearbeiten' } as SheetOption] : []),
+        ];
+  const onMoreSelect = (key: string): void => {
+    if (message === undefined) return;
+    if (key === 'move') openMove();
+    else if (key === 'read') void onToggleRead();
+    else if (key === 'edit') onEdit?.(message);
+  };
+
   return (
     <View style={s.container}>
-      <Pressable style={s.back} onPress={onBack} hitSlop={8}>
-        <Text style={s.backText}>‹ {backLabel}</Text>
-      </Pressable>
+      <View style={s.topbar}>
+        <Pressable style={s.back} onPress={onBack} hitSlop={8}>
+          <Icon name="chevronLeft" size={22} color={t.c.brandPrimary} />
+          <Text style={s.backText} numberOfLines={1}>
+            {backLabel}
+          </Text>
+        </Pressable>
+        {message !== undefined ? (
+          <Pressable style={s.starBtn} onPress={() => void onToggleFlag()} hitSlop={8}>
+            <Icon name="star" size={22} color={flagged ? t.c.warning : t.c.textSecondary} />
+          </Pressable>
+        ) : null}
+      </View>
+
       {message === undefined ? (
         <Text style={s.meta}>Nachricht nicht gefunden.</Text>
       ) : (
         <>
           <ScrollView contentContainerStyle={s.content}>
-            <Text style={s.subject}>{message.subject}</Text>
-            <Text style={s.meta}>{message.from.displayName ?? message.from.address}</Text>
+            <Text style={s.subject}>
+              {message.subject.length > 0 ? message.subject : '(Kein Betreff)'}
+            </Text>
+            <View style={s.senderRow}>
+              <Avatar
+                name={message.from.displayName ?? message.from.address}
+                colorKey={message.from.address}
+                size={44}
+              />
+              <View style={s.senderBody}>
+                <Text style={s.senderName} numberOfLines={1}>
+                  {message.from.displayName ?? message.from.address}
+                </Text>
+                {message.from.displayName !== undefined ? (
+                  <Text style={s.senderAddr} numberOfLines={1}>
+                    {message.from.address}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
             {message.categories.length > 0 ? (
               <Text style={s.categories}>{message.categories.join(' · ')}</Text>
             ) : null}
@@ -195,7 +246,7 @@ export function MessageScreen({
                 <Text style={s.attachHead}>Anhänge ({message.attachments.length})</Text>
                 {message.attachments.map((a) => (
                   <Pressable key={a.id} style={s.attachRow} onPress={() => void onDownload(a)}>
-                    <Text style={s.attachIcon}>📎</Text>
+                    <Icon name="paperclip" size={18} color={t.c.textSecondary} />
                     <Text style={s.attachName} numberOfLines={1}>
                       {a.name}
                     </Text>
@@ -207,25 +258,27 @@ export function MessageScreen({
           </ScrollView>
 
           <View style={s.actions}>
-            {onEdit !== undefined ? (
-              <Action t={t} label="Bearbeiten" onPress={() => onEdit(message)} primary />
-            ) : null}
-            <Action t={t} label="Antworten" onPress={() => onCompose('reply', message)} primary />
-            <Action t={t} label="Allen antw." onPress={() => onCompose('replyAll', message)} />
-            <Action t={t} label="Weiterleiten" onPress={() => onCompose('forward', message)} />
-            <Action
+            <ActionIcon
               t={t}
-              label={isUnread(message) ? 'Gelesen' : 'Ungelesen'}
-              onPress={() => void onToggleRead()}
+              icon="reply"
+              label="Antw."
+              onPress={() => onCompose('reply', message)}
             />
-            <Action
+            <ActionIcon
               t={t}
-              label={hasFlag(message, MessageFlag.Flagged) ? 'Entmarkieren' : 'Markieren'}
-              onPress={() => void onToggleFlag()}
+              icon="replyAll"
+              label="Allen"
+              onPress={() => onCompose('replyAll', message)}
             />
-            <Action t={t} label="Verschieben" onPress={openMove} />
-            <Action t={t} label="Archiv" onPress={() => void onArchive()} />
-            <Action t={t} label="Löschen" onPress={() => void onDelete()} danger />
+            <ActionIcon
+              t={t}
+              icon="forward"
+              label="Weiter"
+              onPress={() => onCompose('forward', message)}
+            />
+            <ActionIcon t={t} icon="archive" label="Archiv" onPress={() => void onArchive()} />
+            <ActionIcon t={t} icon="trash" label="Löschen" danger onPress={() => void onDelete()} />
+            <ActionIcon t={t} icon="more" label="Mehr" onPress={() => setMoreOpen(true)} />
           </View>
         </>
       )}
@@ -240,63 +293,56 @@ export function MessageScreen({
         selected=""
         onSelect={(key) => void doMove(toFolderId(key))}
       />
+      <OptionSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title="Weitere Aktionen"
+        options={moreOptions}
+        selected=""
+        onSelect={onMoreSelect}
+      />
     </View>
   );
 }
 
-function Action({
+function ActionIcon({
   t,
+  icon,
   label,
   onPress,
-  primary,
   danger,
 }: {
   readonly t: AppTheme;
+  readonly icon: IconName;
   readonly label: string;
   readonly onPress: () => void;
-  readonly primary?: boolean;
   readonly danger?: boolean;
 }): React.JSX.Element {
   const s = useMemo(() => makeStyles(t), [t]);
+  const color = danger === true ? t.c.danger : t.c.brandPrimary;
   return (
-    <Pressable style={s.action} onPress={onPress} hitSlop={6}>
-      <Text
-        style={[
-          s.actionText,
-          primary === true ? s.actionPrimary : null,
-          danger === true ? s.actionDanger : null,
-        ]}
-      >
-        {label}
-      </Text>
+    <Pressable style={s.action} onPress={onPress} hitSlop={4}>
+      <Icon name={icon} size={23} color={color} />
+      <Text style={[s.actionText, danger === true ? s.actionDanger : null]}>{label}</Text>
     </Pressable>
   );
 }
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    action: {
-      backgroundColor: t.c.bgElevated,
-      borderRadius: radius.pill,
-      flexGrow: 1,
-      paddingHorizontal: space.md,
-      paddingVertical: space.sm,
-    },
+    action: { alignItems: 'center', flexGrow: 1, gap: 3, paddingVertical: space.xs },
     actionDanger: { color: t.c.danger },
-    actionPrimary: { color: t.c.brandPrimary, fontWeight: '700' },
     actionText: {
-      color: t.c.textPrimary,
-      fontSize: typography.caption.size,
+      color: t.c.brandPrimary,
+      fontSize: 11,
       fontWeight: '600',
       textAlign: 'center',
     },
     actions: {
-      borderTopColor: t.border,
-      borderTopWidth: StyleSheet.hairlineWidth,
       flexDirection: 'row',
-      flexWrap: 'wrap',
       gap: space.xs,
-      padding: space.md,
+      paddingHorizontal: space.sm,
+      paddingTop: space.sm,
     },
     attachHead: {
       color: t.c.textSecondary,
@@ -304,7 +350,6 @@ function makeStyles(t: AppTheme) {
       fontWeight: '700',
       marginBottom: space.xs,
     },
-    attachIcon: { fontSize: typography.body.size, marginRight: space.sm },
     attachMeta: {
       color: t.c.textSecondary,
       fontSize: typography.caption.size,
@@ -313,20 +358,21 @@ function makeStyles(t: AppTheme) {
     attachName: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
     attachRow: {
       alignItems: 'center',
-      backgroundColor: t.c.bgElevated,
+      backgroundColor: t.c.card,
       borderRadius: radius.md,
       flexDirection: 'row',
+      gap: space.sm,
       marginBottom: space.xs,
       padding: space.sm,
     },
     attachWrap: { marginTop: space.lg },
-    back: { paddingHorizontal: space.md, paddingVertical: space.sm },
+    back: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 2 },
     backText: { color: t.c.brandPrimary, fontSize: typography.body.size },
     body: {
       color: t.c.textPrimary,
       fontSize: typography.body.size,
-      lineHeight: 22,
-      marginTop: space.md,
+      lineHeight: 23,
+      marginTop: space.lg,
     },
     categories: {
       alignSelf: 'flex-start',
@@ -334,15 +380,37 @@ function makeStyles(t: AppTheme) {
       borderRadius: radius.pill,
       color: t.c.accent,
       fontSize: typography.caption.size,
-      marginTop: space.xs,
+      marginTop: space.sm,
       overflow: 'hidden',
       paddingHorizontal: space.sm,
       paddingVertical: 3,
     },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    content: { padding: space.md },
-    htmlWrap: { marginTop: space.md },
+    content: { padding: space.md, paddingBottom: space.lg },
+    htmlWrap: { marginTop: space.lg },
     meta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
-    subject: { color: t.c.textPrimary, fontSize: typography.headline.size, fontWeight: '700' },
+    senderAddr: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    senderBody: { flex: 1, minWidth: 0 },
+    senderName: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    senderRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: space.sm,
+      marginTop: space.md,
+    },
+    starBtn: { alignItems: 'center', height: 40, justifyContent: 'center', width: 40 },
+    subject: {
+      color: t.c.textPrimary,
+      fontSize: 24,
+      fontWeight: '700',
+      lineHeight: 30,
+    },
+    topbar: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: space.md,
+      paddingVertical: space.xs,
+    },
   });
 }
