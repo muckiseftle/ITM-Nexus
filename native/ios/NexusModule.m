@@ -41,6 +41,14 @@ RCT_EXTERN_METHOD(transportUpdateContact:(NSString *)accountId contactJson:(NSSt
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportDeleteContact:(NSString *)accountId contactId:(NSString *)contactId
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportCreateEvent:(NSString *)accountId eventJson:(NSString *)eventJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportUpdateEvent:(NSString *)accountId eventJson:(NSString *)eventJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportDeleteEvent:(NSString *)accountId eventId:(NSString *)eventId isMeeting:(BOOL)isMeeting
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportRespondEvent:(NSString *)accountId eventId:(NSString *)eventId changeKey:(NSString *)changeKey responseType:(NSString *)responseType
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(pickAttachment:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSearchServer:(NSString *)accountId query:(NSString *)query
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)

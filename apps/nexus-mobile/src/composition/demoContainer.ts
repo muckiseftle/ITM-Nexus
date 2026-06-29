@@ -5,13 +5,20 @@ import {
   seedDemoData,
 } from '@nexus/services';
 import type { Clock } from '@nexus/core-transport';
-import { toContactId, type Contact } from '@nexus/domain';
+import {
+  toContactId,
+  toEventId,
+  type CalendarEvent,
+  type Contact,
+  type EventResponse,
+} from '@nexus/domain';
 import type { AppContainer } from './container';
 import { defaultSyncTargets } from './container';
 
 const demoClock: Clock = { now: () => Date.now() };
 
 let demoContactSeq = 0;
+let demoEventSeq = 0;
 
 /**
  * Demo-Container: verdrahtet die In-Memory-Adapter mit allen Services und seedet
@@ -62,6 +69,24 @@ export async function createDemoContainer(): Promise<AppContainer> {
     },
     deleteContact: async (account, contactId) => {
       await c.contactStore.deleteContacts(account, [contactId]);
+    },
+    // Kalender-CRUD im Demo-Modus rein lokal (kein Server).
+    createEvent: async (_account, event) => {
+      demoEventSeq += 1;
+      const id = event.id.length > 0 ? event.id : `demo-event-${String(demoEventSeq)}`;
+      const saved: CalendarEvent = { ...event, id: toEventId(id) };
+      await c.calendarStore.upsertEvents([saved]);
+      return saved;
+    },
+    updateEvent: async (_account, event) => {
+      await c.calendarStore.upsertEvents([event]);
+    },
+    deleteEvent: async (account, event) => {
+      await c.calendarStore.deleteEvents(account, [event.id]);
+    },
+    respondEvent: async (_account, event, response) => {
+      const myResponse: EventResponse = response;
+      await c.calendarStore.upsertEvents([{ ...event, myResponse }]);
     },
   };
 }

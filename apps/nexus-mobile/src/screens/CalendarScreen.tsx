@@ -6,13 +6,24 @@ import type { AppContainer } from '../composition/container';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { IconButton } from '../components/Icon';
 import { Segmented } from '../components/Segmented';
+import { Press } from '../components/Press';
+import { FAB } from '../components/FAB';
+import { EventDetailScreen } from './EventDetailScreen';
+import { EventEditScreen } from './EventEditScreen';
 import { paletteColor, useTheme, type AppTheme } from '../theme/ThemeContext';
 
 type CalView = 'list' | 'day' | 'week' | 'month';
 
+type EventRoute =
+  | { name: 'calendar' }
+  | { name: 'detail'; event: CalendarEvent }
+  | { name: 'edit'; event?: CalendarEvent; day?: number };
+
 interface Props {
   readonly container: AppContainer;
   readonly account: AccountId;
+  /** E-Mail des aktiven Kontos — als Organisator beim Anlegen neuer Termine. */
+  readonly accountEmail: string;
   /** Zuletzt gespeicherte Ansicht (aus den Einstellungen) — Startwert. */
   readonly initialView?: CalView;
   /** Wird bei jedem Ansichtswechsel aufgerufen, damit die Wahl persistiert werden kann. */
@@ -52,12 +63,15 @@ const longDay = (ms: number): string =>
 export function CalendarScreen({
   container,
   account,
+  accountEmail,
   initialView,
   onViewChange,
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const today = useMemo(() => dStart(Date.now()), []);
+  const [route, setRoute] = useState<EventRoute>({ name: 'calendar' });
+  const canEdit = container.createEvent !== undefined;
 
   const [view, setViewState] = useState<CalView>(initialView ?? 'list');
   // Ansicht wechseln UND die Wahl persistieren (über den Eltern-Callback).
@@ -82,6 +96,51 @@ export function CalendarScreen({
   useEffect(() => {
     void load().catch(() => undefined);
   }, [load]);
+
+  const openDetail = useCallback((e: CalendarEvent) => setRoute({ name: 'detail', event: e }), []);
+
+  const onSaveEvent = useCallback(
+    async (event: CalendarEvent): Promise<void> => {
+      if (event.id.length > 0 && container.updateEvent !== undefined) {
+        await container.updateEvent(account, event);
+        await load();
+        setRoute({ name: 'detail', event });
+        return;
+      }
+      if (container.createEvent !== undefined) {
+        const saved = await container.createEvent(account, event);
+        await load();
+        setRoute({ name: 'detail', event: saved });
+        return;
+      }
+      setRoute({ name: 'calendar' });
+    },
+    [container, account, load],
+  );
+
+  const onDeleteEvent = useCallback(
+    (event: CalendarEvent): void => {
+      if (container.deleteEvent === undefined) return;
+      void container
+        .deleteEvent(account, event)
+        .then(load)
+        .catch(() => undefined);
+      setRoute({ name: 'calendar' });
+    },
+    [container, account, load],
+  );
+
+  const onRespondEvent = useCallback(
+    (event: CalendarEvent, response: 'accept' | 'decline' | 'tentative'): void => {
+      if (container.respondEvent === undefined) return;
+      void container
+        .respondEvent(account, event, response)
+        .then(load)
+        .catch(() => undefined);
+      setRoute({ name: 'detail', event: { ...event, myResponse: response } });
+    },
+    [container, account, load],
+  );
 
   const evColor = useCallback(
     (e: CalendarEvent): string => paletteColor(t.calPalette, e.organizer.address),
@@ -115,7 +174,11 @@ export function CalendarScreen({
     const cc = evColor(e);
     const when = e.isAllDay ? 'Ganztägig' : `${hm(e.startAt)}–${hm(e.endAt)}`;
     return (
-      <View key={e.id} style={[s.evc, { backgroundColor: cc + '22' }]}>
+      <Press
+        key={e.id}
+        style={[s.evc, { backgroundColor: cc + '22' }]}
+        onPress={() => openDetail(e)}
+      >
         <View style={[s.edot, { backgroundColor: cc }]} />
         <View style={s.evBody}>
           <Text numberOfLines={1} style={s.evTitle}>
@@ -126,7 +189,7 @@ export function CalendarScreen({
             {e.location !== undefined ? ` · ${e.location}` : ''}
           </Text>
         </View>
-      </View>
+      </Press>
     );
   };
 
@@ -364,6 +427,38 @@ export function CalendarScreen({
           ? renderMonth()
           : renderList();
 
+  if (route.name === 'detail') {
+    return (
+      <EventDetailScreen
+        event={route.event}
+        canEdit={canEdit}
+        onBack={() => setRoute({ name: 'calendar' })}
+        onEdit={() => setRoute({ name: 'edit', event: route.event })}
+        onDelete={() => onDeleteEvent(route.event)}
+        onRespond={(r) => onRespondEvent(route.event, r)}
+      />
+    );
+  }
+
+  if (route.name === 'edit') {
+    return (
+      <EventEditScreen
+        account={account}
+        accountEmail={accountEmail}
+        {...(route.event !== undefined ? { event: route.event } : {})}
+        {...(route.day !== undefined ? { initialDay: route.day } : {})}
+        onCancel={() =>
+          setRoute(
+            route.event !== undefined
+              ? { name: 'detail', event: route.event }
+              : { name: 'calendar' },
+          )
+        }
+        onSave={onSaveEvent}
+      />
+    );
+  }
+
   return (
     <View style={s.screen}>
       <ScreenHeader
@@ -380,6 +475,9 @@ export function CalendarScreen({
         </View>
       </ScreenHeader>
       <ScrollView contentContainerStyle={s.content}>{body}</ScrollView>
+      {canEdit ? (
+        <FAB icon="plus" onPress={() => setRoute({ name: 'edit', day: selected })} />
+      ) : null}
     </View>
   );
 }

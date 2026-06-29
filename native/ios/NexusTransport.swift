@@ -700,15 +700,95 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let newState = EwsSoap.extractSyncState(xml) ?? (syncKey ?? "")
     var created: [[String: Any]] = []
     if !ids.isEmpty {
-      created = EwsSoap.parseEvents(try await post(EwsSoap.getItemsLight(ids: ids))).map { (e) in
-        [
-          "id": e.id, "accountId": accountId, "subject": e.subject, "startAt": e.start, "endAt": e.end,
-          "isAllDay": false, "location": e.location,
-          "organizer": ["address": e.organizer], "attendees": [],
-        ]
+      // Volle Termin-Felder (Antwortstatus, ganztägig, Notiz) statt nur Id/Subject.
+      created = EwsSoap.parseEvents(try await post(EwsSoap.getCalendarItems(ids: ids))).map { (e) in
+        Self.eventJson(e, accountId: accountId)
       }
     }
     return try Self.json(["syncKey": newState, "created": created, "updated": [], "deletedIds": [], "hasMore": false])
+  }
+
+  /// EWS-MyResponseType → Domain-EventResponse.
+  private static func responseDomain(_ ews: String) -> String {
+    switch ews {
+    case "Organizer": return "organizer"
+    case "Tentative": return "tentative"
+    case "Accept": return "accept"
+    case "Decline": return "decline"
+    case "NoResponseReceived": return "none"
+    default: return "unknown"
+    }
+  }
+
+  /// Mappt ein geparstes Event auf das Domain-JSON (nur nicht-leere Zusatzfelder).
+  private static func eventJson(_ e: EwsSoap.ParsedEvent, accountId: String) -> [String: Any] {
+    var dict: [String: Any] = [
+      "id": e.id, "accountId": accountId, "subject": e.subject,
+      "startAt": e.start, "endAt": e.end, "isAllDay": e.isAllDay,
+      "location": e.location, "organizer": ["address": e.organizer], "attendees": [],
+      "isMeeting": e.isMeeting, "isCancelled": e.isCancelled,
+      "myResponse": responseDomain(e.myResponse),
+    ]
+    if !e.changeKey.isEmpty { dict["changeKey"] = e.changeKey }
+    if !e.notes.isEmpty { dict["notes"] = e.notes }
+    return dict
+  }
+
+  /// Baut EwsSoap.CalendarFields aus einem Event-JSON-Dict.
+  private static func calendarFields(_ d: [String: Any]) -> EwsSoap.CalendarFields {
+    var f = EwsSoap.CalendarFields()
+    f.subject = d["subject"] as? String ?? ""
+    f.start = (d["startAt"] as? NSNumber)?.doubleValue ?? (d["startAt"] as? Double ?? 0)
+    f.end = (d["endAt"] as? NSNumber)?.doubleValue ?? (d["endAt"] as? Double ?? 0)
+    f.isAllDay = d["isAllDay"] as? Bool ?? false
+    f.location = d["location"] as? String ?? ""
+    f.notes = d["notes"] as? String ?? ""
+    let attendees = d["attendees"] as? [[String: Any]] ?? []
+    f.attendees = attendees.compactMap { $0["address"] as? String }
+    return f
+  }
+
+  /// Termin anlegen (EWS CreateItem). Liefert die neue ItemId als JSON {id}.
+  func createEvent(accountId: String, eventJson: String) async throws -> String {
+    let dict = (Self.jsonObject(eventJson) as? [String: Any]) ?? [:]
+    let xml = try await post(EwsSoap.createCalendarItem(Self.calendarFields(dict)))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Termin konnte nicht angelegt werden (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
+    return try Self.json(["id": EwsSoap.extractItemIds(xml).first ?? ""])
+  }
+
+  /// Termin bearbeiten (EWS UpdateItem). Erwartet `id` (+ optional `changeKey`).
+  func updateEvent(accountId: String, eventJson: String) async throws -> String {
+    let dict = (Self.jsonObject(eventJson) as? [String: Any]) ?? [:]
+    guard let id = dict["id"] as? String, !id.isEmpty else {
+      throw NexusError.transport("Termin-Id fehlt")
+    }
+    let ck = dict["changeKey"] as? String ?? ""
+    let xml = try await post(EwsSoap.updateCalendarItem(itemId: id, changeKey: ck, Self.calendarFields(dict)))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Termin konnte nicht geändert werden (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
+    return try Self.json(["id": id])
+  }
+
+  /// Termin löschen (EWS DeleteItem; Besprechungen mit Absage an Teilnehmer).
+  func deleteEvent(accountId: String, eventId: String, isMeeting: Bool) async throws {
+    let xml = try await post(EwsSoap.deleteCalendarItem(itemId: eventId, isMeeting: isMeeting))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Termin konnte nicht gelöscht werden (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
+  }
+
+  /// Einladung beantworten (Accept/Decline/Tentative) über EWS CreateItem.
+  func respondEvent(accountId: String, eventId: String, changeKey: String, responseType: String)
+    async throws
+  {
+    let xml = try await post(
+      EwsSoap.meetingResponse(itemId: eventId, changeKey: changeKey, responseType: responseType))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Antwort fehlgeschlagen (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
   }
 
   func syncContacts(accountId: String, syncKey: String?) async throws -> String {

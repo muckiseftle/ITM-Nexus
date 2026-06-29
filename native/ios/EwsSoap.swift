@@ -365,6 +365,131 @@ enum EwsSoap {
     return envelope(update)
   }
 
+  // MARK: Kalender (Termine erstellen/ändern/löschen/antworten)
+
+  /// ISO-8601-UTC-String aus Millisekunden (EWS-Datums-/Zeitformat).
+  static func isoString(_ ms: Double) -> String {
+    let f = ISO8601DateFormatter()
+    f.timeZone = TimeZone(identifier: "UTC")
+    return f.string(from: Date(timeIntervalSince1970: ms / 1000.0))
+  }
+
+  /// Felder eines Termins (Erstellen/Bearbeiten).
+  struct CalendarFields {
+    var subject = ""
+    var start: Double = 0
+    var end: Double = 0
+    var isAllDay = false
+    var location = ""
+    var notes = ""
+    var attendees: [String] = []
+  }
+
+  private static func attendeesXml(_ addrs: [String]) -> String {
+    if addrs.isEmpty { return "" }
+    var out = "<t:RequiredAttendees>"
+    for a in addrs {
+      out += "<t:Attendee><t:Mailbox><t:EmailAddress>" + xmlEscape(a)
+        + "</t:EmailAddress></t:Mailbox></t:Attendee>"
+    }
+    out += "</t:RequiredAttendees>"
+    return out
+  }
+
+  /// CreateItem für einen Termin. Reihenfolge der CalendarItem-Felder ist schemaverbindlich
+  /// (Subject, Body, Start, End, IsAllDayEvent, Location, RequiredAttendees).
+  static func createCalendarItem(_ c: CalendarFields) -> String {
+    let send = c.attendees.isEmpty ? "SendToNone" : "SendToAllAndSaveCopy"
+    var item = "<t:CalendarItem>"
+    item += "<t:Subject>" + xmlEscape(c.subject) + "</t:Subject>"
+    if !c.notes.isEmpty {
+      item += "<t:Body BodyType=\"Text\">" + xmlEscape(c.notes) + "</t:Body>"
+    }
+    item += "<t:Start>" + isoString(c.start) + "</t:Start>"
+    item += "<t:End>" + isoString(c.end) + "</t:End>"
+    item += "<t:IsAllDayEvent>" + (c.isAllDay ? "true" : "false") + "</t:IsAllDayEvent>"
+    if !c.location.isEmpty { item += "<t:Location>" + xmlEscape(c.location) + "</t:Location>" }
+    item += attendeesXml(c.attendees)
+    item += "</t:CalendarItem>"
+    var create = "<m:CreateItem SendMeetingInvitations=\"" + send + "\">"
+    create += "<m:SavedItemFolderId>" + distinguishedFolder("calendar") + "</m:SavedItemFolderId>"
+    create += "<m:Items>" + item + "</m:Items>"
+    create += "</m:CreateItem>"
+    return envelope(create)
+  }
+
+  private static func setCalField(_ uri: String, _ inner: String) -> String {
+    var s = "<t:SetItemField><t:FieldURI FieldURI=\"" + uri + "\"/>"
+    s += "<t:CalendarItem>" + inner + "</t:CalendarItem></t:SetItemField>"
+    return s
+  }
+
+  /// UpdateItem für einen Termin (gesetzte Felder). `changeKey` falls vorhanden für Konsistenz.
+  static func updateCalendarItem(itemId: String, changeKey: String, _ c: CalendarFields) -> String {
+    var updates = ""
+    if !c.subject.isEmpty {
+      updates += setCalField("item:Subject", "<t:Subject>" + xmlEscape(c.subject) + "</t:Subject>")
+    }
+    if !c.notes.isEmpty {
+      updates += setCalField("item:Body",
+        "<t:Body BodyType=\"Text\">" + xmlEscape(c.notes) + "</t:Body>")
+    }
+    updates += setCalField("calendar:Start", "<t:Start>" + isoString(c.start) + "</t:Start>")
+    updates += setCalField("calendar:End", "<t:End>" + isoString(c.end) + "</t:End>")
+    updates += setCalField("calendar:IsAllDayEvent",
+      "<t:IsAllDayEvent>" + (c.isAllDay ? "true" : "false") + "</t:IsAllDayEvent>")
+    if !c.location.isEmpty {
+      updates += setCalField("calendar:Location",
+        "<t:Location>" + xmlEscape(c.location) + "</t:Location>")
+    }
+    let ck = changeKey.isEmpty ? "" : " ChangeKey=\"" + xmlEscape(changeKey) + "\""
+    var update = "<m:UpdateItem ConflictResolution=\"AutoResolve\""
+    update += " SendMeetingInvitationsOrCancellations=\"SendToAllAndSaveCopy\">"
+    update += "<m:ItemChanges><t:ItemChange><t:ItemId Id=\"" + xmlEscape(itemId) + "\"" + ck + "/>"
+    update += "<t:Updates>" + updates + "</t:Updates></t:ItemChange></m:ItemChanges>"
+    update += "</m:UpdateItem>"
+    return envelope(update)
+  }
+
+  /// DeleteItem für einen Termin; bei Besprechungen Absagen an die Teilnehmer senden.
+  static func deleteCalendarItem(itemId: String, isMeeting: Bool) -> String {
+    let cancel = isMeeting ? "SendToAllAndSaveCopy" : "SendToNone"
+    return envelope("""
+      <m:DeleteItem DeleteType="MoveToDeletedItems" SendMeetingCancellations="\(cancel)">
+        <m:ItemIds><t:ItemId Id="\(xmlEscape(itemId))"/></m:ItemIds>
+      </m:DeleteItem>
+    """)
+  }
+
+  /// Besprechungseinladung beantworten: AcceptItem/DeclineItem/TentativelyAcceptItem.
+  /// `responseType` ∈ {accept, decline, tentative}. Referenziert das Kalender-/Einladungs-Item.
+  static func meetingResponse(itemId: String, changeKey: String, responseType: String) -> String {
+    let element: String
+    switch responseType {
+    case "decline": element = "DeclineItem"
+    case "tentative": element = "TentativelyAcceptItem"
+    default: element = "AcceptItem"
+    }
+    let ck = changeKey.isEmpty ? "" : " ChangeKey=\"" + xmlEscape(changeKey) + "\""
+    var create = "<m:CreateItem MessageDisposition=\"SendAndSaveCopy\">"
+    create += "<m:Items><t:" + element + ">"
+    create += "<t:ReferenceItemId Id=\"" + xmlEscape(itemId) + "\"" + ck + "/>"
+    create += "</t:" + element + "></m:Items>"
+    create += "</m:CreateItem>"
+    return envelope(create)
+  }
+
+  /// Volle Termin-Felder (AllProperties) — für Detailansicht/Sync inkl. Antwortstatus/Notiz.
+  static func getCalendarItems(ids: [String]) -> String {
+    let refs = ids.map { "<t:ItemId Id=\"\(xmlEscape($0))\"/>" }.joined()
+    return envelope("""
+      <m:GetItem>
+        <m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType></m:ItemShape>
+        <m:ItemIds>\(refs)</m:ItemIds>
+      </m:GetItem>
+    """)
+  }
+
   static func findItem(folderId: String, query: String, mailbox: String? = nil) -> String {
     // QueryString nur ausgeben, wenn vorhanden (leeres AQS-Element kann EWS ablehnen).
     let queryXml = query.isEmpty ? "" : "<m:QueryString>\(xmlEscape(query))</m:QueryString>"
@@ -472,11 +597,17 @@ enum EwsSoap {
 
   struct ParsedEvent {
     var id = ""
+    var changeKey = ""
     var subject = ""
     var start: Double = 0
     var end: Double = 0
     var location = ""
     var organizer = ""
+    var isAllDay = false
+    var isMeeting = false
+    var isCancelled = false
+    var myResponse = ""
+    var notes = ""
   }
 
   static func parseEvents(_ xml: Data) -> [ParsedEvent] {
@@ -790,12 +921,17 @@ private final class EventParser: NSObject, XMLParserDelegate {
   var events: [EwsSoap.ParsedEvent] = []
   private var current: EwsSoap.ParsedEvent?
   private var text = ""
+  private var inBody = false
 
   func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
               qualifiedName: String?, attributes attrs: [String: String]) {
     text = ""
     if name == "CalendarItem" { current = EwsSoap.ParsedEvent() }
-    if name == "ItemId", let id = attrs["Id"] { current?.id = id }
+    if name == "ItemId" {
+      if let id = attrs["Id"] { current?.id = id }
+      if let ck = attrs["ChangeKey"] { current?.changeKey = ck }
+    }
+    if name == "Body" { inBody = true }
   }
   func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
   func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
@@ -804,6 +940,11 @@ private final class EventParser: NSObject, XMLParserDelegate {
     case "Start": current?.start = EwsSoap.iso(text)
     case "End": current?.end = EwsSoap.iso(text)
     case "Location": current?.location = text
+    case "IsAllDayEvent": current?.isAllDay = (text == "true")
+    case "IsMeeting": current?.isMeeting = (text == "true")
+    case "IsCancelled": current?.isCancelled = (text == "true")
+    case "MyResponseType": current?.myResponse = text
+    case "Body": if inBody { current?.notes = text; inBody = false }
     case "Name": if current?.organizer.isEmpty == true { current?.organizer = text }
     case "CalendarItem": if let e = current { events.append(e); current = nil }
     default: break

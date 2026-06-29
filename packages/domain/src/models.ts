@@ -83,6 +83,9 @@ export interface Contact {
   readonly notes?: string;
 }
 
+/** Eigene Antwort auf eine Besprechungseinladung (EWS MyResponseType). */
+export type EventResponse = 'unknown' | 'organizer' | 'tentative' | 'accept' | 'decline' | 'none';
+
 export interface CalendarEvent {
   readonly id: EventId;
   readonly accountId: AccountId;
@@ -93,6 +96,16 @@ export interface CalendarEvent {
   readonly location?: string;
   readonly organizer: MailAddress;
   readonly attendees: readonly MailAddress[];
+  /** Besprechung (mit Teilnehmern) vs. einfacher Termin — steuert Annehmen/Ablehnen. */
+  readonly isMeeting?: boolean;
+  /** Eigene Antwort auf die Einladung. */
+  readonly myResponse?: EventResponse;
+  /** Abgesagte Besprechung. */
+  readonly isCancelled?: boolean;
+  /** Freitext-Beschreibung/Notiz des Termins. */
+  readonly notes?: string;
+  /** EWS-ChangeKey (für UpdateItem/Antworten benötigt). */
+  readonly changeKey?: string;
 }
 
 /** Ein anzuhängender Inhalt (Composer) — Base64, da über die Bridge/Outbox serialisiert. */

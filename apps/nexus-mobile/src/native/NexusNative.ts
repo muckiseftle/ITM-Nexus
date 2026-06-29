@@ -49,6 +49,19 @@ export interface NexusNativeModule {
   transportUpdateContact(accountId: string, contactJson: string): Promise<string>;
   /** Löscht einen Kontakt (EWS DeleteItem → „Gelöschte Elemente"). */
   transportDeleteContact(accountId: string, contactId: string): Promise<void>;
+  /** Legt einen Termin an (EWS CreateItem CalendarItem). Liefert JSON {id}. */
+  transportCreateEvent(accountId: string, eventJson: string): Promise<string>;
+  /** Bearbeitet einen Termin (EWS UpdateItem). Erwartet `id`/`changeKey` im JSON. Liefert JSON {id}. */
+  transportUpdateEvent(accountId: string, eventJson: string): Promise<string>;
+  /** Löscht einen Termin (EWS DeleteItem; bei Besprechungen mit Absage). */
+  transportDeleteEvent(accountId: string, eventId: string, isMeeting: boolean): Promise<void>;
+  /** Beantwortet eine Einladung (accept/decline/tentative) via EWS CreateItem. */
+  transportRespondEvent(
+    accountId: string,
+    eventId: string,
+    changeKey: string,
+    responseType: string,
+  ): Promise<void>;
   /** Öffnet den System-Dateiauswähler; resolved die Datei, rejectet bei Abbruch ('CANCELLED'). */
   pickAttachment(): Promise<{
     readonly name: string;

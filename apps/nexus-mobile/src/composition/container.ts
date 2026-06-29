@@ -23,9 +23,12 @@ import {
 } from '@nexus/services';
 import {
   toContactId,
+  toEventId,
   toFolderId,
   type AccountId,
+  type CalendarEvent,
   type Contact,
+  type EventResponse,
   type MailMessage,
   type OutgoingAttachment,
   type OutgoingMessage,
@@ -150,6 +153,18 @@ export interface AppContainer {
   readonly updateContact?: (account: AccountId, contact: Contact) => Promise<void>;
   /** Kontakt löschen (EWS DeleteItem) + lokal entfernen. */
   readonly deleteContact?: (account: AccountId, contactId: string) => Promise<void>;
+  /** Termin anlegen (EWS CreateItem) + lokal speichern. Liefert den Termin mit Server-Id. */
+  readonly createEvent?: (account: AccountId, event: CalendarEvent) => Promise<CalendarEvent>;
+  /** Termin bearbeiten (EWS UpdateItem) + lokal aktualisieren. */
+  readonly updateEvent?: (account: AccountId, event: CalendarEvent) => Promise<void>;
+  /** Termin löschen (EWS DeleteItem) + lokal entfernen. */
+  readonly deleteEvent?: (account: AccountId, event: CalendarEvent) => Promise<void>;
+  /** Einladung beantworten (accept/decline/tentative) + lokalen Antwortstatus setzen. */
+  readonly respondEvent?: (
+    account: AccountId,
+    event: CalendarEvent,
+    response: 'accept' | 'decline' | 'tentative',
+  ) => Promise<void>;
   /**
    * TOFU-Zertifikat: liest den Server-Fingerprint (SPKI) + Subject, OHNE etwas zu vertrauen.
    * Für die Bestätigung im Setup-Wizard. Nur Live-Modus.
@@ -334,6 +349,30 @@ export async function createContainer(): Promise<AppContainer> {
     deleteContact: async (account, contactId) => {
       await NexusNative.transportDeleteContact(account, contactId);
       await contactStore.deleteContacts(account, [contactId]);
+    },
+    createEvent: async (account, event) => {
+      const res = JSON.parse(
+        await NexusNative.transportCreateEvent(account, JSON.stringify(event)),
+      ) as { id?: string };
+      const saved: CalendarEvent = {
+        ...event,
+        id: toEventId(res.id !== undefined && res.id.length > 0 ? res.id : event.id),
+      };
+      await calendarStore.upsertEvents([saved]);
+      return saved;
+    },
+    updateEvent: async (account, event) => {
+      await NexusNative.transportUpdateEvent(account, JSON.stringify(event));
+      await calendarStore.upsertEvents([event]);
+    },
+    deleteEvent: async (account, event) => {
+      await NexusNative.transportDeleteEvent(account, event.id, event.isMeeting === true);
+      await calendarStore.deleteEvents(account, [event.id]);
+    },
+    respondEvent: async (account, event, response) => {
+      await NexusNative.transportRespondEvent(account, event.id, event.changeKey ?? '', response);
+      const myResponse: EventResponse = response;
+      await calendarStore.upsertEvents([{ ...event, myResponse }]);
     },
   };
 }

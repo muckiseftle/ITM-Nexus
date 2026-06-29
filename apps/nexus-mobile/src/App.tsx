@@ -783,6 +783,7 @@ function AppInner(): React.JSX.Element {
             <CalendarScreen
               container={container}
               account={account}
+              accountEmail={accountEmail}
               initialView={settings.calendarView}
               onViewChange={(v) => updateSettings({ ...settings, calendarView: v })}
             />

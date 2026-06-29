@@ -198,6 +198,42 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportCreateEvent:eventJson:resolver:rejecter:)
+  func transportCreateEvent(_ accountId: String, eventJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.createEvent(accountId: accountId, eventJson: eventJson)) }
+      catch { reject("transport_event_create", "\(error)", error) }
+    }
+  }
+
+  @objc(transportUpdateEvent:eventJson:resolver:rejecter:)
+  func transportUpdateEvent(_ accountId: String, eventJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.updateEvent(accountId: accountId, eventJson: eventJson)) }
+      catch { reject("transport_event_update", "\(error)", error) }
+    }
+  }
+
+  @objc(transportDeleteEvent:eventId:isMeeting:resolver:rejecter:)
+  func transportDeleteEvent(_ accountId: String, eventId: String, isMeeting: Bool, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do {
+        try await NexusTransport.shared.deleteEvent(accountId: accountId, eventId: eventId, isMeeting: isMeeting)
+        resolve(nil)
+      } catch { reject("transport_event_delete", "\(error)", error) }
+    }
+  }
+
+  @objc(transportRespondEvent:eventId:changeKey:responseType:resolver:rejecter:)
+  func transportRespondEvent(_ accountId: String, eventId: String, changeKey: String, responseType: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do {
+        try await NexusTransport.shared.respondEvent(accountId: accountId, eventId: eventId, changeKey: changeKey, responseType: responseType)
+        resolve(nil)
+      } catch { reject("transport_event_respond", "\(error)", error) }
+    }
+  }
+
   /// Öffnet den System-Dateiauswähler und liefert die gewählte Datei (Base64) zurück.
   @objc(pickAttachment:rejecter:)
   func pickAttachment(_ resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
