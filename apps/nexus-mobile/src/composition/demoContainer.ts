@@ -5,10 +5,13 @@ import {
   seedDemoData,
 } from '@nexus/services';
 import type { Clock } from '@nexus/core-transport';
+import { toContactId, type Contact } from '@nexus/domain';
 import type { AppContainer } from './container';
 import { defaultSyncTargets } from './container';
 
 const demoClock: Clock = { now: () => Date.now() };
+
+let demoContactSeq = 0;
 
 /**
  * Demo-Container: verdrahtet die In-Memory-Adapter mit allen Services und seedet
@@ -46,5 +49,19 @@ export async function createDemoContainer(): Promise<AppContainer> {
       defaultSyncTargets(),
       cursors,
     ),
+    // Kontakte-CRUD im Demo-Modus rein lokal (kein Server) — damit der UI-Fluss testbar ist.
+    createContact: async (_account, contact) => {
+      demoContactSeq += 1;
+      const id = contact.id.length > 0 ? contact.id : `demo-contact-${String(demoContactSeq)}`;
+      const saved: Contact = { ...contact, id: toContactId(id) };
+      await c.contactStore.upsertContacts([saved]);
+      return saved;
+    },
+    updateContact: async (_account, contact) => {
+      await c.contactStore.upsertContacts([contact]);
+    },
+    deleteContact: async (account, contactId) => {
+      await c.contactStore.deleteContacts(account, [contactId]);
+    },
   };
 }

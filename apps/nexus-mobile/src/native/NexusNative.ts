@@ -43,6 +43,12 @@ export interface NexusNativeModule {
   transportSendMessage(accountId: string, messageJson: string): Promise<string>;
   /** Speichert die Nachricht als Entwurf (EWS SaveOnly → Ordner „Entwürfe"). Liefert JSON {id}. */
   transportSaveDraft(accountId: string, messageJson: string): Promise<string>;
+  /** Legt einen Kontakt an (EWS CreateItem). Liefert JSON {id} mit der neuen ItemId. */
+  transportCreateContact(accountId: string, contactJson: string): Promise<string>;
+  /** Aktualisiert einen Kontakt (EWS UpdateItem). Erwartet `id` im JSON. Liefert JSON {id}. */
+  transportUpdateContact(accountId: string, contactJson: string): Promise<string>;
+  /** Löscht einen Kontakt (EWS DeleteItem → „Gelöschte Elemente"). */
+  transportDeleteContact(accountId: string, contactId: string): Promise<void>;
   /** Öffnet den System-Dateiauswähler; resolved die Datei, rejectet bei Abbruch ('CANCELLED'). */
   pickAttachment(): Promise<{
     readonly name: string;

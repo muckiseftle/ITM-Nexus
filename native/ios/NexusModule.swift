@@ -172,6 +172,32 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(transportCreateContact:contactJson:resolver:rejecter:)
+  func transportCreateContact(_ accountId: String, contactJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.createContact(accountId: accountId, contactJson: contactJson)) }
+      catch { reject("transport_contact_create", "\(error)", error) }
+    }
+  }
+
+  @objc(transportUpdateContact:contactJson:resolver:rejecter:)
+  func transportUpdateContact(_ accountId: String, contactJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusTransport.shared.updateContact(accountId: accountId, contactJson: contactJson)) }
+      catch { reject("transport_contact_update", "\(error)", error) }
+    }
+  }
+
+  @objc(transportDeleteContact:contactId:resolver:rejecter:)
+  func transportDeleteContact(_ accountId: String, contactId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do {
+        try await NexusTransport.shared.deleteContact(accountId: accountId, contactId: contactId)
+        resolve(nil)
+      } catch { reject("transport_contact_delete", "\(error)", error) }
+    }
+  }
+
   /// Öffnet den System-Dateiauswähler und liefert die gewählte Datei (Base64) zurück.
   @objc(pickAttachment:rejecter:)
   func pickAttachment(_ resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {

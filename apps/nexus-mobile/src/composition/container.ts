@@ -22,8 +22,10 @@ import {
   SyncService,
 } from '@nexus/services';
 import {
+  toContactId,
   toFolderId,
   type AccountId,
+  type Contact,
   type MailMessage,
   type OutgoingAttachment,
   type OutgoingMessage,
@@ -142,6 +144,12 @@ export interface AppContainer {
   readonly pickAttachment?: () => Promise<OutgoingAttachment | null>;
   /** Speichert die Nachricht als Entwurf (EWS SaveOnly → „Entwürfe"). Nur Live-Modus. */
   readonly saveDraft?: (account: AccountId, message: OutgoingMessage) => Promise<void>;
+  /** Kontakt anlegen (EWS CreateItem) + lokal speichern. Liefert den Kontakt mit Server-Id. */
+  readonly createContact?: (account: AccountId, contact: Contact) => Promise<Contact>;
+  /** Kontakt aktualisieren (EWS UpdateItem) + lokal aktualisieren. */
+  readonly updateContact?: (account: AccountId, contact: Contact) => Promise<void>;
+  /** Kontakt löschen (EWS DeleteItem) + lokal entfernen. */
+  readonly deleteContact?: (account: AccountId, contactId: string) => Promise<void>;
   /**
    * TOFU-Zertifikat: liest den Server-Fingerprint (SPKI) + Subject, OHNE etwas zu vertrauen.
    * Für die Bestätigung im Setup-Wizard. Nur Live-Modus.
@@ -307,6 +315,25 @@ export async function createContainer(): Promise<AppContainer> {
     },
     saveDraft: async (account, message) => {
       await NexusNative.transportSaveDraft(account, JSON.stringify(message));
+    },
+    createContact: async (account, contact) => {
+      const res = JSON.parse(
+        await NexusNative.transportCreateContact(account, JSON.stringify(contact)),
+      ) as { id?: string };
+      const saved: Contact = {
+        ...contact,
+        id: toContactId(res.id !== undefined && res.id.length > 0 ? res.id : contact.id),
+      };
+      await contactStore.upsertContacts([saved]);
+      return saved;
+    },
+    updateContact: async (account, contact) => {
+      await NexusNative.transportUpdateContact(account, JSON.stringify(contact));
+      await contactStore.upsertContacts([contact]);
+    },
+    deleteContact: async (account, contactId) => {
+      await NexusNative.transportDeleteContact(account, contactId);
+      await contactStore.deleteContacts(account, [contactId]);
     },
   };
 }

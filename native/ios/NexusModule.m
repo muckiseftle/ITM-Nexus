@@ -35,6 +35,12 @@ RCT_EXTERN_METHOD(transportSendMessage:(NSString *)accountId messageJson:(NSStri
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSaveDraft:(NSString *)accountId messageJson:(NSString *)messageJson
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportCreateContact:(NSString *)accountId contactJson:(NSString *)contactJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportUpdateContact:(NSString *)accountId contactJson:(NSString *)contactJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(transportDeleteContact:(NSString *)accountId contactId:(NSString *)contactId
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(pickAttachment:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSearchServer:(NSString *)accountId query:(NSString *)query
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)

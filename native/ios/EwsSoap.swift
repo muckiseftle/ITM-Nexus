@@ -116,6 +116,17 @@ enum EwsSoap {
     """)
   }
 
+  /// Vollständige Kontaktfelder (AllProperties) — für Detailansicht/Sync inkl. Telefon/Position.
+  static func getContacts(ids: [String]) -> String {
+    let refs = ids.map { "<t:ItemId Id=\"\(xmlEscape($0))\"/>" }.joined()
+    return envelope("""
+      <m:GetItem>
+        <m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType></m:ItemShape>
+        <m:ItemIds>\(refs)</m:ItemIds>
+      </m:GetItem>
+    """)
+  }
+
   /// Lädt den Inhalt eines Anhangs (Base64) über EWS GetAttachment.
   static func getAttachment(id: String) -> String {
     envelope("""
@@ -229,6 +240,129 @@ enum EwsSoap {
         <m:ItemIds><t:ItemId Id="\(xmlEscape(itemId))"/></m:ItemIds>
       </m:DeleteItem>
     """)
+  }
+
+  /// Felder eines Kontakts (für Erstellen/Bearbeiten). Leere Strings = Feld weglassen.
+  struct ContactFields {
+    var displayName = ""
+    var givenName = ""
+    var surname = ""
+    var company = ""
+    var jobTitle = ""
+    var email = ""
+    var mobilePhone = ""
+    var businessPhone = ""
+    var homePhone = ""
+    var notes = ""
+  }
+
+  /// CreateItem für einen Kontakt im Standard-Kontakteordner. WICHTIG: Die EWS-Schema-Reihenfolge
+  /// der Contact-Felder ist verbindlich (Body, FileAs, DisplayName, GivenName, CompanyName,
+  /// EmailAddresses, PhoneNumbers, JobTitle, Surname) — sonst lehnt der Server mit Schemafehler ab.
+  static func createContact(_ c: ContactFields) -> String {
+    var phones = ""
+    if !c.mobilePhone.isEmpty {
+      phones += "<t:Entry Key=\"MobilePhone\">" + xmlEscape(c.mobilePhone) + "</t:Entry>"
+    }
+    if !c.businessPhone.isEmpty {
+      phones += "<t:Entry Key=\"BusinessPhone\">" + xmlEscape(c.businessPhone) + "</t:Entry>"
+    }
+    if !c.homePhone.isEmpty {
+      phones += "<t:Entry Key=\"HomePhone\">" + xmlEscape(c.homePhone) + "</t:Entry>"
+    }
+    var body = "<t:Contact>"
+    if !c.notes.isEmpty {
+      body += "<t:Body BodyType=\"Text\">" + xmlEscape(c.notes) + "</t:Body>"
+    }
+    if !c.displayName.isEmpty {
+      body += "<t:FileAs>" + xmlEscape(c.displayName) + "</t:FileAs>"
+      body += "<t:DisplayName>" + xmlEscape(c.displayName) + "</t:DisplayName>"
+    }
+    if !c.givenName.isEmpty { body += "<t:GivenName>" + xmlEscape(c.givenName) + "</t:GivenName>" }
+    if !c.company.isEmpty { body += "<t:CompanyName>" + xmlEscape(c.company) + "</t:CompanyName>" }
+    if !c.email.isEmpty {
+      body += "<t:EmailAddresses><t:Entry Key=\"EmailAddress1\">" + xmlEscape(c.email)
+        + "</t:Entry></t:EmailAddresses>"
+    }
+    if !phones.isEmpty { body += "<t:PhoneNumbers>" + phones + "</t:PhoneNumbers>" }
+    if !c.jobTitle.isEmpty { body += "<t:JobTitle>" + xmlEscape(c.jobTitle) + "</t:JobTitle>" }
+    if !c.surname.isEmpty { body += "<t:Surname>" + xmlEscape(c.surname) + "</t:Surname>" }
+    body += "</t:Contact>"
+    var create = "<m:CreateItem>"
+    create += "<m:SavedItemFolderId>" + distinguishedFolder("contacts") + "</m:SavedItemFolderId>"
+    create += "<m:Items>" + body + "</m:Items>"
+    create += "</m:CreateItem>"
+    return envelope(create)
+  }
+
+  /// Einzelnes SetItemField für ein einfaches Contact-Feld (FieldURI).
+  private static func setContactField(_ uri: String, _ inner: String) -> String {
+    var s = "<t:SetItemField><t:FieldURI FieldURI=\"" + uri + "\"/>"
+    s += "<t:Contact>" + inner + "</t:Contact></t:SetItemField>"
+    return s
+  }
+
+  /// SetItemField für ein indiziertes Feld (E-Mail/Telefon).
+  private static func setIndexed(_ uri: String, _ index: String, _ inner: String) -> String {
+    var s = "<t:SetItemField><t:IndexedFieldURI FieldURI=\"" + uri
+    s += "\" FieldIndex=\"" + index + "\"/>"
+    s += "<t:Contact>" + inner + "</t:Contact></t:SetItemField>"
+    return s
+  }
+
+  /// UpdateItem für einen Kontakt: setzt die übergebenen (nicht-leeren) Felder. Geleerte Felder
+  /// werden in dieser Version nicht gelöscht (nur gesetzte Werte aktualisiert).
+  static func updateContact(itemId: String, _ c: ContactFields) -> String {
+    var updates = ""
+    if !c.notes.isEmpty {
+      updates += setContactField("item:Body", "<t:Body BodyType=\"Text\">"
+        + xmlEscape(c.notes) + "</t:Body>")
+    }
+    if !c.displayName.isEmpty {
+      updates += setContactField("contacts:DisplayName",
+        "<t:DisplayName>" + xmlEscape(c.displayName) + "</t:DisplayName>")
+    }
+    if !c.givenName.isEmpty {
+      updates += setContactField("contacts:GivenName",
+        "<t:GivenName>" + xmlEscape(c.givenName) + "</t:GivenName>")
+    }
+    if !c.surname.isEmpty {
+      updates += setContactField("contacts:Surname",
+        "<t:Surname>" + xmlEscape(c.surname) + "</t:Surname>")
+    }
+    if !c.company.isEmpty {
+      updates += setContactField("contacts:CompanyName",
+        "<t:CompanyName>" + xmlEscape(c.company) + "</t:CompanyName>")
+    }
+    if !c.jobTitle.isEmpty {
+      updates += setContactField("contacts:JobTitle",
+        "<t:JobTitle>" + xmlEscape(c.jobTitle) + "</t:JobTitle>")
+    }
+    if !c.email.isEmpty {
+      updates += setIndexed("contacts:EmailAddress", "EmailAddress1",
+        "<t:EmailAddresses><t:Entry Key=\"EmailAddress1\">" + xmlEscape(c.email)
+          + "</t:Entry></t:EmailAddresses>")
+    }
+    if !c.mobilePhone.isEmpty {
+      updates += setIndexed("contacts:PhoneNumber", "MobilePhone",
+        "<t:PhoneNumbers><t:Entry Key=\"MobilePhone\">" + xmlEscape(c.mobilePhone)
+          + "</t:Entry></t:PhoneNumbers>")
+    }
+    if !c.businessPhone.isEmpty {
+      updates += setIndexed("contacts:PhoneNumber", "BusinessPhone",
+        "<t:PhoneNumbers><t:Entry Key=\"BusinessPhone\">" + xmlEscape(c.businessPhone)
+          + "</t:Entry></t:PhoneNumbers>")
+    }
+    if !c.homePhone.isEmpty {
+      updates += setIndexed("contacts:PhoneNumber", "HomePhone",
+        "<t:PhoneNumbers><t:Entry Key=\"HomePhone\">" + xmlEscape(c.homePhone)
+          + "</t:Entry></t:PhoneNumbers>")
+    }
+    var update = "<m:UpdateItem ConflictResolution=\"AutoResolve\">"
+    update += "<m:ItemChanges><t:ItemChange><t:ItemId Id=\"" + xmlEscape(itemId) + "\"/>"
+    update += "<t:Updates>" + updates + "</t:Updates></t:ItemChange></m:ItemChanges>"
+    update += "</m:UpdateItem>"
+    return envelope(update)
   }
 
   static func findItem(folderId: String, query: String, mailbox: String? = nil) -> String {
@@ -355,6 +489,14 @@ enum EwsSoap {
     var id = ""
     var displayName = ""
     var email = ""
+    var givenName = ""
+    var surname = ""
+    var company = ""
+    var jobTitle = ""
+    var mobilePhone = ""
+    var businessPhone = ""
+    var homePhone = ""
+    var notes = ""
   }
 
   static func parseContacts(_ xml: Data) -> [ParsedContact] {
@@ -675,18 +817,40 @@ private final class ContactParser: NSObject, XMLParserDelegate {
   var contacts: [EwsSoap.ParsedContact] = []
   private var current: EwsSoap.ParsedContact?
   private var text = ""
+  // `Entry`-Elemente werden für E-Mail UND Telefon genutzt — über das Key-Attribut unterscheiden.
+  private var entryKey = ""
+  private var inBody = false
 
   func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
               qualifiedName: String?, attributes attrs: [String: String]) {
     text = ""
     if name == "Contact" { current = EwsSoap.ParsedContact() }
     if name == "ItemId", let id = attrs["Id"] { current?.id = id }
+    if name == "Entry" { entryKey = attrs["Key"] ?? "" }
+    if name == "Body" { inBody = true }
   }
   func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
   func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
     switch name {
     case "DisplayName": current?.displayName = text
-    case "Entry": if current?.email.isEmpty == true { current?.email = text }
+    case "GivenName": current?.givenName = text
+    case "Surname": current?.surname = text
+    case "CompanyName": current?.company = text
+    case "JobTitle": current?.jobTitle = text
+    case "Body": if inBody { current?.notes = text; inBody = false }
+    case "Entry":
+      if entryKey.hasPrefix("EmailAddress") {
+        if current?.email.isEmpty == true { current?.email = text }
+      } else if entryKey == "MobilePhone" {
+        current?.mobilePhone = text
+      } else if entryKey == "BusinessPhone" {
+        current?.businessPhone = text
+      } else if entryKey == "HomePhone" {
+        current?.homePhone = text
+      } else if current?.email.isEmpty == true, text.contains("@") {
+        current?.email = text
+      }
+      entryKey = ""
     case "Contact": if let c = current { contacts.append(c); current = nil }
     default: break
     }

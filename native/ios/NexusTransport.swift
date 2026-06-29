@@ -717,14 +717,78 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let newState = EwsSoap.extractSyncState(xml) ?? (syncKey ?? "")
     var created: [[String: Any]] = []
     if !ids.isEmpty {
-      created = EwsSoap.parseContacts(try await post(EwsSoap.getItemsLight(ids: ids))).map { (c) in
-        [
-          "id": c.id, "accountId": accountId, "displayName": c.displayName,
-          "emailAddresses": c.email.isEmpty ? [] : [["address": c.email]],
-        ]
+      // Volle Kontaktfelder (Telefon/Position/Notiz) statt nur Id/Name → echte Detailansicht.
+      created = EwsSoap.parseContacts(try await post(EwsSoap.getContacts(ids: ids))).map { (c) in
+        Self.contactJson(c, accountId: accountId)
       }
     }
     return try Self.json(["syncKey": newState, "created": created, "updated": [], "deletedIds": [], "hasMore": false])
+  }
+
+  /// Mappt einen geparsten Kontakt auf das Domain-JSON (nur nicht-leere Zusatzfelder ausgeben).
+  private static func contactJson(_ c: EwsSoap.ParsedContact, accountId: String) -> [String: Any] {
+    var dict: [String: Any] = [
+      "id": c.id, "accountId": accountId, "displayName": c.displayName,
+      "emailAddresses": c.email.isEmpty ? [] : [["address": c.email]],
+    ]
+    if !c.givenName.isEmpty { dict["givenName"] = c.givenName }
+    if !c.surname.isEmpty { dict["surname"] = c.surname }
+    if !c.company.isEmpty { dict["company"] = c.company }
+    if !c.jobTitle.isEmpty { dict["jobTitle"] = c.jobTitle }
+    if !c.mobilePhone.isEmpty { dict["mobilePhone"] = c.mobilePhone }
+    if !c.businessPhone.isEmpty { dict["businessPhone"] = c.businessPhone }
+    if !c.homePhone.isEmpty { dict["homePhone"] = c.homePhone }
+    if !c.notes.isEmpty { dict["notes"] = c.notes }
+    return dict
+  }
+
+  /// Baut EwsSoap.ContactFields aus einem Contact-JSON-Dict (von der JS-Schicht).
+  private static func contactFields(_ d: [String: Any]) -> EwsSoap.ContactFields {
+    var f = EwsSoap.ContactFields()
+    f.displayName = d["displayName"] as? String ?? ""
+    f.givenName = d["givenName"] as? String ?? ""
+    f.surname = d["surname"] as? String ?? ""
+    f.company = d["company"] as? String ?? ""
+    f.jobTitle = d["jobTitle"] as? String ?? ""
+    f.mobilePhone = d["mobilePhone"] as? String ?? ""
+    f.businessPhone = d["businessPhone"] as? String ?? ""
+    f.homePhone = d["homePhone"] as? String ?? ""
+    f.notes = d["notes"] as? String ?? ""
+    let emails = d["emailAddresses"] as? [[String: Any]] ?? []
+    f.email = (emails.first?["address"] as? String) ?? ""
+    return f
+  }
+
+  /// Kontakt anlegen (EWS CreateItem). Liefert die neue ItemId als JSON-String zurück.
+  func createContact(accountId: String, contactJson: String) async throws -> String {
+    let dict = (Self.jsonObject(contactJson) as? [String: Any]) ?? [:]
+    let xml = try await post(EwsSoap.createContact(Self.contactFields(dict)))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Kontakt konnte nicht angelegt werden (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
+    let newId = EwsSoap.extractItemIds(xml).first ?? ""
+    return try Self.json(["id": newId])
+  }
+
+  /// Kontakt aktualisieren (EWS UpdateItem). Erwartet `id` im JSON.
+  func updateContact(accountId: String, contactJson: String) async throws -> String {
+    let dict = (Self.jsonObject(contactJson) as? [String: Any]) ?? [:]
+    guard let id = dict["id"] as? String, !id.isEmpty else {
+      throw NexusError.transport("Kontakt-Id fehlt")
+    }
+    let xml = try await post(EwsSoap.updateContact(itemId: id, Self.contactFields(dict)))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Kontakt konnte nicht aktualisiert werden (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
+    return try Self.json(["id": id])
+  }
+
+  /// Kontakt löschen (EWS DeleteItem → in „Gelöschte Elemente").
+  func deleteContact(accountId: String, contactId: String) async throws {
+    let xml = try await post(EwsSoap.deleteItem(itemId: contactId))
+    guard EwsSoap.isSuccess(xml) else {
+      throw NexusError.transport("Kontakt konnte nicht gelöscht werden (\(EwsSoap.responseCode(xml) ?? "?"))")
+    }
   }
 
   func getMessage(accountId: String, messageId: String) async throws -> String {

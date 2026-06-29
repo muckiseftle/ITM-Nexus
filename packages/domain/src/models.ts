@@ -70,6 +70,17 @@ export interface Contact {
   readonly displayName: string;
   readonly emailAddresses: readonly MailAddress[];
   readonly company?: string;
+  /** Vor-/Nachname (für die Editieransicht; DisplayName bleibt der Anzeigename). */
+  readonly givenName?: string;
+  readonly surname?: string;
+  /** Position/Funktion. */
+  readonly jobTitle?: string;
+  /** Telefonnummern (häufigste Typen — Exchange unterstützt mehr). */
+  readonly mobilePhone?: string;
+  readonly businessPhone?: string;
+  readonly homePhone?: string;
+  /** Freitext-Notiz. */
+  readonly notes?: string;
 }
 
 export interface CalendarEvent {
