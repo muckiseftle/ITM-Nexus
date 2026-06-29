@@ -12,6 +12,8 @@ import {
 import { radius, space, typography } from '@nexus/ui-kit';
 import { APP_MODE, PINNING } from '../config';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
+import { Avatar } from '../components/Avatar';
+import { Icon } from '../components/Icon';
 import { BottomSheet, OptionSheet } from '../components/BottomSheet';
 import { INTERVAL_OPTS, WINDOW_OPTS, labelOf, type AppSettings } from '../composition/settings';
 
@@ -59,14 +61,6 @@ function protocolLabel(p: string): string {
   if (p === 'eas') return 'EAS (ActiveSync)';
   if (p === 'ews') return 'EWS';
   return 'noch kein Sync';
-}
-
-function initials(name: string): string {
-  return name
-    .split(/[\s@.]+/)
-    .slice(0, 2)
-    .map((p) => p.charAt(0).toUpperCase())
-    .join('');
 }
 
 /**
@@ -239,13 +233,12 @@ export function SettingsScreen({
       <View style={s.screen}>
         <ScrollView style={s.screen} contentContainerStyle={s.content}>
           <Pressable style={s.back} onPress={() => setRoute('root')} hitSlop={8}>
-            <Text style={s.backText}>‹ Einstellungen</Text>
+            <Icon name="chevronLeft" size={20} color={t.c.brandPrimary} />
+            <Text style={s.backText}>Einstellungen</Text>
           </Pressable>
 
           <View style={s.hero}>
-            <View style={s.heroAva}>
-              <Text style={s.heroAvaText}>{initials(accountName)}</Text>
-            </View>
+            <Avatar name={accountName} colorKey={accountEmail} size={56} />
             <View>
               <Text style={s.heroName}>{accountName}</Text>
               <Text style={s.itemSub}>{accountEmail}</Text>
@@ -276,7 +269,7 @@ export function SettingsScreen({
                   <Text style={s.itemSub}>Wie weit zurück Mails geladen werden</Text>
                 </View>
                 <Text style={s.itemValue}>{labelOf(WINDOW_OPTS, settings.syncWindow)}</Text>
-                <Text style={s.chev}>›</Text>
+                <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
               </Row>
             </Pressable>
             <Pressable onPress={() => setSheet('interval')}>
@@ -286,7 +279,7 @@ export function SettingsScreen({
                   <Text style={s.itemSub}>Wie oft im Vordergrund synchronisiert wird</Text>
                 </View>
                 <Text style={s.itemValue}>{labelOf(INTERVAL_OPTS, settings.syncInterval)}</Text>
-                <Text style={s.chev}>›</Text>
+                <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
               </Row>
             </Pressable>
             {onChangePassword !== undefined ? (
@@ -296,7 +289,7 @@ export function SettingsScreen({
                     <Text style={s.itemTitle}>Passwort ändern</Text>
                     <Text style={s.itemSub}>Nach Server-seitiger Änderung neu eingeben</Text>
                   </View>
-                  <Text style={s.chev}>›</Text>
+                  <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
                 </Row>
               </Pressable>
             ) : null}
@@ -312,7 +305,7 @@ export function SettingsScreen({
                       <Text style={s.itemTitle}>{m.displayName}</Text>
                       <Text style={s.itemSub}>{m.email} · Nur lesen</Text>
                     </Pressable>
-                    <Text style={s.chev}>›</Text>
+                    <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
                     <Pressable style={s.rm} onPress={() => onRemoveSharedMailbox?.(m.email)}>
                       <Text style={s.rmText}>Entfernen</Text>
                     </Pressable>
@@ -389,7 +382,7 @@ export function SettingsScreen({
                       </Text>
                     </View>
                     <Text style={s.itemValue}>{cacheBusy ? 'Leere …' : ''}</Text>
-                    <Text style={s.chev}>›</Text>
+                    <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
                   </Row>
                 </Pressable>
               </View>
@@ -471,15 +464,13 @@ export function SettingsScreen({
               onPress={() => (isActive ? setRoute('account') : onSwitchAccount(a.email))}
             >
               <Row t={t}>
-                <View style={s.miniAva}>
-                  <Text style={s.miniAvaText}>{initials(a.name)}</Text>
-                </View>
+                <Avatar name={a.name} colorKey={a.email} size={38} />
                 <View style={s.grow}>
                   <Text style={s.itemTitle}>{a.name}</Text>
                   <Text style={s.itemSub}>{a.email}</Text>
                 </View>
                 {isActive ? <Text style={s.activeTag}>Aktiv</Text> : null}
-                <Text style={s.chev}>›</Text>
+                <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
               </Row>
             </Pressable>
           );
@@ -624,7 +615,7 @@ function makeStyles(t: AppTheme) {
     },
     addBlock: { padding: space.md },
     addText: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600' },
-    back: { paddingVertical: space.xs },
+    back: { alignItems: 'center', flexDirection: 'row', gap: 2, paddingVertical: space.xs },
     backText: { color: t.c.brandPrimary, fontSize: typography.body.size },
     card: {
       backgroundColor: t.c.bgElevated,
