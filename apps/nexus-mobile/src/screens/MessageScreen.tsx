@@ -19,7 +19,7 @@ import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { archive, moveToFolder, remove, setRead, toggleFlag } from '../actions/messageActions';
 import { OptionSheet, type SheetOption } from '../components/BottomSheet';
-import { HtmlBody } from '../components/HtmlBody';
+import { HtmlWebView } from '../components/HtmlWebView';
 import { ImageViewer } from '../components/ImageViewer';
 import { Avatar } from '../components/Avatar';
 import { Icon, type IconName } from '../components/Icon';
@@ -76,6 +76,8 @@ export function MessageScreen({
   const [viewer, setViewer] = useState<{ id: string; name: string; uri: string | null } | null>(
     null,
   );
+  // Aufgelöste Inline-Bilder (cid: → Data-URI) für die HTML-Anzeige.
+  const [cidImages, setCidImages] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
@@ -127,6 +129,40 @@ export function MessageScreen({
       active = false;
     };
   }, [container, account, messageId]);
+
+  // Inline-Bilder (cid:) aus den Anhängen auflösen, sobald HTML-Body + Anhänge geladen sind.
+  const inlineCount = message?.attachments.length ?? 0;
+  useEffect(() => {
+    if (message === undefined || message.body?.type !== BodyType.Html) {
+      setCidImages({});
+      return;
+    }
+    const inline = message.attachments.filter(
+      (a) => a.contentId !== undefined && a.contentType.toLowerCase().startsWith('image/'),
+    );
+    if (inline.length === 0) {
+      setCidImages({});
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const map: Record<string, string> = {};
+      for (const a of inline.slice(0, 20)) {
+        try {
+          const content = await container.transport.getAttachment(account, a.id);
+          const id = (a.contentId ?? '').replace(/^<|>$/g, '');
+          if (id.length > 0) map[id] = `data:${content.contentType};base64,${content.base64}`;
+        } catch {
+          /* einzelnes Inline-Bild nicht ladbar → überspringen */
+        }
+      }
+      if (active) setCidImages(map);
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [container, account, messageId, inlineCount, message?.body?.type]);
 
   const onToggleRead = async (): Promise<void> => {
     if (message === undefined) return;
@@ -270,8 +306,9 @@ export function MessageScreen({
             ) : null}
             {message.body?.type === BodyType.Html ? (
               <View style={s.htmlWrap}>
-                <HtmlBody
+                <HtmlWebView
                   html={message.body.content}
+                  cidImages={cidImages}
                   loadRemoteImages={showRemoteImages}
                   onRequestRemoteImages={() => setShowRemoteImages(true)}
                 />

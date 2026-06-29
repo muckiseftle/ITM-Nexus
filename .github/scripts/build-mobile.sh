@@ -70,7 +70,8 @@ npm install --legacy-peer-deps
 npm install --legacy-peer-deps \
   react-native-svg@^15.8.0 \
   react-native-reanimated@~3.17.0 \
-  react-native-gesture-handler@^2.22.0
+  react-native-gesture-handler@^2.22.0 \
+  react-native-webview@^13.13.0
 echo "::endgroup::"
 
 echo "::group::Gebaute @nexus-Pakete in node_modules verlinken"
