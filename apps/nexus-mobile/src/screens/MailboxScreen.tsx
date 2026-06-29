@@ -14,9 +14,40 @@ import { classifyError } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
 import { DEMO_INBOX_ID } from '../config';
 import type { AppContainer } from '../composition/container';
+import { archive, remove } from '../actions/messageActions';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { IconButton } from '../components/Icon';
+import { Icon, IconButton } from '../components/Icon';
+import { Avatar } from '../components/Avatar';
+import { Segmented } from '../components/Segmented';
+import { FAB } from '../components/FAB';
+import { Press } from '../components/Press';
+import { SwipeableRow } from '../components/SwipeableRow';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
+
+/** Hermes-sichere Relativ-Zeit (ohne Intl): „9:42" · „Gestern" · „Mo" · „12.03.". */
+function pad2(n: number): string {
+  return n < 10 ? `0${String(n)}` : String(n);
+}
+const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+function relativeTime(ms: number): string {
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  const yesterday =
+    d.getFullYear() === y.getFullYear() &&
+    d.getMonth() === y.getMonth() &&
+    d.getDate() === y.getDate();
+  if (yesterday) return 'Gestern';
+  const diff = now.getTime() - ms;
+  if (diff > 0 && diff < 6 * 86_400_000) return WEEKDAYS[d.getDay()] ?? '';
+  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.`;
+}
 
 interface Props {
   readonly container: AppContainer;
@@ -112,10 +143,38 @@ export function MailboxScreen({
   }, [messages, query, unreadOnly]);
 
   const onOpen = useCallback((id: MessageId) => onOpenMessage(id), [onOpenMessage]);
+
+  // Wisch-Aktionen: optimistisch ausführen, dann lokal neu laden (Nachricht verlässt den Ordner).
+  const onArchiveMsg = useCallback(
+    (m: MailMessage) => {
+      void archive(container, account, m)
+        .then(load)
+        .catch(() => undefined);
+    },
+    [container, account, load],
+  );
+  const onDeleteMsg = useCallback(
+    (m: MailMessage) => {
+      void remove(container, account, m)
+        .then(load)
+        .catch(() => undefined);
+    },
+    [container, account, load],
+  );
+
   const keyExtractor = useCallback((m: MailMessage) => m.id, []);
   const renderItem = useCallback(
-    ({ item }: { item: MailMessage }) => <MessageRow item={item} s={s} onOpen={onOpen} />,
-    [s, onOpen],
+    ({ item }: { item: MailMessage }) => (
+      <MessageRow
+        item={item}
+        s={s}
+        t={t}
+        onOpen={onOpen}
+        onArchive={onArchiveMsg}
+        onDelete={onDeleteMsg}
+      />
+    ),
+    [s, t, onOpen, onArchiveMsg, onDeleteMsg],
   );
 
   return (
@@ -123,9 +182,22 @@ export function MailboxScreen({
       <ScreenHeader
         title={folderTitle}
         left={<IconButton name="menu" color={t.c.textPrimary} onPress={onOpenDrawer} />}
-        right={<IconButton name="edit" color={t.c.brandPrimary} onPress={onCompose} />}
         search={{ value: query, onChange: setQuery, placeholder: `In „${folderTitle}" suchen` }}
-      />
+      >
+        <View style={s.filterBar}>
+          <Segmented
+            options={[
+              { key: 'all', label: 'Alle' },
+              {
+                key: 'unread',
+                label: unreadCount > 0 ? `Ungelesen (${String(unreadCount)})` : 'Ungelesen',
+              },
+            ]}
+            value={unreadOnly ? 'unread' : 'all'}
+            onChange={(k) => setUnreadOnly(k === 'unread')}
+          />
+        </View>
+      </ScreenHeader>
       {syncError !== null ? (
         <Pressable style={s.banner} onPress={() => setSyncError(null)}>
           <Text style={s.bannerText} numberOfLines={2}>
@@ -133,26 +205,10 @@ export function MailboxScreen({
           </Text>
         </Pressable>
       ) : null}
-      <View style={s.filterBar}>
-        <Pressable
-          style={[s.filterChip, !unreadOnly ? s.filterChipActive : null]}
-          onPress={() => setUnreadOnly(false)}
-        >
-          <Text style={[s.filterChipText, !unreadOnly ? s.filterChipTextActive : null]}>Alle</Text>
-        </Pressable>
-        <Pressable
-          style={[s.filterChip, unreadOnly ? s.filterChipActive : null]}
-          onPress={() => setUnreadOnly(true)}
-        >
-          <Text style={[s.filterChipText, unreadOnly ? s.filterChipTextActive : null]}>
-            Ungelesen{unreadCount > 0 ? ` (${String(unreadCount)})` : ''}
-          </Text>
-        </Pressable>
-      </View>
       <FlatList
         data={filtered}
         keyExtractor={keyExtractor}
-        contentContainerStyle={filtered.length === 0 ? s.emptyWrap : undefined}
+        contentContainerStyle={filtered.length === 0 ? s.emptyWrap : s.listContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -167,42 +223,58 @@ export function MailboxScreen({
         maxToRenderPerBatch={12}
         windowSize={11}
       />
+      <FAB icon="edit" onPress={onCompose} />
     </View>
   );
 }
 
 type Styles = ReturnType<typeof makeStyles>;
 
-/** Memoisierte Listenzeile — verhindert das Neu-Rendern aller Zeilen bei jedem syncTick. */
+/** Memoisierte Listenzeile — Avatar, Absender + Zeit, 2-zeilige Vorschau, Ungelesen-Akzent,
+ *  Wisch-Aktionen (Archivieren/Löschen) und weiches Press-Feedback. */
 const MessageRow = React.memo(function MessageRow({
   item,
   s,
+  t,
   onOpen,
+  onArchive,
+  onDelete,
 }: {
   readonly item: MailMessage;
   readonly s: Styles;
+  readonly t: AppTheme;
   readonly onOpen: (id: MessageId) => void;
+  readonly onArchive: (m: MailMessage) => void;
+  readonly onDelete: (m: MailMessage) => void;
 }): React.JSX.Element {
   const unread = isUnread(item);
+  const sender = item.from.displayName ?? item.from.address;
   return (
-    <Pressable
-      style={({ pressed }) => [s.row, pressed ? s.rowPressed : null]}
-      onPress={() => onOpen(item.id)}
-    >
-      <View style={[s.dot, { opacity: unread ? 1 : 0 }]} />
-      <View style={s.rowBody}>
-        <Text numberOfLines={1} style={[s.sender, unread ? s.unread : null]}>
-          {item.from.displayName ?? item.from.address}
-        </Text>
-        <Text numberOfLines={1} style={s.subject}>
-          {item.subject}
-        </Text>
-        <Text numberOfLines={1} style={s.preview}>
-          {item.preview}
-        </Text>
-      </View>
-      {hasFlag(item, MessageFlag.Flagged) ? <Text style={s.flag}>⚑</Text> : null}
-    </Pressable>
+    <SwipeableRow onArchive={() => onArchive(item)} onDelete={() => onDelete(item)}>
+      <Press onPress={() => onOpen(item.id)} style={s.row}>
+        <Avatar name={sender} colorKey={item.from.address} size={46} />
+        <View style={s.rowBody}>
+          <View style={s.rowTop}>
+            <Text numberOfLines={1} style={[s.sender, unread ? s.senderUnread : null]}>
+              {sender}
+            </Text>
+            <Text style={s.time}>{relativeTime(item.receivedAt)}</Text>
+          </View>
+          <Text numberOfLines={1} style={[s.subject, unread ? s.subjectUnread : null]}>
+            {item.subject.length > 0 ? item.subject : '(Kein Betreff)'}
+          </Text>
+          <Text numberOfLines={2} style={s.preview}>
+            {item.preview}
+          </Text>
+        </View>
+        <View style={s.rowRight}>
+          {unread ? <View style={s.unreadDot} /> : null}
+          {hasFlag(item, MessageFlag.Flagged) ? (
+            <Icon name="flag" size={15} color={t.c.warning} />
+          ) : null}
+        </View>
+      </Press>
+    </SwipeableRow>
   );
 });
 
@@ -215,49 +287,34 @@ function makeStyles(t: AppTheme) {
       marginBottom: space.xs,
       padding: space.sm,
     },
-    filterBar: {
-      flexDirection: 'row',
-      gap: space.xs,
-      paddingHorizontal: space.md,
-      paddingBottom: space.xs,
-    },
-    filterChip: {
-      backgroundColor: t.c.bgElevated,
-      borderRadius: radius.pill,
-      paddingHorizontal: space.md,
-      paddingVertical: 6,
-    },
-    filterChipActive: { backgroundColor: t.c.brandPrimary },
-    filterChipText: {
-      color: t.c.textSecondary,
-      fontSize: typography.caption.size,
-      fontWeight: '600',
-    },
-    filterChipTextActive: { color: t.onBrand },
+    filterBar: { paddingHorizontal: space.md, paddingBottom: space.sm },
     bannerText: { color: t.c.danger, fontSize: typography.caption.size },
-    dot: {
-      backgroundColor: t.c.brandPrimary,
-      borderRadius: 4,
-      height: 8,
-      marginRight: space.sm,
-      marginTop: space.xs,
-      width: 8,
-    },
     empty: { color: t.c.textSecondary, fontSize: typography.body.size, textAlign: 'center' },
     emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
-    flag: { color: t.c.warning, fontSize: typography.body.size, marginLeft: space.sm },
-    preview: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    listContent: { paddingBottom: 96 },
+    preview: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      lineHeight: 18,
+      marginTop: 1,
+    },
     row: {
-      borderBottomColor: t.border,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      alignItems: 'flex-start',
+      backgroundColor: t.c.bgCanvas,
       flexDirection: 'row',
-      padding: space.md,
+      gap: space.sm,
+      paddingHorizontal: space.md,
+      paddingVertical: space.sm,
     },
     rowBody: { flex: 1, minWidth: 0 },
-    rowPressed: { backgroundColor: t.rowActive },
+    rowRight: { alignItems: 'flex-end', gap: 6, marginLeft: space.xs, paddingTop: 4 },
+    rowTop: { alignItems: 'center', flexDirection: 'row', gap: space.xs },
     screen: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    sender: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
-    subject: { color: t.c.textPrimary, fontSize: typography.body.size },
-    unread: { fontWeight: '800' },
+    sender: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size, fontWeight: '600' },
+    senderUnread: { fontWeight: '800' },
+    subject: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: 1 },
+    subjectUnread: { fontWeight: '700' },
+    time: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    unreadDot: { backgroundColor: t.c.brandPrimary, borderRadius: 5, height: 10, width: 10 },
   });
 }

@@ -73,8 +73,6 @@ function makeStyles(t: AppTheme) {
     },
     header: {
       backgroundColor: t.c.bgCanvas,
-      borderBottomColor: t.border,
-      borderBottomWidth: StyleSheet.hairlineWidth,
     },
     search: {
       backgroundColor: t.c.bgElevated,
