@@ -40,6 +40,7 @@ export type IconName =
   | 'clock'
   | 'user'
   | 'image'
+  | 'share'
   | 'dot';
 
 interface IconProps {
@@ -237,6 +238,14 @@ function shape(name: IconName): React.JSX.Element {
           <Rect x={3} y={4.5} width={18} height={15} rx={2.5} />
           <Circle cx={8.5} cy={9.5} r={1.6} />
           <Path d="M4 17l4.5-4.5 3.5 3.5 3-3 5 5" />
+        </>
+      );
+    case 'share':
+      return (
+        <>
+          <Line x1={12} y1={3} x2={12} y2={15} />
+          <Polyline points="8 7 12 3 16 7" />
+          <Path d="M7 11H5.5A1.5 1.5 0 0 0 4 12.5v6A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 18.5 11H17" />
         </>
       );
     case 'dot':

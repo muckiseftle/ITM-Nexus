@@ -20,6 +20,7 @@ import type { AppContainer } from '../composition/container';
 import { archive, moveToFolder, remove, setRead, toggleFlag } from '../actions/messageActions';
 import { OptionSheet, type SheetOption } from '../components/BottomSheet';
 import { HtmlBody } from '../components/HtmlBody';
+import { ImageViewer } from '../components/ImageViewer';
 import { Avatar } from '../components/Avatar';
 import { Icon, type IconName } from '../components/Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
@@ -71,6 +72,10 @@ export function MessageScreen({
   const [moreOpen, setMoreOpen] = useState(false);
   // Externe Bilder pro geöffneter Nachricht erst nach ausdrücklicher Freigabe laden (Tracking-Schutz).
   const [showRemoteImages, setShowRemoteImages] = useState(false);
+  // In-App-Bildbetrachter: Bild-Anhang direkt anzeigen (kein externes Programm nötig).
+  const [viewer, setViewer] = useState<{ id: string; name: string; uri: string | null } | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -179,6 +184,26 @@ export function MessageScreen({
     }
   };
 
+  // Bild-Anhang direkt in der App anzeigen: Inhalt holen, als Data-URI in den Vollbild-Betrachter.
+  const onViewImage = async (a: Attachment): Promise<void> => {
+    setViewer({ id: a.id, name: a.name, uri: null });
+    try {
+      const content = await container.transport.getAttachment(account, a.id);
+      const uri = `data:${content.contentType};base64,${content.base64}`;
+      // Nur setzen, wenn der Betrachter noch dasselbe Bild zeigt (nicht zwischenzeitlich gewechselt).
+      setViewer((prev) => (prev !== null && prev.id === a.id ? { ...prev, uri } : prev));
+    } catch {
+      setViewer(null);
+      Alert.alert('Bild', 'Konnte nicht geladen werden.');
+    }
+  };
+
+  // Anhang antippen: Bilder im In-App-Betrachter öffnen, alles andere ins System-Teilen-Blatt.
+  const onOpenAttachment = (a: Attachment): void => {
+    if (a.contentType.toLowerCase().startsWith('image/')) void onViewImage(a);
+    else void onDownload(a);
+  };
+
   const flagged = message !== undefined && hasFlag(message, MessageFlag.Flagged);
   const moreOptions: SheetOption[] =
     message === undefined
@@ -258,15 +283,22 @@ export function MessageScreen({
             {message.attachments.length > 0 ? (
               <View style={s.attachWrap}>
                 <Text style={s.attachHead}>Anhänge ({message.attachments.length})</Text>
-                {message.attachments.map((a) => (
-                  <Pressable key={a.id} style={s.attachRow} onPress={() => void onDownload(a)}>
-                    <Icon name="paperclip" size={18} color={t.c.textSecondary} />
-                    <Text style={s.attachName} numberOfLines={1}>
-                      {a.name}
-                    </Text>
-                    <Text style={s.attachMeta}>{formatSize(a.sizeBytes)}</Text>
-                  </Pressable>
-                ))}
+                {message.attachments.map((a) => {
+                  const isImage = a.contentType.toLowerCase().startsWith('image/');
+                  return (
+                    <Pressable key={a.id} style={s.attachRow} onPress={() => onOpenAttachment(a)}>
+                      <Icon
+                        name={isImage ? 'image' : 'paperclip'}
+                        size={18}
+                        color={t.c.textSecondary}
+                      />
+                      <Text style={s.attachName} numberOfLines={1}>
+                        {a.name}
+                      </Text>
+                      <Text style={s.attachMeta}>{formatSize(a.sizeBytes)}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
           </ScrollView>
@@ -314,6 +346,16 @@ export function MessageScreen({
         options={moreOptions}
         selected=""
         onSelect={onMoreSelect}
+      />
+
+      <ImageViewer
+        visible={viewer !== null}
+        name={viewer?.name ?? ''}
+        uri={viewer?.uri ?? null}
+        onClose={() => setViewer(null)}
+        {...(container.openAttachment !== undefined && viewer !== null
+          ? { onShare: () => void container.openAttachment!(account, viewer.id) }
+          : {})}
       />
     </View>
   );
