@@ -20,6 +20,8 @@ import {
 } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
+import { BrandMark } from '../components/BrandMark';
+import { Icon } from '../components/Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
@@ -261,8 +263,14 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
     <View style={s.container}>
       {onCancel !== undefined ? (
         <Pressable style={s.cancelRow} onPress={onCancel} hitSlop={8}>
-          <Text style={s.cancelLink}>‹ Abbrechen</Text>
+          <Icon name="chevronLeft" size={20} color={t.c.brandPrimary} />
+          <Text style={s.cancelLink}>Abbrechen</Text>
         </Pressable>
+      ) : null}
+      {onCancel === undefined ? (
+        <View style={s.brandRow}>
+          <BrandMark size={56} />
+        </View>
       ) : null}
       <Text style={s.title}>{onCancel !== undefined ? 'Konto hinzufügen' : 'NEXUS'}</Text>
       <StepDots step={step} s={s} t={t} />
@@ -622,8 +630,14 @@ function makeStyles(t: AppTheme) {
     },
     buttonDisabled: { opacity: 0.6 },
     buttonText: { color: t.onBrand, fontSize: typography.body.size, fontWeight: '600' },
+    brandRow: { marginBottom: space.md },
     cancelLink: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600' },
-    cancelRow: { marginBottom: space.md },
+    cancelRow: {
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      marginBottom: space.md,
+    },
     certBox: {
       backgroundColor: t.c.bgElevated,
       borderRadius: radius.md,
@@ -701,7 +715,12 @@ function makeStyles(t: AppTheme) {
     },
     serverInfoLabel: { color: t.c.textSecondary, fontSize: typography.caption.size },
     serverInfoUrl: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
-    subtitle: { color: t.c.textSecondary, fontSize: typography.body.size, marginBottom: space.lg },
+    subtitle: {
+      color: t.c.textPrimary,
+      fontSize: typography.headline.size,
+      fontWeight: '600',
+      marginBottom: space.lg,
+    },
     summaryBox: {
       backgroundColor: t.c.bgElevated,
       borderRadius: radius.md,
@@ -711,7 +730,12 @@ function makeStyles(t: AppTheme) {
     summaryKey: { color: t.c.textSecondary, fontSize: typography.caption.size, width: 120 },
     summaryRow: { flexDirection: 'row', marginBottom: space.xs },
     summaryVal: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
-    title: { color: t.c.brandPrimary, fontSize: 34, fontWeight: '700', marginBottom: space.sm },
+    title: {
+      color: t.c.brandPrimary,
+      fontSize: typography.largeTitle.size,
+      fontWeight: '700',
+      marginBottom: space.sm,
+    },
     toggleLabel: { color: t.c.textPrimary, fontSize: typography.body.size },
     toggleRow: {
       alignItems: 'center',

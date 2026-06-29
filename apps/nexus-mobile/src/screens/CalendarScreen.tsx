@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type AccountId, type CalendarEvent } from '@nexus/domain';
-import { radius, space, typography } from '@nexus/ui-kit';
+import { space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { IconButton } from '../components/Icon';
+import { Segmented } from '../components/Segmented';
 import { paletteColor, useTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface Props {
@@ -357,19 +358,8 @@ export function CalendarScreen({ container, account }: Props): React.JSX.Element
         }
         search={{ value: query, onChange: setQuery, placeholder: 'Termine durchsuchen' }}
       >
-        <View style={s.seg}>
-          {VIEWS.map((v) => {
-            const active = v.key === view;
-            return (
-              <Pressable
-                key={v.key}
-                style={[s.segBtn, active ? s.segBtnActive : null]}
-                onPress={() => setView(v.key)}
-              >
-                <Text style={[s.segText, active ? s.segTextActive : null]}>{v.label}</Text>
-              </Pressable>
-            );
-          })}
+        <View style={s.segWrap}>
+          <Segmented options={VIEWS} value={view} onChange={setView} />
         </View>
       </ScreenHeader>
       <ScrollView contentContainerStyle={s.content}>{body}</ScrollView>
@@ -503,24 +493,7 @@ function makeStyles(t: AppTheme) {
     mrow: { flex: 1, flexDirection: 'row', gap: 2 },
     mweek: { alignItems: 'flex-start', flexDirection: 'row' },
     screen: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    seg: {
-      backgroundColor: t.c.bgElevated,
-      borderRadius: radius.pill,
-      flexDirection: 'row',
-      gap: 4,
-      marginBottom: space.xs,
-      marginHorizontal: space.md,
-      padding: 4,
-    },
-    segBtn: { borderRadius: radius.pill, flex: 1, paddingVertical: 7 },
-    segBtnActive: { backgroundColor: t.c.brandPrimary + '22' },
-    segText: {
-      color: t.c.textSecondary,
-      fontSize: typography.caption.size,
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    segTextActive: { color: t.c.brandPrimary, fontWeight: '700' },
+    segWrap: { marginBottom: space.xs, marginHorizontal: space.md },
     timeline: { marginBottom: space.lg, marginHorizontal: space.md, position: 'relative' },
     todayBtn: {
       color: t.c.brandPrimary,
@@ -543,11 +516,7 @@ function makeStyles(t: AppTheme) {
     wddTextToday: { color: t.onBrand },
     wddToday: { backgroundColor: t.c.brandPrimary },
     wdn: { color: t.c.textSecondary, fontSize: 11, textAlign: 'center' },
-    weekStrip: {
-      borderBottomColor: t.border,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      flexDirection: 'row',
-    },
+    weekStrip: { flexDirection: 'row', marginBottom: space.xs },
     wnum: { color: t.c.textSecondary, fontSize: 10, paddingTop: 8, textAlign: 'center', width: 18 },
   });
 }

@@ -22,6 +22,7 @@ import {
 import { classifyError, type ErrorInfo } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
+import { Icon } from '../components/Icon';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 /** Vorbelegung des Composers (z. B. aus Antworten/Weiterleiten abgeleitet). */
@@ -304,10 +305,12 @@ export function ComposerScreen({
         {container.pickAttachment !== undefined ? (
           <>
             <Pressable style={s.attachBtn} onPress={() => void onAttach()} hitSlop={6}>
-              <Text style={s.attachBtnText}>📎 Anhang hinzufügen</Text>
+              <Icon name="paperclip" size={17} color={t.c.brandPrimary} />
+              <Text style={s.attachBtnText}>Anhang hinzufügen</Text>
             </Pressable>
             {attachments.map((a, i) => (
               <View key={`${a.name}-${String(i)}`} style={s.attachRow}>
+                <Icon name="paperclip" size={17} color={t.c.textSecondary} />
                 <Text style={s.attachName} numberOfLines={1}>
                   {a.name}
                 </Text>
@@ -316,7 +319,7 @@ export function ComposerScreen({
                   hitSlop={8}
                   onPress={() => setAttachments((list) => list.filter((_, j) => j !== i))}
                 >
-                  <Text style={s.attachRemove}>✕</Text>
+                  <Icon name="x" size={18} color={t.c.danger} />
                 </Pressable>
               </View>
             ))}
@@ -340,17 +343,18 @@ function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     bar: {
       alignItems: 'center',
-      borderBottomColor: t.border,
-      borderBottomWidth: StyleSheet.hairlineWidth,
       flexDirection: 'row',
       justifyContent: 'space-between',
       paddingHorizontal: space.md,
       paddingVertical: space.sm,
     },
     attachBtn: {
+      alignItems: 'center',
       alignSelf: 'flex-start',
       backgroundColor: t.c.bgElevated,
       borderRadius: radius.pill,
+      flexDirection: 'row',
+      gap: space.xs,
       marginBottom: space.sm,
       paddingHorizontal: space.md,
       paddingVertical: space.sm,
@@ -361,7 +365,6 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
     },
     attachName: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
-    attachRemove: { color: t.c.danger, fontSize: typography.body.size, fontWeight: '700' },
     attachRow: {
       alignItems: 'center',
       backgroundColor: t.c.bgElevated,

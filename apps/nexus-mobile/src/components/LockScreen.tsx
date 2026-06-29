@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { radius, space, typography } from '@nexus/ui-kit';
+import { Icon } from './Icon';
 import { NexusNative } from '../native/NexusNative';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
@@ -42,10 +44,10 @@ export function LockScreen({ onUnlock }: Props): React.JSX.Element {
 
   return (
     <View style={s.root}>
-      <View style={s.center}>
-        <View style={s.badge}>
-          <Text style={s.badgeGlyph}>🔒</Text>
-        </View>
+      <Animated.View entering={FadeIn.duration(t.motion.duration.slow)} style={s.center}>
+        <Animated.View entering={FadeInDown.duration(t.motion.duration.slow)} style={s.badge}>
+          <Icon name="lock" size={40} color={t.c.brandPrimary} strokeWidth={2} />
+        </Animated.View>
         <Text style={s.title}>NEXUS gesperrt</Text>
         <Text style={s.subtitle}>
           {failed
@@ -59,7 +61,7 @@ export function LockScreen({ onUnlock }: Props): React.JSX.Element {
         >
           <Text style={s.buttonText}>{busy ? 'Prüfe …' : 'Entsperren'}</Text>
         </Pressable>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -75,7 +77,6 @@ function makeStyles(t: AppTheme) {
       marginBottom: space.lg,
       width: 88,
     },
-    badgeGlyph: { color: t.c.brandPrimary, fontSize: 40 },
     button: {
       alignItems: 'center',
       backgroundColor: t.c.brandPrimary,
