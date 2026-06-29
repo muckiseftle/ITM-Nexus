@@ -52,6 +52,21 @@ import { DEMO_INBOX_ID, PINNING, SYNC_INTERVALS } from '../config';
  * App-Container: das Interface, an dem die UI hängt — port-/service-typisiert, damit sowohl
  * der Live-Container (native Adapter) als auch der Demo-Container (In-Memory) ihn erfüllen.
  */
+/** Eine zwischengespeicherte Datenart mit Anzahl und ungefährer Inhaltsgröße (Bytes). */
+export interface CacheCategory {
+  readonly key: string;
+  readonly label: string;
+  readonly count: number;
+  readonly bytes: number;
+}
+
+/** Übersicht über den lokalen Cache: je Datenart Anzahl/Größe + Gesamtsummen. */
+export interface CacheStats {
+  readonly categories: readonly CacheCategory[];
+  readonly totalItems: number;
+  readonly totalBytes: number;
+}
+
 export interface AppContainer {
   readonly secureStore: SecureStore;
   readonly mailStore: MailStore;
@@ -90,6 +105,13 @@ export interface AppContainer {
    * und DB-Schlüssel bleiben erhalten — der Sync füllt die Daten danach erneut. Nur Live-Modus.
    */
   readonly clearCache?: () => Promise<void>;
+  /**
+   * Cache-Transparenz: Anzahl + ungefähre Größe der lokal zwischengespeicherten Datenarten
+   * (E-Mails/Kalender/Kontakte/Ordner/Ausgang). Größe ist die Summe der Payload-Längen (Inhalt)
+   * — eine ehrliche Näherung der DB-Nutzdaten. Nur Live-Modus. Anhänge/Bilder werden NICHT
+   * dauerhaft gecacht (bei Bedarf geladen) und daher nicht mitgezählt.
+   */
+  readonly cacheStats?: () => Promise<CacheStats>;
   /**
    * Aktueller Verbindungstyp ('wifi' | 'cellular' | 'none') für die Einstellung „Nur über
    * WLAN". Nur Live-Modus — im Demo-Modus undefiniert (Sync läuft dort uneingeschränkt).
@@ -222,6 +244,33 @@ export async function createContainer(): Promise<AppContainer> {
     clearCache: async () => {
       await NexusNative.dbReset();
       await NexusNative.dbInit();
+    },
+    cacheStats: async () => {
+      // Anzahl + Inhaltsgröße (Summe der Payload-Längen) je Tabelle — über das bestehende
+      // dbQuery, ohne neue native Methode. LENGTH zählt Zeichen ≈ Bytes der JSON-Payload.
+      const tables = [
+        { key: 'mails', label: 'E-Mails', table: 'messages' },
+        { key: 'events', label: 'Kalender', table: 'events' },
+        { key: 'contacts', label: 'Kontakte', table: 'contacts' },
+        { key: 'folders', label: 'Ordner', table: 'folders' },
+        { key: 'outbox', label: 'Ausgang', table: 'outbox' },
+      ] as const;
+      const categories: CacheCategory[] = [];
+      let totalItems = 0;
+      let totalBytes = 0;
+      for (const tbl of tables) {
+        const rows = await NexusNative.dbQuery(
+          `SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(payload)), 0) AS b FROM ${tbl.table}`,
+          [],
+        );
+        const row = rows[0] ?? { n: 0, b: 0 };
+        const count = Number(row.n ?? 0);
+        const bytes = Number(row.b ?? 0);
+        categories.push({ key: tbl.key, label: tbl.label, count, bytes });
+        totalItems += count;
+        totalBytes += bytes;
+      }
+      return { categories, totalItems, totalBytes };
     },
     networkStatus: () => NexusNative.networkStatus(),
     switchAccount: async (email) => {

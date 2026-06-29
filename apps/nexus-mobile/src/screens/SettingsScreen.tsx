@@ -16,6 +16,7 @@ import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { BottomSheet, OptionSheet } from '../components/BottomSheet';
 import { INTERVAL_OPTS, WINDOW_OPTS, labelOf, type AppSettings } from '../composition/settings';
+import type { CacheStats } from '../composition/container';
 
 interface Props {
   readonly accountName: string;
@@ -40,6 +41,8 @@ interface Props {
   readonly onVerifyAppLock?: () => Promise<boolean>;
   /** Lokalen Daten-Cache leeren (DB) ohne Logout — neu laden via Sync. Nur Live-Modus. */
   readonly onClearCache?: () => Promise<void>;
+  /** Cache-Statistik (Anzahl + Größe je Datenart). Nur Live-Modus. */
+  readonly onGetCacheStats?: () => Promise<CacheStats>;
   /** Liefert das zuletzt genutzte Mail-Protokoll ('eas'|'ews'|'unbekannt'). Nur Live-Modus. */
   readonly onGetProtocol?: () => Promise<string>;
   /** Freigegebene Postfächer des aktiven Kontos (serverseitig berechtigungsgeprüft). */
@@ -63,6 +66,13 @@ function protocolLabel(p: string): string {
   return 'noch kein Sync';
 }
 
+/** Bytes menschenlesbar (KB/MB) — für die Cache-Übersicht. */
+function formatBytes(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1000) return `${Math.round(bytes / 1000)} KB`;
+  return `${bytes} B`;
+}
+
 /**
  * Einstellungen (Tab „Mehr"): Konten, App-/Sync-Optionen, Sicherheitsstatus und eine
  * Konto-Detailseite mit Sync-Zeitraum/-Intervall und Verwaltung freigegebener Postfächer —
@@ -81,6 +91,7 @@ export function SettingsScreen({
   onChangePassword,
   onVerifyAppLock,
   onClearCache,
+  onGetCacheStats,
   onGetProtocol,
   sharedMailboxes,
   onAddSharedMailbox,
@@ -91,6 +102,23 @@ export function SettingsScreen({
   const s = useMemo(() => makeStyles(t), [t]);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [protocol, setProtocol] = useState<string | null>(null);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+
+  // Cache-Statistik laden (Anzahl + Größe je Datenart) — bei Bedarf neu abrufen.
+  const loadCacheStats = useMemo(
+    () => async (): Promise<void> => {
+      if (onGetCacheStats === undefined) return;
+      try {
+        setCacheStats(await onGetCacheStats());
+      } catch {
+        /* Statistik optional — Fehler still ignorieren. */
+      }
+    },
+    [onGetCacheStats],
+  );
+  useEffect(() => {
+    void loadCacheStats();
+  }, [loadCacheStats]);
 
   // Zuletzt genutztes Mail-Protokoll (EAS/EWS) für die Konto-Detailseite laden.
   useEffect(() => {
@@ -120,7 +148,10 @@ export function SettingsScreen({
           onPress: () => {
             setCacheBusy(true);
             void onClearCache()
-              .then(() => Alert.alert('Cache', 'Lokaler Cache geleert — wird neu geladen.'))
+              .then(() => {
+                void loadCacheStats();
+                Alert.alert('Cache', 'Lokaler Cache geleert — wird neu geladen.');
+              })
               .catch(() => Alert.alert('Cache', 'Konnte nicht geleert werden.'))
               .finally(() => setCacheBusy(false));
           },
@@ -361,11 +392,42 @@ export function SettingsScreen({
                     }}
                   >
                     <Row t={t}>
-                      <Text style={s.addText}>＋ Freigegebenes Postfach hinzufügen</Text>
+                      <Icon name="plus" size={18} color={t.c.brandPrimary} />
+                      <Text style={[s.addText, s.addTextSpacer]}>
+                        Freigegebenes Postfach hinzufügen
+                      </Text>
                     </Row>
                   </Pressable>
                 )}
               </View>
+            </>
+          ) : null}
+
+          {cacheStats !== null ? (
+            <>
+              <Text style={s.section}>Speicher (lokaler Cache)</Text>
+              <View style={s.card}>
+                {cacheStats.categories.map((c) => (
+                  <Row t={t} key={c.key}>
+                    <Text style={s.itemTitle}>{c.label}</Text>
+                    <View style={s.grow} />
+                    <Text style={s.itemValue}>
+                      {c.count} · {formatBytes(c.bytes)}
+                    </Text>
+                  </Row>
+                ))}
+                <Row t={t}>
+                  <Text style={s.cacheTotal}>Gesamt</Text>
+                  <View style={s.grow} />
+                  <Text style={s.cacheTotal}>
+                    {cacheStats.totalItems} Elemente · {formatBytes(cacheStats.totalBytes)}
+                  </Text>
+                </Row>
+              </View>
+              <Text style={s.cacheNote}>
+                Gespeichert werden Mail-Texte, Ordner, Kalender und Kontakte. Anhänge und Bilder
+                werden bei Bedarf geladen und nicht dauerhaft gespeichert.
+              </Text>
             </>
           ) : null}
 
@@ -477,7 +539,8 @@ export function SettingsScreen({
         })}
         <Pressable onPress={onAddAccount}>
           <Row t={t}>
-            <Text style={s.addText}>＋ Konto hinzufügen</Text>
+            <Icon name="plus" size={18} color={t.c.brandPrimary} />
+            <Text style={[s.addText, s.addTextSpacer]}>Konto hinzufügen</Text>
           </Row>
         </Pressable>
       </View>
@@ -615,6 +678,14 @@ function makeStyles(t: AppTheme) {
     },
     addBlock: { padding: space.md },
     addText: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    addTextSpacer: { marginLeft: space.xs },
+    cacheNote: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginTop: space.xs,
+      paddingHorizontal: space.md,
+    },
+    cacheTotal: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '700' },
     back: { alignItems: 'center', flexDirection: 'row', gap: 2, paddingVertical: space.xs },
     backText: { color: t.c.brandPrimary, fontSize: typography.body.size },
     card: {
