@@ -103,6 +103,10 @@ export interface NexusNativeModule {
   transportSyncSharedInbox(accountId: string, owner: string): Promise<string>;
   /** Liest die Termine eines freigegebenen Kalenders (Delegation). Liefert JSON {events:[…]}. */
   transportSyncSharedCalendar(accountId: string, owner: string): Promise<string>;
+  /** Exportiert Kontakte ins iPhone-Adressbuch (Gruppe „NEXUS", Full-Replace). Liefert JSON {count}. */
+  localExportContacts(contactsJson: string): Promise<string>;
+  /** Exportiert Termine in den iPhone-Kalender „NEXUS" (Full-Replace). Liefert JSON {count}. */
+  localExportEvents(eventsJson: string): Promise<string>;
 
   // — Crash-Diagnose (On-Device, kein Cloud) —
   /** Letzter nativer Crash-Bericht (NSException-`reason`/Signal-Backtrace) oder null. */

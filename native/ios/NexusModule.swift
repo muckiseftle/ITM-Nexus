@@ -396,6 +396,22 @@ final class NexusModule: NSObject {
     }
   }
 
+  @objc(localExportContacts:resolver:rejecter:)
+  func localExportContacts(_ contactsJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusLocalSync.exportContacts(contactsJson)) }
+      catch { reject("local_contacts", "\(error)", error) }
+    }
+  }
+
+  @objc(localExportEvents:resolver:rejecter:)
+  func localExportEvents(_ eventsJson: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    Task {
+      do { resolve(try await NexusLocalSync.exportEvents(eventsJson)) }
+      catch { reject("local_calendar", "\(error)", error) }
+    }
+  }
+
   // MARK: Netzwerkstatus (für „Nur über WLAN")
 
   /// Aktueller Verbindungstyp: "wifi" | "cellular" | "none".

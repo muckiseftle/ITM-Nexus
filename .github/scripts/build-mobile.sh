@@ -130,6 +130,16 @@ if [ "$PLATFORM" = "ios-live" ]; then
   # Face-ID-Nutzungsbeschreibung (Pflicht — sonst Absturz beim ersten LAContext-Aufruf mit Face ID).
   /usr/libexec/PlistBuddy -c "Add :NSFaceIDUsageDescription string 'NEXUS nutzt Face ID, um die App zu entsperren.'" "$PLIST" 2>/dev/null || \
     /usr/libexec/PlistBuddy -c "Set :NSFaceIDUsageDescription 'NEXUS nutzt Face ID, um die App zu entsperren.'" "$PLIST" 2>/dev/null || true
+  # Geräte-Sync: Nutzungsbeschreibungen für Apple-Kontakte (CNContactStore) und -Kalender (EventKit).
+  # Pflicht ab iOS — sonst Absturz beim ersten Zugriff. Schreibzugriff: NSCalendarsFullAccess (iOS 17+).
+  /usr/libexec/PlistBuddy -c "Add :NSContactsUsageDescription string 'NEXUS kann deine Exchange-Kontakte mit dem iPhone-Adressbuch abgleichen.'" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Set :NSContactsUsageDescription 'NEXUS kann deine Exchange-Kontakte mit dem iPhone-Adressbuch abgleichen.'" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :NSCalendarsUsageDescription string 'NEXUS kann deine Exchange-Termine mit dem iPhone-Kalender abgleichen.'" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Set :NSCalendarsUsageDescription 'NEXUS kann deine Exchange-Termine mit dem iPhone-Kalender abgleichen.'" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :NSCalendarsFullAccessUsageDescription string 'NEXUS kann deine Exchange-Termine mit dem iPhone-Kalender abgleichen.'" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Set :NSCalendarsFullAccessUsageDescription 'NEXUS kann deine Exchange-Termine mit dem iPhone-Kalender abgleichen.'" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Add :NSContactsFullAccessUsageDescription string 'NEXUS kann deine Exchange-Kontakte mit dem iPhone-Adressbuch abgleichen.'" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Set :NSContactsFullAccessUsageDescription 'NEXUS kann deine Exchange-Kontakte mit dem iPhone-Adressbuch abgleichen.'" "$PLIST" 2>/dev/null || true
   # BGTask-Handler VOR Ende von didFinishLaunchingWithOptions registrieren (iOS-Vorgabe).
   ruby -e '
     p = "ios/NEXUS/AppDelegate.swift"

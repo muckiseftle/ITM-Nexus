@@ -168,6 +168,10 @@ export interface AppContainer {
     event: CalendarEvent,
     response: 'accept' | 'decline' | 'tentative',
   ) => Promise<void>;
+  /** Exchange-Kontakte ins iPhone-Adressbuch exportieren (Gruppe „NEXUS"). Liefert die Anzahl. */
+  readonly exportContactsToDevice?: (account: AccountId) => Promise<number>;
+  /** Exchange-Termine in den iPhone-Kalender „NEXUS" exportieren. Liefert die Anzahl. */
+  readonly exportCalendarToDevice?: (account: AccountId) => Promise<number>;
   /**
    * TOFU-Zertifikat: liest den Server-Fingerprint (SPKI) + Subject, OHNE etwas zu vertrauen.
    * Für die Bestätigung im Setup-Wizard. Nur Live-Modus.
@@ -377,6 +381,22 @@ export async function createContainer(): Promise<AppContainer> {
       await NexusNative.transportRespondEvent(account, event.id, event.changeKey ?? '', response);
       const myResponse: EventResponse = response;
       await calendarStore.upsertEvents([{ ...event, myResponse }]);
+    },
+    exportContactsToDevice: async (account) => {
+      const contacts = await contactStore.search(account, '');
+      const res = JSON.parse(await NexusNative.localExportContacts(JSON.stringify(contacts))) as {
+        count?: number;
+      };
+      return res.count ?? 0;
+    },
+    exportCalendarToDevice: async (account) => {
+      const from = Date.now() - 60 * 86_400_000;
+      const to = Date.now() + 365 * 86_400_000;
+      const events = await calendarStore.listRange(account, from, to);
+      const res = JSON.parse(await NexusNative.localExportEvents(JSON.stringify(events))) as {
+        count?: number;
+      };
+      return res.count ?? 0;
     },
   };
 }

@@ -43,6 +43,10 @@ interface Props {
   readonly onClearCache?: () => Promise<void>;
   /** Cache-Statistik (Anzahl + Größe je Datenart). Nur Live-Modus. */
   readonly onGetCacheStats?: () => Promise<CacheStats>;
+  /** Kontakte ins iPhone-Adressbuch exportieren (Gruppe „NEXUS"). Liefert die Anzahl. Nur Live. */
+  readonly onExportContacts?: () => Promise<number>;
+  /** Termine in den iPhone-Kalender „NEXUS" exportieren. Liefert die Anzahl. Nur Live. */
+  readonly onExportCalendar?: () => Promise<number>;
   /** Liefert das zuletzt genutzte Mail-Protokoll ('eas'|'ews'|'unbekannt'). Nur Live-Modus. */
   readonly onGetProtocol?: () => Promise<string>;
   /** Freigegebene Postfächer des aktiven Kontos (serverseitig berechtigungsgeprüft). */
@@ -92,6 +96,8 @@ export function SettingsScreen({
   onVerifyAppLock,
   onClearCache,
   onGetCacheStats,
+  onExportContacts,
+  onExportCalendar,
   onGetProtocol,
   sharedMailboxes,
   onAddSharedMailbox,
@@ -133,6 +139,29 @@ export function SettingsScreen({
       active = false;
     };
   }, [onGetProtocol]);
+
+  // Geräte-Export (iPhone-Adressbuch/-Kalender): exportieren + Anzahl rückmelden.
+  const [deviceBusy, setDeviceBusy] = useState<'contacts' | 'calendar' | null>(null);
+  const runExport = (kind: 'contacts' | 'calendar'): void => {
+    const fn = kind === 'contacts' ? onExportContacts : onExportCalendar;
+    if (fn === undefined || deviceBusy !== null) return;
+    const label = kind === 'contacts' ? 'Kontakte' : 'Termine';
+    setDeviceBusy(kind);
+    void fn()
+      .then((n) =>
+        Alert.alert(
+          'Auf das iPhone exportiert',
+          `${String(n)} ${label} in „NEXUS" auf dem iPhone abgeglichen.`,
+        ),
+      )
+      .catch(() =>
+        Alert.alert(
+          'Export fehlgeschlagen',
+          'Bitte den Zugriff in den iPhone-Einstellungen (Datenschutz) erlauben und erneut versuchen.',
+        ),
+      )
+      .finally(() => setDeviceBusy(null));
+  };
 
   // Lokalen Cache leeren (mit Bestätigung): löscht nur die lokale DB, Login bleibt erhalten.
   const confirmClearCache = (): void => {
@@ -400,6 +429,45 @@ export function SettingsScreen({
                   </Pressable>
                 )}
               </View>
+            </>
+          ) : null}
+
+          {onExportContacts !== undefined || onExportCalendar !== undefined ? (
+            <>
+              <Text style={s.section}>Mit iPhone synchronisieren</Text>
+              <View style={s.card}>
+                {onExportContacts !== undefined ? (
+                  <Pressable disabled={deviceBusy !== null} onPress={() => runExport('contacts')}>
+                    <Row t={t}>
+                      <Icon name="contacts" size={20} color={t.c.textSecondary} />
+                      <View style={s.grow}>
+                        <Text style={s.itemTitle}>Kontakte aufs iPhone exportieren</Text>
+                        <Text style={s.itemSub}>In die iPhone-Gruppe „NEXUS" (Adressbuch)</Text>
+                      </View>
+                      <Text style={s.itemValue}>{deviceBusy === 'contacts' ? 'Läuft …' : ''}</Text>
+                      <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
+                    </Row>
+                  </Pressable>
+                ) : null}
+                {onExportCalendar !== undefined ? (
+                  <Pressable disabled={deviceBusy !== null} onPress={() => runExport('calendar')}>
+                    <Row t={t}>
+                      <Icon name="calendar" size={20} color={t.c.textSecondary} />
+                      <View style={s.grow}>
+                        <Text style={s.itemTitle}>Termine aufs iPhone exportieren</Text>
+                        <Text style={s.itemSub}>In den iPhone-Kalender „NEXUS"</Text>
+                      </View>
+                      <Text style={s.itemValue}>{deviceBusy === 'calendar' ? 'Läuft …' : ''}</Text>
+                      <Icon name="chevronRight" size={18} color={t.c.textSecondary} />
+                    </Row>
+                  </Pressable>
+                ) : null}
+              </View>
+              <Text style={s.cacheNote}>
+                Beim ersten Mal fragt das iPhone nach Zugriff auf Kontakte/Kalender. Es wird nur die
+                NEXUS-eigene Gruppe bzw. der NEXUS-Kalender geschrieben — deine übrigen Kontakte und
+                Termine bleiben unangetastet.
+              </Text>
             </>
           ) : null}
 

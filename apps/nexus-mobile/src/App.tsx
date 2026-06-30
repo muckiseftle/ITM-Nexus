@@ -819,6 +819,12 @@ function AppInner(): React.JSX.Element {
               {...(container.cacheStats !== undefined
                 ? { onGetCacheStats: container.cacheStats }
                 : {})}
+              {...(container.exportContactsToDevice !== undefined && account !== null
+                ? { onExportContacts: () => container.exportContactsToDevice!(account) }
+                : {})}
+              {...(container.exportCalendarToDevice !== undefined && account !== null
+                ? { onExportCalendar: () => container.exportCalendarToDevice!(account) }
+                : {})}
               {...(container.activeProtocol !== undefined && account !== null
                 ? { onGetProtocol: () => container.activeProtocol!(account) }
                 : {})}

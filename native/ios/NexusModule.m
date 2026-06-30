@@ -86,6 +86,10 @@ RCT_EXTERN_METHOD(transportSyncSharedInbox:(NSString *)accountId owner:(NSString
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(transportSyncSharedCalendar:(NSString *)accountId owner:(NSString *)owner
                   resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(localExportContacts:(NSString *)contactsJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(localExportEvents:(NSString *)eventsJson
+                  resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(crashLastReport:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(crashClearReport:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
