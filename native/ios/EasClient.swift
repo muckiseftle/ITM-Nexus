@@ -260,9 +260,17 @@ final class EasClient {
       guard let serverId = EasParse.childText(node, page: f, tag: "ServerId") else { continue }
       let name = EasParse.childText(node, page: f, tag: "DisplayName") ?? ""
       let type = EasParse.childText(node, page: f, tag: "Type") ?? ""
+      let mapped = Self.mapFolderType(type: type, name: name)
+      // Logische Ordner (inbox/sent/…) auf ihre ServerId merken — so kann syncMessages("inbox")
+      // auf die echte EAS-CollectionId übersetzen. Ein kanonischer numerischer EAS-Typ (2/3/4/5)
+      // gewinnt über eine reine Namens-Heuristik; sonst gilt die erste Zuordnung.
+      let canonical = ["2", "3", "4", "5"].contains(type)
+      if Self.logicalFolderIds.contains(mapped), wellKnown(mapped) == nil || canonical {
+        setWellKnown(mapped, serverId)
+      }
       created.append([
         "id": serverId, "accountId": accountId, "displayName": name,
-        "type": Self.mapFolderType(type: type, name: name), "unreadCount": 0, "totalCount": 0,
+        "type": mapped, "unreadCount": 0, "totalCount": 0,
       ])
     }
     for node in EasParse.all(root, page: f, tag: "Delete") {
@@ -303,6 +311,36 @@ final class EasClient {
     lock.lock()
     defer { lock.unlock() }
     return collectionForServerId[serverId]
+  }
+
+  // Logischer Ordnername (inbox/sent/…) → EAS-ServerId. EAS adressiert Ordner über die ServerId
+  // aus FolderSync, NICHT über sprechende Namen wie „inbox" (anders als EWS-DistinguishedFolderId).
+  // Wird beim FolderSync befüllt; syncMessages("inbox") wird darüber auf die echte ServerId gemappt.
+  private var wellKnownCollection: [String: String] = [:]
+  private static let logicalFolderIds: Set<String> = [
+    "inbox", "sent", "drafts", "deleted", "archive", "junk",
+  ]
+
+  private func setWellKnown(_ logical: String, _ serverId: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    wellKnownCollection[logical] = serverId
+  }
+  private func wellKnown(_ logical: String) -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return wellKnownCollection[logical]
+  }
+
+  /// Mappt eine logische Ordner-ID (inbox/sent/…) auf die EAS-ServerId. Echte ServerIds werden
+  /// unverändert durchgereicht. Ist die Zuordnung noch unbekannt, wird einmal FolderSync „0"
+  /// ausgeführt, um sie zu ermitteln.
+  private func resolveCollectionId(_ accountId: String, _ id: String) async throws -> String {
+    guard Self.logicalFolderIds.contains(id) else { return id }
+    if let sid = wellKnown(id) { return sid }
+    _ = try await fetchFolders(accountId, syncKey: "0")  // befüllt wellKnownCollection
+    if let sid = wellKnown(id) { return sid }
+    throw EasError.hard("EAS-Ordner „\(id)“ nicht gefunden (FolderSync ohne passenden Typ)")
   }
 
   // Aktueller SyncKey je Collection. EAS-Änderungen (Read/Flag/Delete) sind Sync-Commands und
@@ -347,13 +385,15 @@ final class EasClient {
 
   func syncMessages(accountId: String, folderId: String, syncKey: String?) async throws -> String {
     try await ensureState(accountId)
+    // Logische Ordner-ID („inbox") → echte EAS-CollectionId (ServerId aus FolderSync).
+    let collectionId = try await resolveCollectionId(accountId, folderId)
     let startKey: String
     if let sk = syncKey, !sk.isEmpty, sk != "0" {
       startKey = sk
     } else {
-      startKey = try await primeCollection(accountId, collectionId: folderId)
+      startKey = try await primeCollection(accountId, collectionId: collectionId)
     }
-    let r = try await syncCollection(accountId, collectionId: folderId, syncKey: startKey)
+    let r = try await syncCollection(accountId, collectionId: collectionId, syncKey: startKey)
     let json = NexusJSON.string(from: [
       "syncKey": r.newKey, "created": r.created, "updated": [], "deletedIds": r.deleted,
       "hasMore": r.hasMore,
@@ -610,12 +650,13 @@ final class EasClient {
     if let newKey = EasParse.text(coll, page: a, tag: "SyncKey") { setSyncKey(collectionId, newKey) }
   }
 
-  /// MoveItems (Code-Page 5). `targetFolderId` ist die Ziel-CollectionId (FolderSync-ServerId).
-  /// Logische Namen (z. B. „archive") lassen sich hier nicht auflösen → Hardfailure.
+  /// MoveItems (Code-Page 5). `targetFolderId` ist die Ziel-CollectionId; logische Namen
+  /// (z. B. „archive"/„deleted") werden auf ihre EAS-ServerId aufgelöst.
   private func moveItem(_ accountId: String, serverId: String, targetFolderId: String) async throws {
     guard let srcColl = collection(forServerId: serverId) else {
       throw EasError.hard("Unbekannte Collection für \(serverId)")
     }
+    let dstColl = try await resolveCollectionId(accountId, targetFolderId)
     let m = Wbxml.Page.move
     let req = Wbxml.el(
       m, "MoveItems",
@@ -625,7 +666,7 @@ final class EasClient {
           [
             Wbxml.txt(m, "SrcMsgId", serverId),
             Wbxml.txt(m, "SrcFldId", srcColl),
-            Wbxml.txt(m, "DstFldId", targetFolderId),
+            Wbxml.txt(m, "DstFldId", dstColl),
           ])
       ])
     let data = try await easSend(accountId, command: "MoveItems", body: Wbxml.encode(req))
@@ -634,7 +675,7 @@ final class EasClient {
       let status = EasParse.text(root, page: m, tag: "Status") ?? "3"
       guard status == "3" else { throw EasError.hard("MoveItems Status \(status)") }  // 3 = Erfolg
       if let dstId = EasParse.text(root, page: m, tag: "DstMsgId") {
-        cacheCollection(dstId, targetFolderId)
+        cacheCollection(dstId, dstColl)
       }
     }
   }
