@@ -175,6 +175,31 @@ const TAGS_BY_PAGE: Readonly<Record<number, Readonly<Record<string, number>>>> =
     RemoteWipe: 0x0c,
     EASProvisionDoc: 0x0d,
   },
+  // Code Page 18 — Settings ([MS-ASWBXML] 2.1.2.1.19). DeviceInformation/Set wird im ersten
+  // Provision-Request benötigt (EAS 14.1 antwortet sonst mit Status 165).
+  [PAGE.Settings]: {
+    Settings: 0x05,
+    Status: 0x06,
+    Get: 0x07,
+    Set: 0x08,
+    Oof: 0x09,
+    DevicePassword: 0x14,
+    Password: 0x15,
+    DeviceInformation: 0x16,
+    Model: 0x17,
+    IMEI: 0x18,
+    FriendlyName: 0x19,
+    OS: 0x1a,
+    OSLanguage: 0x1b,
+    PhoneNumber: 0x1c,
+    UserInformation: 0x1d,
+    EmailAddresses: 0x1e,
+    SMTPAddress: 0x1f,
+    UserAgent: 0x20,
+    EnableOutboundSMS: 0x21,
+    MobileOperator: 0x22,
+    PrimarySmtpAddress: 0x23,
+  },
   // Code Page 15 — Search ([MS-ASWBXML] 2.1.2.1.16)
   [PAGE.Search]: {
     Search: 0x05,

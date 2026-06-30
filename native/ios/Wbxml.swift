@@ -86,6 +86,16 @@ enum Wbxml {
     "Data": 0x0a, "Status": 0x0b, "RemoteWipe": 0x0c, "EASProvisionDoc": 0x0d,
   ]
 
+  /// Settings-Code-Page (18). Wird u. a. für `DeviceInformation/Set` im ersten Provision-Request
+  /// benötigt (EAS 14.1 antwortet sonst mit Status 165 „DeviceInformationRequired").
+  private static let settingsTags: [String: UInt8] = [
+    "Settings": 0x05, "Status": 0x06, "Get": 0x07, "Set": 0x08, "Oof": 0x09,
+    "DevicePassword": 0x14, "Password": 0x15, "DeviceInformation": 0x16, "Model": 0x17,
+    "IMEI": 0x18, "FriendlyName": 0x19, "OS": 0x1a, "OSLanguage": 0x1b, "PhoneNumber": 0x1c,
+    "UserInformation": 0x1d, "EmailAddresses": 0x1e, "SMTPAddress": 0x1f, "UserAgent": 0x20,
+    "EnableOutboundSMS": 0x21, "MobileOperator": 0x22, "PrimarySmtpAddress": 0x23,
+  ]
+
   private static let searchTags: [String: UInt8] = [
     "Search": 0x05, "Store": 0x07, "Name": 0x08, "Query": 0x09, "Options": 0x0a, "Range": 0x0b,
     "Status": 0x0c, "Response": 0x0d, "Result": 0x0e, "Properties": 0x0f, "Total": 0x10,
@@ -126,6 +136,7 @@ enum Wbxml {
     Page.meetingResponse: meetingResponseTags,
     Page.ping: pingTags,
     Page.provision: provisionTags,
+    Page.settings: settingsTags,
     Page.search: searchTags,
     Page.airSyncBase: airSyncBaseTags,
     Page.itemOperations: itemOpsTags,

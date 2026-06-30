@@ -113,6 +113,26 @@ describe('encode — kanonische Byte-Vektoren', () => {
     const tree: WbxmlNode = { page: 0, token: 0x13, children: [] };
     expect(hex(encode(tree))).toBe(hex(bytes(0x03, 0x01, 0x6a, 0x00, 0x13)));
   });
+
+  it('Settings-Code-Page: DeviceInformation/Set (Provision 14.1) kodiert + round-trippt', () => {
+    // Im ersten Provision-Request verlangt EAS 14.1 DeviceInformation (sonst Status 165).
+    expect(tagToken('Settings', 'DeviceInformation')).toBe(0x16);
+    expect(tagToken('Settings', 'Set')).toBe(0x08);
+    expect(tagToken('Settings', 'Model')).toBe(0x17);
+    expect(tagToken('Settings', 'UserAgent')).toBe(0x20);
+
+    const tree = el('Settings', 'DeviceInformation', [
+      el('Settings', 'Set', [txt('Settings', 'Model', 'iPhone')]),
+    ]);
+    // SWITCH_PAGE 18 (0x00 0x12) + DeviceInformation(0x16)|Content(0x40)=0x56.
+    expect(hex(encode(tree))).toContain('00 12 56');
+
+    const root = decode(encode(tree));
+    expect(root.page).toBe(18);
+    expect(root.token).toBe(0x16);
+    expect(root.children[0]?.token).toBe(0x08); // Set
+    expect(root.children[0]?.children[0]?.text).toBe('iPhone');
+  });
 });
 
 describe('decode', () => {

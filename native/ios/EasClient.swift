@@ -111,23 +111,70 @@ final class EasClient {
 
   // MARK: Provision (zweiphasig, Code-Page 14)
 
-  private func provisionBody(policyKey: String?) -> Data {
+  /// Ab EAS 14.1 verlangt der Server Geräteinformationen im ERSTEN Provision-Request — fehlen
+  /// sie, antwortet er mit Status 165 („DeviceInformationRequired"). Für 14.0/12.x darf der Block
+  /// NICHT gesendet werden (Protokollfehler).
+  private static func needsDeviceInformation(_ version: String) -> Bool {
+    return (Double(version) ?? 0) >= 14.1
+  }
+
+  /// Klartext-Hinweis zu häufigen EAS-Provision-/Common-Status-Codes (für verständliche Fehler).
+  private static func provisionStatusHint(_ status: String) -> String {
+    switch status {
+    case "2": return " (Protokollfehler)"
+    case "3": return " (allgemeiner Serverfehler)"
+    case "139": return " (Gerät nicht vollständig provisionierbar — Richtlinie zu streng)"
+    case "141": return " (Gerät auf strikter Richtlinie nicht erlaubt)"
+    case "142": return " (Gerät nicht provisioniert)"
+    case "143": return " (PolicyKey veraltet — erneut provisionieren)"
+    case "144": return " (ungültiger PolicyKey)"
+    case "145": return " (extern verwaltete Geräte nicht erlaubt)"
+    case "165": return " (Geräteinformationen erforderlich)"
+    default: return ""
+    }
+  }
+
+  /// `<DeviceInformation><Set>…</Set></DeviceInformation>` (Settings-Code-Page) als Kind von
+  /// `<Provision>`, vor `<Policies>`.
+  private static func deviceInformationNode() -> Wbxml.Node {
+    let st = Wbxml.Page.settings
+    return Wbxml.el(
+      st, "DeviceInformation",
+      [
+        Wbxml.el(
+          st, "Set",
+          [
+            Wbxml.txt(st, "Model", "iPhone"),
+            Wbxml.txt(st, "FriendlyName", "NEXUS"),
+            Wbxml.txt(st, "OS", "iOS"),
+            Wbxml.txt(st, "UserAgent", "NEXUS-EAS"),
+          ]),
+      ])
+  }
+
+  private func provisionBody(policyKey: String?, includeDeviceInfo: Bool) -> Data {
     let p = Wbxml.Page.provision
+    var children: [Wbxml.Node] = []
+    // DeviceInformation muss VOR Policies stehen (nur im ersten Request / ab 14.1).
+    if includeDeviceInfo { children.append(Self.deviceInformationNode()) }
     var policyChildren: [Wbxml.Node] = [Wbxml.txt(p, "PolicyType", "MS-EAS-Provisioning-WBXML")]
     if let pk = policyKey {
       policyChildren.append(Wbxml.txt(p, "PolicyKey", pk))
       policyChildren.append(Wbxml.txt(p, "Status", "1"))  // Policy akzeptiert
     }
-    let tree = Wbxml.el(
-      p, "Provision",
-      [Wbxml.el(p, "Policies", [Wbxml.el(p, "Policy", policyChildren)])])
-    return Wbxml.encode(tree)
+    children.append(Wbxml.el(p, "Policies", [Wbxml.el(p, "Policy", policyChildren)]))
+    return Wbxml.encode(Wbxml.el(p, "Provision", children))
   }
 
   /// Request- + Acknowledge-Phase; liefert den finalen PolicyKey.
   func provision(_ accountId: String) async throws -> String {
-    let tempKey = try await sendProvision(accountId, body: provisionBody(policyKey: nil))
-    return try await sendProvision(accountId, body: provisionBody(policyKey: tempKey))
+    let version = getState(accountId)?.protocolVersion ?? "14.1"
+    let withDeviceInfo = Self.needsDeviceInformation(version)
+    // Phase 1 (initial): ggf. mit DeviceInformation. Phase 2 (Acknowledge): nie.
+    let tempKey = try await sendProvision(
+      accountId, body: provisionBody(policyKey: nil, includeDeviceInfo: withDeviceInfo))
+    return try await sendProvision(
+      accountId, body: provisionBody(policyKey: tempKey, includeDeviceInfo: false))
   }
 
   private func sendProvision(_ accountId: String, body: Data) async throws -> String {
@@ -142,7 +189,9 @@ final class EasClient {
     guard let root = try? Wbxml.decode(data) else { throw EasError.hard("Provision: WBXML defekt") }
     let p = Wbxml.Page.provision
     let status = EasParse.text(root, page: p, tag: "Status") ?? "?"
-    guard status == "1" else { throw EasError.hard("Provision Status \(status)") }
+    guard status == "1" else {
+      throw EasError.hard("Provision Status \(status)\(Self.provisionStatusHint(status))")
+    }
     guard let key = EasParse.text(root, page: p, tag: "PolicyKey"), !key.isEmpty else {
       throw EasError.hard("Provision ohne PolicyKey")
     }
