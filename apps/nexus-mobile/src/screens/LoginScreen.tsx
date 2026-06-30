@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -336,296 +339,322 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
     ) : null;
 
   return (
-    <View style={s.container}>
-      {onCancel !== undefined ? (
-        <Pressable style={s.cancelRow} onPress={onCancel} hitSlop={8}>
-          <Icon name="chevronLeft" size={20} color={t.c.brandPrimary} />
-          <Text style={s.cancelLink}>Abbrechen</Text>
-        </Pressable>
-      ) : null}
-      {onCancel === undefined ? (
-        <View style={s.brandRow}>
-          <BrandMark size={56} />
-        </View>
-      ) : null}
-      <Text style={s.title}>{onCancel !== undefined ? 'Konto hinzufügen' : 'NEXUS'}</Text>
-      <StepDots step={step} s={s} t={t} />
-
-      {step === 'email' ? (
-        <>
-          <Text style={s.subtitle}>Mit deinem Exchange-Konto anmelden</Text>
-          <TextInput
-            style={s.input}
-            placeholder="E-Mail-Adresse"
-            placeholderTextColor={t.c.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-            onSubmitEditing={continueFromEmail}
-            returnKeyType="next"
-          />
-          {errorBox}
-          <Pressable style={s.button} onPress={continueFromEmail}>
-            <Text style={s.buttonText}>Weiter</Text>
+    <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={s.flex}
+        contentContainerStyle={s.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        {onCancel !== undefined ? (
+          <Pressable style={s.cancelRow} onPress={onCancel} hitSlop={8}>
+            <Icon name="chevronLeft" size={20} color={t.c.brandPrimary} />
+            <Text style={s.cancelLink}>Abbrechen</Text>
           </Pressable>
-          <Text style={s.hint}>
-            Wir ermitteln Server und ActiveSync-Pfad automatisch — du kannst sie im nächsten Schritt
-            prüfen.
-          </Text>
-        </>
-      ) : null}
-
-      {step === 'config' ? (
-        <>
-          <AccountRow email={email} onChange={() => setStep('email')} label="Ändern" s={s} />
-          <Text style={s.subtitle}>Serverkonfiguration</Text>
-
-          <ToggleRow
-            label="Automatisch ermitteln (Autodiscover)"
-            value={autodiscover}
-            enabled
-            onChange={(v) => {
-              setAutodiscover(v);
-              resetDiscovery();
-            }}
-            s={s}
-            t={t}
-          />
-
-          <FieldLabel text="Server (Host)" s={s} />
-          <TextInput
-            style={s.input}
-            placeholder="mail.firma.de"
-            placeholderTextColor={t.c.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            value={serverHost}
-            onChangeText={(v) => {
-              setServerHost(v);
-              setAutodiscover(false);
-              resetDiscovery();
-            }}
-          />
-
-          <FieldLabel text="ActiveSync-Pfad (EAS)" s={s} />
-          <TextInput
-            style={s.input}
-            placeholder={DEFAULT_EAS_PATH}
-            placeholderTextColor={t.c.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={easPath}
-            onChangeText={(v) => {
-              setEasPath(v);
-              setAutodiscover(false);
-              resetDiscovery();
-            }}
-          />
-
-          <FieldLabel text="Port" s={s} />
-          <TextInput
-            style={s.input}
-            placeholder={DEFAULT_PORT}
-            placeholderTextColor={t.c.textSecondary}
-            keyboardType="number-pad"
-            value={port}
-            onChangeText={(v) => {
-              setPort(v);
-              setAutodiscover(false);
-              resetDiscovery();
-            }}
-          />
-
-          <ToggleRow
-            label="SSL/TLS verwenden"
-            value
-            enabled={false}
-            onChange={() => undefined}
-            s={s}
-            t={t}
-          />
-          <ReadonlyRow k="Minimum TLS-Version" v="TLS 1.2" s={s} />
-          <ReadonlyRow k="EAS-Protokollversion" v="Automatisch (ausgehandelt)" s={s} />
-          <ToggleRow
-            label="Selbstsigniertes/Firmenzertifikat zulassen"
-            value={allowSelfSigned}
-            enabled
-            onChange={setAllowSelfSigned}
-            s={s}
-            t={t}
-          />
-          <ToggleRow
-            label="Fallback auf EWS erlauben"
-            value={easFallbackToEws}
-            enabled
-            onChange={setEasFallbackToEws}
-            s={s}
-            t={t}
-          />
-          <Text style={s.hint}>
-            Standard: aus — es wird ausschließlich ActiveSync (EAS) verwendet. Nur aktivieren, wenn
-            dein Server EAS nicht unterstützt.
-          </Text>
-
-          <FieldLabel text="Anmelde-/Benutzernamen-Format" s={s} />
-          <Segmented
-            options={[
-              { key: 'downlevel', label: 'DOMÄNE\\Benutzer' },
-              { key: 'upn', label: 'name@firma' },
-              { key: 'bare', label: 'Benutzer' },
-            ]}
-            value={loginFormat}
-            onChange={(k) => changeFormat(k as LoginForm)}
-            s={s}
-            t={t}
-          />
-          <View style={s.previewBox}>
-            <Text style={s.previewLabel}>Benutzername</Text>
-            <Text style={s.previewValue}>{deriveUsername(loginFormat, email) || '—'}</Text>
+        ) : null}
+        {onCancel === undefined ? (
+          <View style={s.brandRow}>
+            <BrandMark size={56} />
           </View>
+        ) : null}
+        <Text style={s.title}>{onCancel !== undefined ? 'Konto hinzufügen' : 'NEXUS'}</Text>
+        <StepDots step={step} s={s} t={t} />
 
-          {errorBox}
-          <PrimaryButton label="Weiter" busy={busy} onPress={continueFromConfig} s={s} t={t} />
-        </>
-      ) : null}
-
-      {step === 'credentials' ? (
-        <>
-          <AccountRow email={email} onChange={() => setStep('config')} label="Zurück" s={s} />
-          <Text style={s.subtitle}>Anmeldung</Text>
-          <TextInput
-            style={s.input}
-            placeholder="Benutzername"
-            placeholderTextColor={t.c.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={username}
-            onChangeText={(v) => {
-              setUsername(v);
-              resetDiscovery();
-            }}
-          />
-          <TextInput
-            style={s.input}
-            placeholder="Passwort"
-            placeholderTextColor={t.c.textSecondary}
-            secureTextEntry
-            autoFocus
-            value={password}
-            onChangeText={(v) => {
-              setPassword(v);
-              resetDiscovery();
-            }}
-          />
-
-          <View style={s.consentBox}>
-            <View style={s.consentHeader}>
-              <Icon name="shield" size={18} color={t.c.warning} />
-              <Text style={s.consentTitle}>ActiveSync (EAS) — Hinweis</Text>
-            </View>
-            <Text style={s.consentText}>
-              Bei der Anmeldung über ActiveSync kann deine Organisation dieses Gerät verwalten und
-              aus der Ferne zurücksetzen bzw. löschen (Remote-Wipe).
-            </Text>
-            <Pressable style={s.checkRow} onPress={() => setWipeConsent((v) => !v)} hitSlop={6}>
-              <View style={[s.checkBox, wipeConsent ? s.checkBoxOn : null]}>
-                {wipeConsent ? <Icon name="check" size={14} color={t.onBrand} /> : null}
-              </View>
-              <Text style={s.checkLabel}>Das ist mir bewusst und ich stimme zu.</Text>
+        {step === 'email' ? (
+          <>
+            <Text style={s.subtitle}>Mit deinem Exchange-Konto anmelden</Text>
+            <TextInput
+              style={s.input}
+              placeholder="E-Mail-Adresse"
+              placeholderTextColor={t.c.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              onSubmitEditing={continueFromEmail}
+              returnKeyType="next"
+            />
+            {errorBox}
+            <Pressable style={s.button} onPress={continueFromEmail}>
+              <Text style={s.buttonText}>Weiter</Text>
             </Pressable>
-          </View>
-
-          {errorBox}
-          <PrimaryButton label="Anmelden" busy={busy} onPress={() => void runLogin()} s={s} t={t} />
-        </>
-      ) : null}
-
-      {step === 'cert' ? (
-        <>
-          <AccountRow email={email} onChange={() => setStep('credentials')} label="Zurück" s={s} />
-          <Text style={s.subtitle}>Server-Zertifikat bestätigen</Text>
-          {cert === null ? (
-            <>
-              <Text style={s.advancedHint}>
-                Dein Server nutzt vermutlich ein firmeninternes Zertifikat. Lies den Fingerprint aus
-                und vergleiche ihn mit deiner IT, bevor du ihm vertraust.
-              </Text>
-              {errorBox}
-              <PrimaryButton
-                label="Zertifikat lesen"
-                busy={busy}
-                onPress={() => void readCertificate()}
-                s={s}
-                t={t}
-              />
-            </>
-          ) : (
-            <>
-              <View style={s.certBox}>
-                <Text style={s.certLabel}>Host</Text>
-                <Text style={s.certValue}>{cert.host}</Text>
-                <Text style={s.certLabel}>Aussteller / Subjekt</Text>
-                <Text style={s.certValue}>{cert.subject || '—'}</Text>
-                <Text style={s.certLabel}>SHA-256-Fingerprint (SPKI)</Text>
-                <Text style={s.certFingerprint}>{cert.spkiSha256}</Text>
-              </View>
-              {errorBox}
-              <PrimaryButton
-                label="Vertrauen & fortfahren"
-                busy={busy}
-                onPress={() => void trustAndContinue()}
-                s={s}
-                t={t}
-              />
-              <Pressable onPress={() => setCert(null)} hitSlop={6}>
-                <Text style={s.secondaryLink}>Anderes Zertifikat lesen</Text>
-              </Pressable>
-            </>
-          )}
-        </>
-      ) : null}
-
-      {step === 'permissions' ? (
-        <>
-          <Text style={s.subtitle}>Was soll synchronisiert werden?</Text>
-          <View style={s.serverInfoBox}>
-            <Text style={s.serverInfoLabel}>Angemeldet · Server</Text>
-            <Text style={s.serverInfoUrl} numberOfLines={2}>
-              {resolvedServer ?? effectiveHost() ?? email.trim()}
+            <Text style={s.hint}>
+              Wir ermitteln Server und ActiveSync-Pfad automatisch — du kannst sie im nächsten
+              Schritt prüfen.
             </Text>
-          </View>
-          <ToggleRow label="E-Mail" value enabled={false} onChange={() => undefined} s={s} t={t} />
-          <ToggleRow
-            label="Kalender"
-            value={syncCalendar}
-            enabled
-            onChange={setSyncCalendar}
-            s={s}
-            t={t}
-          />
-          <ToggleRow
-            label="Kontakte"
-            value={syncContacts}
-            enabled
-            onChange={setSyncContacts}
-            s={s}
-            t={t}
-          />
-          {errorBox}
-          <PrimaryButton
-            label="Konto einrichten"
-            busy={busy}
-            onPress={() => void finish()}
-            s={s}
-            t={t}
-          />
-        </>
-      ) : null}
-    </View>
+          </>
+        ) : null}
+
+        {step === 'config' ? (
+          <>
+            <AccountRow email={email} onChange={() => setStep('email')} label="Ändern" s={s} />
+            <Text style={s.subtitle}>Serverkonfiguration</Text>
+
+            <ToggleRow
+              label="Automatisch ermitteln (Autodiscover)"
+              value={autodiscover}
+              enabled
+              onChange={(v) => {
+                setAutodiscover(v);
+                resetDiscovery();
+              }}
+              s={s}
+              t={t}
+            />
+
+            <FieldLabel text="Server (Host)" s={s} />
+            <TextInput
+              style={s.input}
+              placeholder="mail.firma.de"
+              placeholderTextColor={t.c.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              value={serverHost}
+              onChangeText={(v) => {
+                setServerHost(v);
+                setAutodiscover(false);
+                resetDiscovery();
+              }}
+            />
+
+            <FieldLabel text="ActiveSync-Pfad (EAS)" s={s} />
+            <TextInput
+              style={s.input}
+              placeholder={DEFAULT_EAS_PATH}
+              placeholderTextColor={t.c.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={easPath}
+              onChangeText={(v) => {
+                setEasPath(v);
+                setAutodiscover(false);
+                resetDiscovery();
+              }}
+            />
+
+            <FieldLabel text="Port" s={s} />
+            <TextInput
+              style={s.input}
+              placeholder={DEFAULT_PORT}
+              placeholderTextColor={t.c.textSecondary}
+              keyboardType="number-pad"
+              value={port}
+              onChangeText={(v) => {
+                setPort(v);
+                setAutodiscover(false);
+                resetDiscovery();
+              }}
+            />
+
+            <ToggleRow
+              label="SSL/TLS verwenden"
+              value
+              enabled={false}
+              onChange={() => undefined}
+              s={s}
+              t={t}
+            />
+            <ReadonlyRow k="Minimum TLS-Version" v="TLS 1.2" s={s} />
+            <ReadonlyRow k="EAS-Protokollversion" v="Automatisch (ausgehandelt)" s={s} />
+            <ToggleRow
+              label="Selbstsigniertes/Firmenzertifikat zulassen"
+              value={allowSelfSigned}
+              enabled
+              onChange={setAllowSelfSigned}
+              s={s}
+              t={t}
+            />
+            <ToggleRow
+              label="Fallback auf EWS erlauben"
+              value={easFallbackToEws}
+              enabled
+              onChange={setEasFallbackToEws}
+              s={s}
+              t={t}
+            />
+            <Text style={s.hint}>
+              Standard: aus — es wird ausschließlich ActiveSync (EAS) verwendet. Nur aktivieren,
+              wenn dein Server EAS nicht unterstützt.
+            </Text>
+
+            <FieldLabel text="Anmelde-/Benutzernamen-Format" s={s} />
+            <Segmented
+              options={[
+                { key: 'downlevel', label: 'DOMÄNE\\Benutzer' },
+                { key: 'upn', label: 'name@firma' },
+                { key: 'bare', label: 'Benutzer' },
+              ]}
+              value={loginFormat}
+              onChange={(k) => changeFormat(k as LoginForm)}
+              s={s}
+              t={t}
+            />
+            <View style={s.previewBox}>
+              <Text style={s.previewLabel}>Benutzername</Text>
+              <Text style={s.previewValue}>{deriveUsername(loginFormat, email) || '—'}</Text>
+            </View>
+
+            {errorBox}
+            <PrimaryButton label="Weiter" busy={busy} onPress={continueFromConfig} s={s} t={t} />
+          </>
+        ) : null}
+
+        {step === 'credentials' ? (
+          <>
+            <AccountRow email={email} onChange={() => setStep('config')} label="Zurück" s={s} />
+            <Text style={s.subtitle}>Anmeldung</Text>
+            <TextInput
+              style={s.input}
+              placeholder="Benutzername"
+              placeholderTextColor={t.c.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={username}
+              onChangeText={(v) => {
+                setUsername(v);
+                resetDiscovery();
+              }}
+            />
+            <TextInput
+              style={s.input}
+              placeholder="Passwort"
+              placeholderTextColor={t.c.textSecondary}
+              secureTextEntry
+              autoFocus
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                resetDiscovery();
+              }}
+            />
+
+            <View style={s.consentBox}>
+              <View style={s.consentHeader}>
+                <Icon name="shield" size={18} color={t.c.warning} />
+                <Text style={s.consentTitle}>ActiveSync (EAS) — Hinweis</Text>
+              </View>
+              <Text style={s.consentText}>
+                Bei der Anmeldung über ActiveSync kann deine Organisation dieses Gerät verwalten und
+                aus der Ferne zurücksetzen bzw. löschen (Remote-Wipe).
+              </Text>
+              <Pressable style={s.checkRow} onPress={() => setWipeConsent((v) => !v)} hitSlop={6}>
+                <View style={[s.checkBox, wipeConsent ? s.checkBoxOn : null]}>
+                  {wipeConsent ? <Icon name="check" size={14} color={t.onBrand} /> : null}
+                </View>
+                <Text style={s.checkLabel}>Das ist mir bewusst und ich stimme zu.</Text>
+              </Pressable>
+            </View>
+
+            {errorBox}
+            <PrimaryButton
+              label="Anmelden"
+              busy={busy}
+              onPress={() => void runLogin()}
+              s={s}
+              t={t}
+            />
+          </>
+        ) : null}
+
+        {step === 'cert' ? (
+          <>
+            <AccountRow
+              email={email}
+              onChange={() => setStep('credentials')}
+              label="Zurück"
+              s={s}
+            />
+            <Text style={s.subtitle}>Server-Zertifikat bestätigen</Text>
+            {cert === null ? (
+              <>
+                <Text style={s.advancedHint}>
+                  Dein Server nutzt vermutlich ein firmeninternes Zertifikat. Lies den Fingerprint
+                  aus und vergleiche ihn mit deiner IT, bevor du ihm vertraust.
+                </Text>
+                {errorBox}
+                <PrimaryButton
+                  label="Zertifikat lesen"
+                  busy={busy}
+                  onPress={() => void readCertificate()}
+                  s={s}
+                  t={t}
+                />
+              </>
+            ) : (
+              <>
+                <View style={s.certBox}>
+                  <Text style={s.certLabel}>Host</Text>
+                  <Text style={s.certValue}>{cert.host}</Text>
+                  <Text style={s.certLabel}>Aussteller / Subjekt</Text>
+                  <Text style={s.certValue}>{cert.subject || '—'}</Text>
+                  <Text style={s.certLabel}>SHA-256-Fingerprint (SPKI)</Text>
+                  <Text style={s.certFingerprint}>{cert.spkiSha256}</Text>
+                </View>
+                {errorBox}
+                <PrimaryButton
+                  label="Vertrauen & fortfahren"
+                  busy={busy}
+                  onPress={() => void trustAndContinue()}
+                  s={s}
+                  t={t}
+                />
+                <Pressable onPress={() => setCert(null)} hitSlop={6}>
+                  <Text style={s.secondaryLink}>Anderes Zertifikat lesen</Text>
+                </Pressable>
+              </>
+            )}
+          </>
+        ) : null}
+
+        {step === 'permissions' ? (
+          <>
+            <Text style={s.subtitle}>Was soll synchronisiert werden?</Text>
+            <View style={s.serverInfoBox}>
+              <Text style={s.serverInfoLabel}>Angemeldet · Server</Text>
+              <Text style={s.serverInfoUrl} numberOfLines={2}>
+                {resolvedServer ?? effectiveHost() ?? email.trim()}
+              </Text>
+            </View>
+            <ToggleRow
+              label="E-Mail"
+              value
+              enabled={false}
+              onChange={() => undefined}
+              s={s}
+              t={t}
+            />
+            <ToggleRow
+              label="Kalender"
+              value={syncCalendar}
+              enabled
+              onChange={setSyncCalendar}
+              s={s}
+              t={t}
+            />
+            <ToggleRow
+              label="Kontakte"
+              value={syncContacts}
+              enabled
+              onChange={setSyncContacts}
+              s={s}
+              t={t}
+            />
+            {errorBox}
+            <PrimaryButton
+              label="Konto einrichten"
+              busy={busy}
+              onPress={() => void finish()}
+              s={s}
+              t={t}
+            />
+          </>
+        ) : null}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -846,12 +875,7 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
       marginLeft: space.xs,
     },
-    container: {
-      backgroundColor: t.c.bgCanvas,
-      flex: 1,
-      justifyContent: 'center',
-      padding: space.lg,
-    },
+    flex: { backgroundColor: t.c.bgCanvas, flex: 1 },
     dot: { borderRadius: 3, flex: 1, height: 4, marginHorizontal: 3 },
     dotsRow: { flexDirection: 'row', marginBottom: space.lg, marginTop: space.xs },
     errorBox: {
@@ -913,6 +937,12 @@ function makeStyles(t: AppTheme) {
       paddingVertical: space.sm,
     },
     readonlyVal: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      padding: space.lg,
+      paddingBottom: space.xxl,
+    },
     secondaryLink: {
       color: t.c.brandPrimary,
       fontSize: typography.caption.size,
