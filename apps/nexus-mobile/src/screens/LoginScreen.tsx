@@ -608,29 +608,19 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
               <Text style={s.previewLabel}>Anmeldung als</Text>
               <Text style={s.previewValue}>{effectiveLogin() || '—'}</Text>
             </View>
-            <TextInput
-              style={s.input}
-              placeholder="Passwort"
-              placeholderTextColor={t.c.textSecondary}
-              secureTextEntry
-              autoFocus
-              value={password}
-              onChangeText={(v) => {
-                setPassword(v);
-                resetDiscovery();
-              }}
-            />
 
-            <View style={s.consentBox}>
+            {/* Einwilligung BEWUSST über dem Passwortfeld: so ist sie sofort sichtbar und wird
+                nicht von der eingeblendeten Tastatur verdeckt. */}
+            <View style={[s.consentBox, !wipeConsent ? s.consentBoxOpen : null]}>
               <View style={s.consentHeader}>
                 <Icon name="shield" size={18} color={t.c.warning} />
-                <Text style={s.consentTitle}>ActiveSync (EAS) — Hinweis</Text>
+                <Text style={s.consentTitle}>ActiveSync (EAS) — Bitte bestätigen</Text>
               </View>
               <Text style={s.consentText}>
                 Bei der Anmeldung über ActiveSync kann deine Organisation dieses Gerät verwalten und
                 aus der Ferne zurücksetzen bzw. löschen (Remote-Wipe).
               </Text>
-              <Pressable style={s.checkRow} onPress={() => setWipeConsent((v) => !v)} hitSlop={6}>
+              <Pressable style={s.checkRow} onPress={() => setWipeConsent((v) => !v)} hitSlop={8}>
                 <View style={[s.checkBox, wipeConsent ? s.checkBoxOn : null]}>
                   {wipeConsent ? <Icon name="check" size={14} color={t.onBrand} /> : null}
                 </View>
@@ -638,14 +628,32 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
               </Pressable>
             </View>
 
+            <TextInput
+              style={s.input}
+              placeholder="Passwort"
+              placeholderTextColor={t.c.textSecondary}
+              secureTextEntry
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                resetDiscovery();
+              }}
+            />
+
             {errorBox}
             <PrimaryButton
               label="Anmelden"
               busy={busy}
+              disabled={!wipeConsent}
               onPress={() => void runLogin()}
               s={s}
               t={t}
             />
+            {!wipeConsent ? (
+              <Text style={s.fieldHint}>
+                Bitte zuerst oben den ActiveSync-Hinweis bestätigen, um fortzufahren.
+              </Text>
+            ) : null}
           </>
         ) : null}
 
@@ -842,15 +850,22 @@ function PrimaryButton({
   onPress,
   s,
   t,
+  disabled = false,
 }: {
   label: string;
   busy: boolean;
   onPress: () => void;
   s: Styles;
   t: AppTheme;
+  disabled?: boolean;
 }): React.JSX.Element {
+  const inactive = busy || disabled;
   return (
-    <Pressable style={[s.button, busy ? s.buttonDisabled : null]} disabled={busy} onPress={onPress}>
+    <Pressable
+      style={[s.button, inactive ? s.buttonDisabled : null]}
+      disabled={inactive}
+      onPress={onPress}
+    >
       {busy ? <ActivityIndicator color={t.onBrand} /> : <Text style={s.buttonText}>{label}</Text>}
     </Pressable>
   );
@@ -960,6 +975,9 @@ function makeStyles(t: AppTheme) {
       marginTop: space.xs,
       padding: space.md,
     },
+    // Noch nicht bestätigt → dezent eingefärbte Fläche (kein Rahmen/Schatten auf Rundung), damit
+    // der Hinweis klar auffällt.
+    consentBoxOpen: { backgroundColor: t.c.warning + '1f' },
     consentHeader: { alignItems: 'center', flexDirection: 'row', marginBottom: space.xs },
     consentText: { color: t.c.textSecondary, fontSize: typography.caption.size },
     consentTitle: {

@@ -91,9 +91,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// Sonst (Fallback erlaubt) kehrt sie zurück und der Aufrufer nutzt den EWS-Pfad.
   func guardEwsFallback(_ e: EasClient.EasError) throws {
     if !allowEwsFallback {
+      // Bewusst OHNE Wörter wie „Anmeldung/Passwort/401" — das ist ein Verfügbarkeits-/
+      // Verbindungsproblem von ActiveSync, KEIN Auth-Fehler. Sonst würde die App den Fehler als
+      // abgelehnte Anmeldung deuten und das Konto abmelden/entfernen (Setup-Schleife).
       throw NexusError.transport(
-        "EAS (ActiveSync) nicht verfügbar: \(Self.easReason(e)). "
-          + "EWS-Fallback ist deaktiviert — Server/Pfad prüfen oder EWS-Fallback in der Anmeldung aktivieren.")
+        "ActiveSync (EAS) ist nicht verfügbar: \(Self.easReason(e)). "
+          + "Der EWS-Fallback ist deaktiviert — bitte Server und EAS-Pfad prüfen oder den "
+          + "EWS-Fallback in den Experten-Einstellungen einschalten.")
     }
   }
   /// Preemptiver Basic-Auth-Header (thread-safe).
@@ -1057,8 +1061,8 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         }
       } else if !allowEwsFallback {
         throw NexusError.transport(
-          "EAS (ActiveSync) nicht verfügbar: keine EAS-URL ermittelt — Server/Pfad prüfen "
-            + "oder EWS-Fallback in der Anmeldung aktivieren.")
+          "ActiveSync (EAS) ist nicht verfügbar: keine EAS-URL ermittelt — bitte Server und "
+            + "EAS-Pfad prüfen oder den EWS-Fallback in den Experten-Einstellungen einschalten.")
       }
     }
     _ = try await post(EwsSoap.findFolders())
