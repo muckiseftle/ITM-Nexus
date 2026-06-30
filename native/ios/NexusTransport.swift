@@ -20,6 +20,13 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   private var _password: String?
   /// Konto-Wunsch „EWS bevorzugen" (Kompatibilitätsmodus). true ⇒ EAS für die Sitzung aus.
   private var _preferEws = false
+  // EAS-Hardfailure → EWS-Fallback NUR, wenn der Nutzer ihn in der Anmeldung erlaubt hat.
+  // Standard AUS ⇒ es wird ausschließlich EAS verwendet; scheitert EAS, kommt ein klarer Fehler.
+  private var _allowEwsFallback = false
+  // Benutzerdefinierte EAS-URL der Sitzung (Host/Pfad/Port aus der Anmeldung). Leer ⇒ Standardpfad
+  // aus dem EWS-Host ableiten. So wirken EAS-Pfad/Port-Overrides auch beim echten Sync, nicht nur
+  // bei Autodiscover.
+  private var _sessionEasUrl: String?
   private var _pinPolicies: [PinPolicy] = []
   /// Aus JS gesetzte Basis-Pins (statische Policy); die effektiven `_pinPolicies` sind Basis +
   /// TOFU-Pins (vom Nutzer beim ersten Login bestätigt, im Keychain persistiert).
@@ -61,6 +68,33 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   var preferEwsSession: Bool {
     get { locked { _preferEws } }
     set { locked { _preferEws = newValue } }
+  }
+  /// EWS-Fallback bei EAS-Hardfailure erlaubt? (thread-safe). Standard: false (nur EAS).
+  var allowEwsFallback: Bool {
+    get { locked { _allowEwsFallback } }
+    set { locked { _allowEwsFallback = newValue } }
+  }
+  /// Benutzerdefinierte EAS-URL der Sitzung (thread-safe). nil ⇒ Standardpfad aus EWS-Host.
+  var sessionEasUrl: String? {
+    get { locked { _sessionEasUrl } }
+    set { locked { _sessionEasUrl = newValue } }
+  }
+
+  /// Klartext einer EasError (für eine verständliche Fehlermeldung).
+  static func easReason(_ e: EasClient.EasError) -> String {
+    switch e {
+    case .auth(let m), .hard(let m), .soft(let m): return m
+    }
+  }
+
+  /// Wirft einen klaren Fehler, wenn EAS hart scheitert UND der EWS-Fallback deaktiviert ist.
+  /// Sonst (Fallback erlaubt) kehrt sie zurück und der Aufrufer nutzt den EWS-Pfad.
+  func guardEwsFallback(_ e: EasClient.EasError) throws {
+    if !allowEwsFallback {
+      throw NexusError.transport(
+        "EAS (ActiveSync) nicht verfügbar: \(Self.easReason(e)). "
+          + "EWS-Fallback ist deaktiviert — Server/Pfad prüfen oder EWS-Fallback in der Anmeldung aktivieren.")
+    }
   }
   /// Preemptiver Basic-Auth-Header (thread-safe).
   var basicAuthHeader: String? {
@@ -167,6 +201,8 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let creds = Self.jsonObject(credentialsJson) as? [String: Any]
     // Protokollwahl der Einrichtung übernehmen (true ⇒ EAS für die Sitzung aus).
     preferEwsSession = (creds?["preferEws"] as? Bool) ?? false
+    // EWS-Fallback nur, wenn ausdrücklich erlaubt (Standard: aus ⇒ nur EAS).
+    allowEwsFallback = (creds?["easFallbackToEws"] as? Bool) ?? false
 
     // Login-Namen ggf. um die NetBIOS-Domäne ergänzen (NTLM erwartet DOMÄNE\Benutzer).
     if let user = creds?["username"] as? String, let secret = creds?["secret"] as? String {
@@ -185,6 +221,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       let manualEws = manual["ewsUrl"] as? String, let url = URL(string: manualEws) {
       ewsUrl = url
       let manualEas = (manual["easUrl"] as? String) ?? Self.defaultEasUrl(forEwsHost: url.host)
+      sessionEasUrl = manualEas
       return try Self.json([
         "emailAddress": email, "auth": scheme, "ewsUrl": manualEws, "easUrl": manualEas,
         "capabilities": Self.defaultCapabilities,
@@ -203,9 +240,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       guard let ews = try await fetchAutodiscoverEwsUrl(url, email: email, method: probe.method)
       else { continue }
       ewsUrl = URL(string: ews)
+      sessionEasUrl = Self.defaultEasUrl(forEwsHost: URL(string: ews)?.host)
       return try Self.json([
         "emailAddress": email, "auth": scheme, "ewsUrl": ews,
-        "easUrl": Self.defaultEasUrl(forEwsHost: URL(string: ews)?.host),
+        "easUrl": sessionEasUrl ?? "",
         "capabilities": Self.defaultCapabilities,
       ])
     }
@@ -223,9 +261,10 @@ final class NexusTransport: NSObject, URLSessionDelegate {
       guard let url = URL(string: fb) else { continue }
       if try await probeEwsEndpoint(url) {
         ewsUrl = url
+        sessionEasUrl = Self.defaultEasUrl(forEwsHost: url.host)
         return try Self.json([
           "emailAddress": email, "auth": scheme, "ewsUrl": fb,
-          "easUrl": Self.defaultEasUrl(forEwsHost: url.host),
+          "easUrl": sessionEasUrl ?? "",
           "capabilities": Self.defaultCapabilities,
         ])
       }
@@ -392,6 +431,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         return try await EasClient.shared.ping(
           accountId: accountId, folderIdsJson: folderIdsJson, timeoutSec: timeoutSec)
       } catch let e as EasClient.EasError where e.isHard {
+        try guardEwsFallback(e)
         return try await pingEws(accountId: accountId, folderIdsJson: folderIdsJson, timeoutSec: timeoutSec)
       }
     }
@@ -444,7 +484,8 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         recordProtocol("eas", for: accountId)
         return result
       } catch let e as EasClient.EasError where e.isHard {
-        recordProtocol("ews", for: accountId)  // EAS-Hardfailure → automatischer EWS-Fallback
+        try guardEwsFallback(e)
+        recordProtocol("ews", for: accountId)  // EAS-Hardfailure → erlaubter EWS-Fallback
         return try await syncMessagesEws(accountId: accountId, folderId: folderId, syncKey: syncKey)
       }
     }
@@ -558,7 +599,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
           obj["contentType"] as? String ?? "application/octet-stream",
           obj["base64"] as? String ?? ""
         )
-      } catch let e as EasClient.EasError where e.isHard { /* EWS-Fallback unten */ }
+      } catch let e as EasClient.EasError where e.isHard { try guardEwsFallback(e) /* sonst EWS unten */ }
     }
     let xml = try await post(EwsSoap.getAttachment(id: attachmentId))
     let a = EwsSoap.parseAttachmentContent(xml)
@@ -626,6 +667,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
         try await EasClient.shared.applyOperation(operationJson: operationJson)
         return
       } catch let e as EasClient.EasError where e.isHard {
+        try guardEwsFallback(e)
         try await applyOperationEws(operationJson: operationJson)
         return
       }
@@ -682,8 +724,12 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     Self.easEnabled && ewsUrl?.host != nil && !preferEwsSession
   }
 
-  /// EAS-URL der aktuellen Sitzung (Standardpfad aus dem EWS-Host) — für `EasClient.ensureState`.
-  func easUrlForSession() -> String { Self.defaultEasUrl(forEwsHost: ewsUrl?.host) }
+  /// EAS-URL der aktuellen Sitzung — benutzerdefinierte URL (Host/Pfad/Port aus der Anmeldung),
+  /// sonst Standardpfad aus dem EWS-Host. Für `EasClient.ensureState`.
+  func easUrlForSession() -> String {
+    if let custom = sessionEasUrl, !custom.isEmpty { return custom }
+    return Self.defaultEasUrl(forEwsHost: ewsUrl?.host)
+  }
   /// Benutzername der aktuellen Sitzung (EAS `User`-Parameter).
   func sessionUsername() -> String? { currentUsername() }
 
@@ -691,6 +737,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     if useEas(accountId) {
       do { return try await EasClient.shared.syncFolders(accountId: accountId, syncKey: syncKey) }
       catch let e as EasClient.EasError where e.isHard {
+        try guardEwsFallback(e)
         return try await syncFoldersEws(accountId: accountId, syncKey: syncKey)
       }
     }
@@ -894,6 +941,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     if useEas(accountId) {
       do { return try await EasClient.shared.getMessage(accountId: accountId, messageId: messageId) }
       catch let e as EasClient.EasError where e.isHard {
+        try guardEwsFallback(e)
         return try await getMessageEws(accountId: accountId, messageId: messageId)
       }
     }
@@ -922,6 +970,7 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     if useEas(accountId) {
       do { return try await EasClient.shared.sendMessage(accountId: accountId, messageJson: messageJson) }
       catch let e as EasClient.EasError where e.isHard {
+        try guardEwsFallback(e)
         return try await sendMessageEws(accountId: accountId, messageJson: messageJson)
       }
     }
@@ -987,8 +1036,33 @@ final class NexusTransport: NSObject, URLSessionDelegate {
   /// Postfach-Wurzel). `post()` wirft AUTH bei 401/403 bzw. SERVER bei sonstigem Nicht-200 —
   /// damit werden falsche Anmeldedaten verlässlich abgelehnt (kein „Pseudo-Login").
   func verifyCredentials(email: String) async throws -> String {
+    let account = email.lowercased()
+    // ActiveSync (EAS) ZUERST: bestätigt Server + Anmeldung End-to-End (OPTIONS → Provision →
+    // FolderSync). So wird – wie vom Nutzer gewünscht – primär EAS verwendet, nicht still EWS.
+    if useEas(account) {
+      let easStr = easUrlForSession()
+      if !easStr.isEmpty, let easURL = URL(string: easStr) {
+        do {
+          _ = try await EasClient.shared.verify(
+            accountId: account, easUrl: easURL, user: sessionUsername() ?? account)
+          return try Self.json(["verified": true, "protocol": "eas"])
+        } catch let e as EasClient.EasError {
+          // Falsches Passwort o. Ä. → immer klar abbrechen (EWS-Fallback hilft hier nicht).
+          if case .auth(let m) = e {
+            throw NexusError.transport("EAS-Anmeldung abgelehnt: \(m)")
+          }
+          // EAS nicht nutzbar → nur weiter auf EWS, wenn der Nutzer den Fallback erlaubt hat;
+          // sonst kommt hier ein klarer Fehler (kein stiller EWS-Wechsel).
+          try guardEwsFallback(e)
+        }
+      } else if !allowEwsFallback {
+        throw NexusError.transport(
+          "EAS (ActiveSync) nicht verfügbar: keine EAS-URL ermittelt — Server/Pfad prüfen "
+            + "oder EWS-Fallback in der Anmeldung aktivieren.")
+      }
+    }
     _ = try await post(EwsSoap.findFolders())
-    return try Self.json(["verified": true])
+    return try Self.json(["verified": true, "protocol": "ews"])
   }
 
   /// Setzt das Passwort der laufenden Sitzung neu und prüft es mit einem authentifizierten
@@ -1037,6 +1111,9 @@ final class NexusTransport: NSObject, URLSessionDelegate {
     let effectiveUser =
       (domain != nil && !user.contains("\\") && !user.contains("@")) ? "\(domain!)\\\(user)" : user
     preferEwsSession = (meta["preferEws"] as? Bool) ?? false
+    allowEwsFallback = (meta["easFallbackToEws"] as? Bool) ?? false
+    // Benutzerdefinierte EAS-URL (Pfad/Port-Override) wiederherstellen — sonst Standardpfad.
+    sessionEasUrl = (meta["easUrl"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     ewsUrl = url
     setCredentials(
       username: effectiveUser, password: secret,

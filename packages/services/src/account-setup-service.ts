@@ -80,6 +80,8 @@ export class AccountSetupService {
           manual: credentials.manual !== undefined,
           // Protokollwahl: true ⇒ bewusst EWS (Kompatibilitätsmodus); sonst EAS bevorzugt.
           preferEws: credentials.preferEws === true,
+          // EAS-Hardfailure → EWS-Fallback nur, wenn in der Anmeldung erlaubt (Standard aus ⇒ nur EAS).
+          easFallbackToEws: credentials.easFallbackToEws === true,
         }),
       );
       // Aktives Konto markieren (für nativen Hintergrund-Sync ohne JS-Kontext).

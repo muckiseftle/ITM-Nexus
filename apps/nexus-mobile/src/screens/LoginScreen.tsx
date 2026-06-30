@@ -12,11 +12,11 @@ import { isValidEmail, toAccountId, type AccountId } from '@nexus/domain';
 import {
   classifyError,
   domainFromEmail,
-  normalizeEwsUrl,
   parseLogin,
   type AutodiscoverResult,
   type Credentials,
   type ErrorInfo,
+  type LoginForm,
 } from '@nexus/core-transport';
 import { radius, space, typography } from '@nexus/ui-kit';
 import type { AppContainer } from '../composition/container';
@@ -32,26 +32,58 @@ interface Props {
 }
 
 /**
- * Geführter 6-Schritt-Einrichtungs-Wizard (Live-Modus):
+ * Geführter Einrichtungs-Wizard (Live-Modus) — ActiveSync (EAS) zuerst:
  *
- * 1. **E-Mail** – Adresse.
- * 2. **Anmeldung** – Passwort/Benutzer; „Verbindung prüfen" ermittelt den Server (Autodiscover)
- *    UND prüft die Zugangsdaten echt-authentifiziert (Test Connection).
- * 3. **Zertifikat** – nur bei TLS-Problem: Server-Fingerprint anzeigen und nach Bestätigung
+ * 1. **E-Mail** – Adresse eingeben.
+ * 2. **Server** – Serverkonfiguration (Host, EAS-Pfad, Port, SSL, Zertifikat, TLS, EAS-Version)
+ *    wird aus der Domäne vorermittelt und kann angepasst werden; danach das Anmelde-/
+ *    Benutzernamen-Format wählen (der Benutzername wird automatisch vorbelegt).
+ * 3. **Anmeldung** – Benutzername (vorbelegt) + Passwort. Der Nutzer bestätigt ausdrücklich,
+ *    dass die Organisation das Gerät über EAS aus der Ferne zurücksetzen kann; danach läuft die
+ *    echte Anmeldung (Autodiscover/Server + Authentifizierung).
+ * 4. **Zertifikat** – nur bei TLS-Problem: Server-Fingerprint anzeigen und nach Bestätigung
  *    pinnen (Trust-on-First-Use; keine TLS-Abschwächung).
- * 4. **Server** – ermittelten Server prüfen/anpassen (manuell, falls Autodiscover scheitert).
- * 5. **Berechtigungen** – Mail (immer) / Kalender / Kontakte.
- * 6. **Fertig** – Zusammenfassung; Konto wird serverseitig bestätigt gespeichert (Secret nur
- *    im Keychain) und geöffnet.
+ * 5. **Berechtigungen** – Kalender / Kontakte; danach wird das Konto serverseitig bestätigt
+ *    gespeichert (Secret nur im Keychain) und geöffnet.
  */
-type Step = 'email' | 'credentials' | 'cert' | 'server' | 'permissions' | 'done';
+type Step = 'email' | 'config' | 'credentials' | 'cert' | 'permissions';
 
-const STEP_ORDER: readonly Step[] = ['email', 'credentials', 'server', 'permissions', 'done'];
+const STEP_ORDER: readonly Step[] = ['email', 'config', 'credentials', 'permissions'];
+
+const DEFAULT_EAS_PATH = '/Microsoft-Server-ActiveSync';
+const DEFAULT_PORT = '443';
 
 interface CertInfo {
   readonly host: string;
   readonly spkiSha256: string;
   readonly subject: string;
+}
+
+/** Lokaler Teil (vor dem @) einer E-Mail-Adresse. */
+function localPart(email: string): string {
+  const at = email.indexOf('@');
+  return at > 0 ? email.slice(0, at) : email;
+}
+
+/** Vermutete NetBIOS-Domäne (erstes Label der DNS-Domäne, groß) — für `DOMÄNE\Benutzer`. */
+function netbiosGuess(domain: string | undefined): string {
+  if (domain === undefined) return '';
+  const label = domain.split('.')[0] ?? domain;
+  return label.toUpperCase();
+}
+
+/** Benutzernamen je gewähltem Format aus der E-Mail ableiten (Vorbelegung, editierbar). */
+function deriveUsername(format: LoginForm, email: string): string {
+  const e = email.trim();
+  if (e.length === 0) return '';
+  const domain = domainFromEmail(e);
+  const user = localPart(e);
+  if (format === 'upn') return domain !== undefined ? `${user}@${domain}` : user;
+  if (format === 'downlevel') {
+    const nb = netbiosGuess(domain);
+    return nb.length > 0 ? `${nb}\\${user}` : user;
+  }
+  return user;
 }
 
 export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.JSX.Element {
@@ -62,15 +94,24 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [serverUrl, setServerUrl] = useState('');
+
+  // Serverkonfiguration (aus der Domäne vorermittelt, anpassbar).
+  const [autodiscover, setAutodiscover] = useState(true);
+  const [serverHost, setServerHost] = useState('');
+  const [easPath, setEasPath] = useState(DEFAULT_EAS_PATH);
+  const [port, setPort] = useState(DEFAULT_PORT);
+  const [allowSelfSigned, setAllowSelfSigned] = useState(true);
+  const [loginFormat, setLoginFormat] = useState<LoginForm>('upn');
+  // EAS-Hardfailure → EWS nur, wenn ausdrücklich erlaubt. Standard AUS ⇒ ausschließlich EAS.
+  const [easFallbackToEws, setEasFallbackToEws] = useState(false);
+  // Pflicht-Einwilligung: Organisation darf das Gerät über EAS aus der Ferne zurücksetzen.
+  const [wipeConsent, setWipeConsent] = useState(false);
+
+  const [syncCalendar, setSyncCalendar] = useState(true);
+  const [syncContacts, setSyncContacts] = useState(true);
   const [resolvedServer, setResolvedServer] = useState<string | null>(null);
   const [discovered, setDiscovered] = useState<AutodiscoverResult | null>(null);
   const [cert, setCert] = useState<CertInfo | null>(null);
-  const [syncCalendar, setSyncCalendar] = useState(true);
-  const [syncContacts, setSyncContacts] = useState(true);
-  // Protokollwahl: Standard EAS (false). „EWS bevorzugen" nur, wenn der Server EAS nicht
-  // unterstützt/zulässt — dann wird bewusst EWS verwendet.
-  const [preferEws, setPreferEws] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [showTechnical, setShowTechnical] = useState(false);
@@ -84,47 +125,73 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
     setResolvedServer(null);
   };
 
-  /** Host für die Zertifikatsprüfung: manueller Server, sonst `mail.<domain>`. */
-  const hostForCert = (): string | undefined => {
-    const manual = serverUrl.trim();
-    if (manual.length > 0) {
-      // Host aus „https://host/pfad" bzw. „user@host" extrahieren (kein URL() in Hermes).
-      const noScheme = manual.replace(/^[a-z]+:\/\//i, '');
-      const hostPart = noScheme.split('/')[0] ?? noScheme;
-      const host = hostPart.split('@').pop() ?? hostPart;
-      return host.length > 0 ? host : undefined;
-    }
+  /** Server-Host: manuell gesetzt, sonst `mail.<domain>` aus der E-Mail. */
+  const effectiveHost = (): string | undefined => {
+    const manual = serverHost.trim();
+    if (manual.length > 0) return manual;
     const domain = domainFromEmail(email.trim());
     return domain !== undefined ? `mail.${domain}` : undefined;
   };
 
-  const buildCredentials = (withManualServer: boolean): Credentials | null => {
+  /** Port-Suffix für URLs (leer bei Standard-Port 443). */
+  const portSuffix = (): string => {
+    const p = port.trim();
+    return p === '' || p === DEFAULT_PORT ? '' : `:${p}`;
+  };
+
+  /** Manuelle Server-URLs (EWS + EAS) aus den Feldern bauen; `null` bei ungültiger Eingabe. */
+  const buildManual = (): { ewsUrl: string; easUrl: string } | null => {
+    const host = effectiveHost();
+    if (host === undefined || !host.includes('.')) {
+      fail(
+        'Server-Adresse ungültig',
+        'Bitte einen gültigen Server-Host angeben (z. B. mail.firma.de).',
+        serverHost,
+      );
+      return null;
+    }
+    const p = port.trim();
+    if (p !== '' && !/^\d+$/.test(p)) {
+      fail('Port ungültig', 'Der Port muss eine Zahl sein (Standard 443).', port);
+      return null;
+    }
+    const suffix = portSuffix();
+    let path = easPath.trim();
+    if (path.length === 0) path = DEFAULT_EAS_PATH;
+    if (!path.startsWith('/')) path = `/${path}`;
+    return {
+      ewsUrl: `https://${host}${suffix}/EWS/Exchange.asmx`,
+      easUrl: `https://${host}${suffix}${path}`,
+    };
+  };
+
+  const buildCredentials = (): Credentials | null => {
     if (password.length === 0) {
       fail('Passwort fehlt', 'Bitte dein Passwort eingeben.', 'leeres Passwort');
       return null;
     }
-    const loginName = username.trim().length > 0 ? username.trim() : email.trim();
+    const typed = username.trim();
+    const loginName = typed.length > 0 ? typed : deriveUsername(loginFormat, email);
+    if (loginName.length === 0) {
+      fail('Benutzername fehlt', 'Bitte einen Benutzernamen eingeben.', 'leerer Benutzername');
+      return null;
+    }
     const login = parseLogin(loginName);
     const scheme = login.form === 'downlevel' ? 'ntlm' : 'basic';
-    let manualEws: string | undefined;
-    if (withManualServer) {
-      manualEws = normalizeEwsUrl(serverUrl);
-      if (manualEws === undefined) {
-        fail(
-          'Server-Adresse ungültig',
-          'Bitte eine gültige EWS-/Server-URL eingeben (z. B. mail.firma.de).',
-          serverUrl,
-        );
-        return null;
-      }
+    // Manueller Server, sobald Autodiscover deaktiviert ist (oder der Nutzer Felder anpasst).
+    let manual: { ewsUrl: string; easUrl: string } | undefined;
+    if (!autodiscover) {
+      const built = buildManual();
+      if (built === null) return null;
+      manual = built;
     }
     return {
       username: loginName,
       secret: password,
       scheme,
       ...(login.form === 'downlevel' && login.domain !== undefined ? { domain: login.domain } : {}),
-      ...(manualEws !== undefined ? { manual: { ewsUrl: manualEws } } : {}),
-      ...(preferEws ? { preferEws: true } : {}),
+      ...(manual !== undefined ? { manual } : {}),
+      ...(easFallbackToEws ? { easFallbackToEws: true } : {}),
     };
   };
 
@@ -136,13 +203,40 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
       return;
     }
     setError(null);
+    // Server-Host und Benutzernamen aus der Domäne vorermitteln (anpassbar).
+    const domain = domainFromEmail(trimmed);
+    if (serverHost.trim().length === 0 && domain !== undefined) setServerHost(`mail.${domain}`);
+    if (username.trim().length === 0) setUsername(deriveUsername(loginFormat, trimmed));
+    setStep('config');
+  };
+
+  const continueFromConfig = (): void => {
+    if (busy) return;
+    setError(null);
+    // Benutzernamen-Vorbelegung an das gewählte Format angleichen, falls noch nicht editiert.
+    if (username.trim().length === 0) setUsername(deriveUsername(loginFormat, email));
     setStep('credentials');
   };
 
-  /** Test Connection: Autodiscover + echte Anmeldeprüfung. Steuert die Folgeschritte. */
-  const testConnection = async (withManualServer: boolean): Promise<void> => {
+  const changeFormat = (format: LoginForm): void => {
+    setLoginFormat(format);
+    // Benutzernamen neu vorbelegen (Nutzer kann danach frei überschreiben).
+    setUsername(deriveUsername(format, email));
+    resetDiscovery();
+  };
+
+  /** Echte Anmeldung: Autodiscover/Server ermitteln + authentifizieren. Steuert die Folgeschritte. */
+  const runLogin = async (): Promise<void> => {
     if (busy) return;
-    const credentials = buildCredentials(withManualServer);
+    if (!wipeConsent) {
+      fail(
+        'Bestätigung erforderlich',
+        'Bitte bestätige, dass deine Organisation das Gerät über ActiveSync zurücksetzen darf.',
+        'wipeConsent=false',
+      );
+      return;
+    }
+    const credentials = buildCredentials();
     if (credentials === null) return;
     setBusy(true);
     setError(null);
@@ -151,32 +245,14 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
       const result = await container.setup.discover(email.trim(), credentials);
       await container.transport.verifyCredentials(email.trim());
       setDiscovered(result);
-      const resolved = result.ewsUrl ?? credentials.manual?.ewsUrl ?? null;
-      setResolvedServer(resolved);
-      // Den ermittelten Host ins editierbare Feld übernehmen — so SIEHT der Nutzer den
-      // tatsächlich verwendeten Server und kann ihn bei Bedarf korrigieren (z. B. auf
-      // mail.firma.de, falls Autodiscover den nackten Domain-Host geliefert hat). Der Host
-      // gilt dann für EWS UND EAS gleichermaßen.
-      if (resolved !== null && serverUrl.trim().length === 0) {
-        const host = resolved.replace(/^[a-z]+:\/\//i, '').split('/')[0];
-        if (host !== undefined && host.length > 0) setServerUrl(host);
-      }
-      setStep('server');
+      setResolvedServer(result.ewsUrl ?? credentials.manual?.ewsUrl ?? null);
+      setStep('permissions');
     } catch (e: unknown) {
       const info = classifyError(e);
       setError(info);
-      // TLS-Problem (z. B. firmeninternes Zertifikat) → Zertifikat bestätigen (TOFU).
-      if (info.kind === 'tls' && container.probeCertificate !== undefined) {
+      // TLS-Problem (firmeninternes Zertifikat) → nur anbieten, wenn der Nutzer es zulässt.
+      if (info.kind === 'tls' && allowSelfSigned && container.probeCertificate !== undefined) {
         setStep('cert');
-        return;
-      }
-      // Autodiscover scheitert → manuelle Servereingabe, sinnvollen Host vorbefüllen.
-      if (info.kind === 'autodiscover') {
-        if (serverUrl.trim().length === 0) {
-          const domain = domainFromEmail(email.trim());
-          if (domain !== undefined) setServerUrl(`mail.${domain}`);
-        }
-        setStep('server');
       }
     } finally {
       setBusy(false);
@@ -186,7 +262,7 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
   /** Liest das Server-Zertifikat (Fingerprint), ohne zu vertrauen. */
   const readCertificate = async (): Promise<void> => {
     if (busy || container.probeCertificate === undefined) return;
-    const host = hostForCert();
+    const host = effectiveHost();
     if (host === undefined) {
       fail('Server unbekannt', 'Bitte erst die Serveradresse angeben.', 'kein Host');
       return;
@@ -202,7 +278,7 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
     }
   };
 
-  /** Zertifikat pinnen (TOFU) und Verbindung erneut prüfen. */
+  /** Zertifikat pinnen (TOFU) und Anmeldung erneut versuchen. */
   const trustAndContinue = async (): Promise<void> => {
     if (busy || cert === null || container.trustCertificate === undefined) return;
     setBusy(true);
@@ -216,20 +292,20 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
     }
     setBusy(false);
     setCert(null);
-    await testConnection(serverUrl.trim().length > 0);
+    setStep('credentials');
+    await runLogin();
   };
 
-  /** Schritt „Fertig": Konto serverseitig bestätigt speichern + öffnen. */
+  /** Schritt „Berechtigungen": Konto serverseitig bestätigt speichern + öffnen. */
   const finish = async (): Promise<void> => {
     if (busy || discovered === null) return;
-    const credentials = buildCredentials(serverUrl.trim().length > 0);
+    const credentials = buildCredentials();
     if (credentials === null) return;
     const trimmedEmail = email.trim();
     setBusy(true);
     setError(null);
     try {
       await container.setup.completeSetup(trimmedEmail, credentials, discovered);
-      // Berechtigungen merken (Mail immer aktiv; Kalender/Kontakte optional).
       await container.secureStore
         .set(
           `nexus:perms:${trimmedEmail.toLowerCase()}`,
@@ -295,14 +371,144 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
           <Pressable style={s.button} onPress={continueFromEmail}>
             <Text style={s.buttonText}>Weiter</Text>
           </Pressable>
-          <Text style={s.hint}>Wir ermitteln deinen Server automatisch (Autodiscover).</Text>
+          <Text style={s.hint}>
+            Wir ermitteln Server und ActiveSync-Pfad automatisch — du kannst sie im nächsten Schritt
+            prüfen.
+          </Text>
+        </>
+      ) : null}
+
+      {step === 'config' ? (
+        <>
+          <AccountRow email={email} onChange={() => setStep('email')} label="Ändern" s={s} />
+          <Text style={s.subtitle}>Serverkonfiguration</Text>
+
+          <ToggleRow
+            label="Automatisch ermitteln (Autodiscover)"
+            value={autodiscover}
+            enabled
+            onChange={(v) => {
+              setAutodiscover(v);
+              resetDiscovery();
+            }}
+            s={s}
+            t={t}
+          />
+
+          <FieldLabel text="Server (Host)" s={s} />
+          <TextInput
+            style={s.input}
+            placeholder="mail.firma.de"
+            placeholderTextColor={t.c.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={serverHost}
+            onChangeText={(v) => {
+              setServerHost(v);
+              setAutodiscover(false);
+              resetDiscovery();
+            }}
+          />
+
+          <FieldLabel text="ActiveSync-Pfad (EAS)" s={s} />
+          <TextInput
+            style={s.input}
+            placeholder={DEFAULT_EAS_PATH}
+            placeholderTextColor={t.c.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={easPath}
+            onChangeText={(v) => {
+              setEasPath(v);
+              setAutodiscover(false);
+              resetDiscovery();
+            }}
+          />
+
+          <FieldLabel text="Port" s={s} />
+          <TextInput
+            style={s.input}
+            placeholder={DEFAULT_PORT}
+            placeholderTextColor={t.c.textSecondary}
+            keyboardType="number-pad"
+            value={port}
+            onChangeText={(v) => {
+              setPort(v);
+              setAutodiscover(false);
+              resetDiscovery();
+            }}
+          />
+
+          <ToggleRow
+            label="SSL/TLS verwenden"
+            value
+            enabled={false}
+            onChange={() => undefined}
+            s={s}
+            t={t}
+          />
+          <ReadonlyRow k="Minimum TLS-Version" v="TLS 1.2" s={s} />
+          <ReadonlyRow k="EAS-Protokollversion" v="Automatisch (ausgehandelt)" s={s} />
+          <ToggleRow
+            label="Selbstsigniertes/Firmenzertifikat zulassen"
+            value={allowSelfSigned}
+            enabled
+            onChange={setAllowSelfSigned}
+            s={s}
+            t={t}
+          />
+          <ToggleRow
+            label="Fallback auf EWS erlauben"
+            value={easFallbackToEws}
+            enabled
+            onChange={setEasFallbackToEws}
+            s={s}
+            t={t}
+          />
+          <Text style={s.hint}>
+            Standard: aus — es wird ausschließlich ActiveSync (EAS) verwendet. Nur aktivieren, wenn
+            dein Server EAS nicht unterstützt.
+          </Text>
+
+          <FieldLabel text="Anmelde-/Benutzernamen-Format" s={s} />
+          <Segmented
+            options={[
+              { key: 'downlevel', label: 'DOMÄNE\\Benutzer' },
+              { key: 'upn', label: 'name@firma' },
+              { key: 'bare', label: 'Benutzer' },
+            ]}
+            value={loginFormat}
+            onChange={(k) => changeFormat(k as LoginForm)}
+            s={s}
+            t={t}
+          />
+          <View style={s.previewBox}>
+            <Text style={s.previewLabel}>Benutzername</Text>
+            <Text style={s.previewValue}>{deriveUsername(loginFormat, email) || '—'}</Text>
+          </View>
+
+          {errorBox}
+          <PrimaryButton label="Weiter" busy={busy} onPress={continueFromConfig} s={s} t={t} />
         </>
       ) : null}
 
       {step === 'credentials' ? (
         <>
-          <AccountRow email={email} onChange={() => setStep('email')} label="Ändern" s={s} />
-          <Text style={s.subtitle}>Zugangsdaten & Verbindung prüfen</Text>
+          <AccountRow email={email} onChange={() => setStep('config')} label="Zurück" s={s} />
+          <Text style={s.subtitle}>Anmeldung</Text>
+          <TextInput
+            style={s.input}
+            placeholder="Benutzername"
+            placeholderTextColor={t.c.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={username}
+            onChangeText={(v) => {
+              setUsername(v);
+              resetDiscovery();
+            }}
+          />
           <TextInput
             style={s.input}
             placeholder="Passwort"
@@ -315,29 +521,26 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
               resetDiscovery();
             }}
           />
-          <TextInput
-            style={s.input}
-            placeholder="Benutzername (optional, z. B. DOMÄNE\Benutzer)"
-            placeholderTextColor={t.c.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={username}
-            onChangeText={(v) => {
-              setUsername(v);
-              resetDiscovery();
-            }}
-          />
+
+          <View style={s.consentBox}>
+            <View style={s.consentHeader}>
+              <Icon name="shield" size={18} color={t.c.warning} />
+              <Text style={s.consentTitle}>ActiveSync (EAS) — Hinweis</Text>
+            </View>
+            <Text style={s.consentText}>
+              Bei der Anmeldung über ActiveSync kann deine Organisation dieses Gerät verwalten und
+              aus der Ferne zurücksetzen bzw. löschen (Remote-Wipe).
+            </Text>
+            <Pressable style={s.checkRow} onPress={() => setWipeConsent((v) => !v)} hitSlop={6}>
+              <View style={[s.checkBox, wipeConsent ? s.checkBoxOn : null]}>
+                {wipeConsent ? <Icon name="check" size={14} color={t.onBrand} /> : null}
+              </View>
+              <Text style={s.checkLabel}>Das ist mir bewusst und ich stimme zu.</Text>
+            </Pressable>
+          </View>
+
           {errorBox}
-          <PrimaryButton
-            label="Verbindung prüfen"
-            busy={busy}
-            onPress={() => void testConnection(false)}
-            s={s}
-            t={t}
-          />
-          <Pressable onPress={() => setStep('server')} hitSlop={6}>
-            <Text style={s.secondaryLink}>Server manuell eingeben</Text>
-          </Pressable>
+          <PrimaryButton label="Anmelden" busy={busy} onPress={() => void runLogin()} s={s} t={t} />
         </>
       ) : null}
 
@@ -386,60 +589,15 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
         </>
       ) : null}
 
-      {step === 'server' ? (
-        <>
-          <AccountRow email={email} onChange={() => setStep('credentials')} label="Zurück" s={s} />
-          <Text style={s.subtitle}>Server prüfen</Text>
-          {resolvedServer !== null ? (
-            <View style={s.serverInfoBox}>
-              <Text style={s.serverInfoLabel}>Ermittelter Server</Text>
-              <Text style={s.serverInfoUrl} numberOfLines={2}>
-                {resolvedServer}
-              </Text>
-            </View>
-          ) : (
-            <Text style={s.advancedHint}>
-              Autodiscover hat keinen Server gefunden. Bitte die Adresse manuell angeben.
-            </Text>
-          )}
-          <TextInput
-            style={s.input}
-            placeholder="EWS-/Server-Adresse (z. B. mail.firma.de)"
-            placeholderTextColor={t.c.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            value={serverUrl}
-            onChangeText={(v) => {
-              setServerUrl(v);
-              resetDiscovery();
-            }}
-          />
-          {errorBox}
-          {discovered !== null ? (
-            <PrimaryButton
-              label="Weiter"
-              busy={busy}
-              onPress={() => setStep('permissions')}
-              s={s}
-              t={t}
-            />
-          ) : (
-            <PrimaryButton
-              label="Verbindung prüfen"
-              busy={busy}
-              onPress={() => void testConnection(true)}
-              s={s}
-              t={t}
-            />
-          )}
-        </>
-      ) : null}
-
       {step === 'permissions' ? (
         <>
-          <AccountRow email={email} onChange={() => setStep('server')} label="Zurück" s={s} />
           <Text style={s.subtitle}>Was soll synchronisiert werden?</Text>
+          <View style={s.serverInfoBox}>
+            <Text style={s.serverInfoLabel}>Angemeldet · Server</Text>
+            <Text style={s.serverInfoUrl} numberOfLines={2}>
+              {resolvedServer ?? effectiveHost() ?? email.trim()}
+            </Text>
+          </View>
           <ToggleRow label="E-Mail" value enabled={false} onChange={() => undefined} s={s} t={t} />
           <ToggleRow
             label="Kalender"
@@ -457,37 +615,6 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
             s={s}
             t={t}
           />
-          <ToggleRow
-            label="EWS bevorzugen (Kompatibilitätsmodus)"
-            value={preferEws}
-            enabled
-            onChange={setPreferEws}
-            s={s}
-            t={t}
-          />
-          <Text style={s.hint}>
-            Standard ist ActiveSync (EAS). Nur aktivieren, wenn dein Server EAS nicht unterstützt.
-          </Text>
-          {errorBox}
-          <PrimaryButton label="Weiter" busy={busy} onPress={() => setStep('done')} s={s} t={t} />
-        </>
-      ) : null}
-
-      {step === 'done' ? (
-        <>
-          <AccountRow email={email} onChange={() => setStep('permissions')} label="Zurück" s={s} />
-          <Text style={s.subtitle}>Bereit zur Einrichtung</Text>
-          <View style={s.summaryBox}>
-            <SummaryRow k="Konto" v={email.trim()} s={s} />
-            <SummaryRow k="Server" v={resolvedServer ?? serverUrl.trim()} s={s} />
-            <SummaryRow
-              k="Synchronisieren"
-              v={['E-Mail', syncCalendar ? 'Kalender' : null, syncContacts ? 'Kontakte' : null]
-                .filter((x): x is string => x !== null)
-                .join(' · ')}
-              s={s}
-            />
-          </View>
           {errorBox}
           <PrimaryButton
             label="Konto einrichten"
@@ -514,6 +641,52 @@ function StepDots({ step, s, t }: { step: Step; s: Styles; t: AppTheme }): React
           style={[s.dot, { backgroundColor: i <= idx ? t.c.brandPrimary : t.border }]}
         />
       ))}
+    </View>
+  );
+}
+
+function FieldLabel({ text, s }: { text: string; s: Styles }): React.JSX.Element {
+  return <Text style={s.fieldLabel}>{text}</Text>;
+}
+
+function ReadonlyRow({ k, v, s }: { k: string; v: string; s: Styles }): React.JSX.Element {
+  return (
+    <View style={s.readonlyRow}>
+      <Text style={s.readonlyKey}>{k}</Text>
+      <Text style={s.readonlyVal}>{v}</Text>
+    </View>
+  );
+}
+
+function Segmented({
+  options,
+  value,
+  onChange,
+  s,
+  t,
+}: {
+  options: ReadonlyArray<{ key: string; label: string }>;
+  value: string;
+  onChange: (key: string) => void;
+  s: Styles;
+  t: AppTheme;
+}): React.JSX.Element {
+  return (
+    <View style={s.segmented}>
+      {options.map((opt) => {
+        const active = opt.key === value;
+        return (
+          <Pressable
+            key={opt.key}
+            style={[s.segment, active ? s.segmentActive : null]}
+            onPress={() => onChange(opt.key)}
+          >
+            <Text style={[s.segmentText, active ? { color: t.onBrand } : null]} numberOfLines={1}>
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -589,17 +762,6 @@ function ToggleRow({
   );
 }
 
-function SummaryRow({ k, v, s }: { k: string; v: string; s: Styles }): React.JSX.Element {
-  return (
-    <View style={s.summaryRow}>
-      <Text style={s.summaryKey}>{k}</Text>
-      <Text style={s.summaryVal} numberOfLines={2}>
-        {v}
-      </Text>
-    </View>
-  );
-}
-
 type Styles = ReturnType<typeof makeStyles>;
 
 function makeStyles(t: AppTheme) {
@@ -657,6 +819,33 @@ function makeStyles(t: AppTheme) {
     },
     certValue: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
     changeLink: { color: t.c.brandPrimary, fontSize: typography.caption.size, fontWeight: '600' },
+    checkBox: {
+      alignItems: 'center',
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.sm,
+      height: 22,
+      justifyContent: 'center',
+      marginRight: space.sm,
+      width: 22,
+    },
+    checkBoxOn: { backgroundColor: t.c.brandPrimary },
+    checkLabel: { color: t.c.textPrimary, flex: 1, fontSize: typography.caption.size },
+    checkRow: { alignItems: 'center', flexDirection: 'row', marginTop: space.sm },
+    consentBox: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.md,
+      marginBottom: space.sm,
+      marginTop: space.xs,
+      padding: space.md,
+    },
+    consentHeader: { alignItems: 'center', flexDirection: 'row', marginBottom: space.xs },
+    consentText: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    consentTitle: {
+      color: t.c.textPrimary,
+      fontSize: typography.body.size,
+      fontWeight: '600',
+      marginLeft: space.xs,
+    },
     container: {
       backgroundColor: t.c.bgCanvas,
       flex: 1,
@@ -687,6 +876,12 @@ function makeStyles(t: AppTheme) {
       fontSize: typography.caption.size,
       marginTop: space.xs,
     },
+    fieldLabel: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginBottom: space.xxs,
+      marginTop: space.xs,
+    },
     hint: {
       color: t.c.textSecondary,
       fontSize: typography.caption.size,
@@ -701,11 +896,44 @@ function makeStyles(t: AppTheme) {
       marginBottom: space.sm,
       padding: space.md,
     },
+    previewBox: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.md,
+      marginBottom: space.sm,
+      marginTop: space.xs,
+      padding: space.md,
+    },
+    previewLabel: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    previewValue: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: space.xxs },
+    readonlyKey: { color: t.c.textSecondary, fontSize: typography.body.size },
+    readonlyRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: space.sm,
+    },
+    readonlyVal: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
     secondaryLink: {
       color: t.c.brandPrimary,
       fontSize: typography.caption.size,
       marginTop: space.md,
       textAlign: 'center',
+    },
+    segment: {
+      alignItems: 'center',
+      borderRadius: radius.sm,
+      flex: 1,
+      paddingHorizontal: space.xs,
+      paddingVertical: space.sm,
+    },
+    segmentActive: { backgroundColor: t.c.brandPrimary },
+    segmentText: { color: t.c.textPrimary, fontSize: typography.caption.size, fontWeight: '600' },
+    segmented: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.md,
+      flexDirection: 'row',
+      marginBottom: space.xs,
+      padding: space.xxs,
     },
     serverInfoBox: {
       backgroundColor: t.c.success + '14',
@@ -721,22 +949,18 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
       marginBottom: space.lg,
     },
-    summaryBox: {
-      backgroundColor: t.c.bgElevated,
-      borderRadius: radius.md,
-      marginBottom: space.sm,
-      padding: space.md,
-    },
-    summaryKey: { color: t.c.textSecondary, fontSize: typography.caption.size, width: 120 },
-    summaryRow: { flexDirection: 'row', marginBottom: space.xs },
-    summaryVal: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size },
     title: {
       color: t.c.brandPrimary,
       fontSize: typography.largeTitle.size,
       fontWeight: '700',
       marginBottom: space.sm,
     },
-    toggleLabel: { color: t.c.textPrimary, fontSize: typography.body.size },
+    toggleLabel: {
+      color: t.c.textPrimary,
+      flex: 1,
+      fontSize: typography.body.size,
+      paddingRight: space.sm,
+    },
     toggleRow: {
       alignItems: 'center',
       flexDirection: 'row',

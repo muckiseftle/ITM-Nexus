@@ -21,9 +21,14 @@ export interface Credentials {
   readonly manual?: ManualServerConfig;
   /**
    * Wenn `true`: bewusst EWS statt EAS verwenden (Kompatibilitätsmodus). Standard `false`/
-   * undefiniert ⇒ EAS bevorzugt (mit automatischem EWS-Fallback bei Hardfailure).
+   * undefiniert ⇒ EAS bevorzugt.
    */
   readonly preferEws?: boolean;
+  /**
+   * Wenn `true`: bei einem EAS-Hardfailure automatisch auf EWS zurückfallen. Standard `false`/
+   * undefiniert ⇒ **nur EAS** — scheitert EAS, kommt ein klarer Fehler (kein stiller EWS-Wechsel).
+   */
+  readonly easFallbackToEws?: boolean;
 }
 
 /** Vom Server/Autodiscover gemeldete Fähigkeiten — steuert die Protokollwahl im Hybrid. */
