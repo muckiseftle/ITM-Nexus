@@ -38,12 +38,13 @@ interface Props {
  * Geführter Einrichtungs-Wizard (Live-Modus) — ActiveSync (EAS) zuerst:
  *
  * 1. **E-Mail** – Adresse eingeben.
- * 2. **Server** – Serverkonfiguration (Host, EAS-Pfad, Port, SSL, Zertifikat, TLS, EAS-Version)
- *    wird aus der Domäne vorermittelt und kann angepasst werden; danach das Anmelde-/
- *    Benutzernamen-Format wählen (der Benutzername wird automatisch vorbelegt).
- * 3. **Anmeldung** – Benutzername (vorbelegt) + Passwort. Der Nutzer bestätigt ausdrücklich,
- *    dass die Organisation das Gerät über EAS aus der Ferne zurücksetzen kann; danach läuft die
- *    echte Anmeldung (Autodiscover/Server + Authentifizierung).
+ * 2. **Server** – Serverkonfiguration in Kategorien: *Server* (Host, Autodiscover), *Anmeldung*
+ *    (Benutzernamen-Format + editierbarer Benutzer/Domäne, aus der E-Mail vorbelegt) und
+ *    einklappbare *Experten-Einstellungen* (EAS-Pfad, Port, SSL/TLS, Firmenzertifikat,
+ *    EWS-Fallback). Alles aus der Domäne vorermittelt und anpassbar.
+ * 3. **Anmeldung** – Passwort eingeben (Anmeldename read-only zur Kontrolle). Der Nutzer
+ *    bestätigt ausdrücklich, dass die Organisation das Gerät über EAS aus der Ferne zurücksetzen
+ *    kann; danach läuft die echte Anmeldung (Autodiscover/Server + Authentifizierung).
  * 4. **Zertifikat** – nur bei TLS-Problem: Server-Fingerprint anzeigen und nach Bestätigung
  *    pinnen (Trust-on-First-Use; keine TLS-Abschwächung).
  * 5. **Berechtigungen** – Kalender / Kontakte; danach wird das Konto serverseitig bestätigt
@@ -75,18 +76,21 @@ function netbiosGuess(domain: string | undefined): string {
   return label.toUpperCase();
 }
 
-/** Benutzernamen je gewähltem Format aus der E-Mail ableiten (Vorbelegung, editierbar). */
-function deriveUsername(format: LoginForm, email: string): string {
+/** Vorbelegung für das Benutzerfeld je Format: bei UPN die volle Adresse, sonst nur der Name. */
+function defaultUserField(format: LoginForm, email: string): string {
   const e = email.trim();
   if (e.length === 0) return '';
-  const domain = domainFromEmail(e);
   const user = localPart(e);
-  if (format === 'upn') return domain !== undefined ? `${user}@${domain}` : user;
-  if (format === 'downlevel') {
-    const nb = netbiosGuess(domain);
-    return nb.length > 0 ? `${nb}\\${user}` : user;
+  if (format === 'upn') {
+    const domain = domainFromEmail(e);
+    return domain !== undefined ? `${user}@${domain}` : user;
   }
   return user;
+}
+
+/** Vorbelegung für das Domänenfeld (NetBIOS) aus der E-Mail — nur für DOMÄNE\Benutzer. */
+function defaultDomainField(email: string): string {
+  return netbiosGuess(domainFromEmail(email.trim()));
 }
 
 export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.JSX.Element {
@@ -95,8 +99,13 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
 
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+
+  // Anmeldename: für DOMÄNE\Benutzer getrennt (das „\" wird automatisch ergänzt), sonst nur
+  // das Benutzerfeld. Beides aus der E-Mail vorbelegt und frei editierbar.
+  const [userField, setUserField] = useState('');
+  const [domainField, setDomainField] = useState('');
+  const [loginFormat, setLoginFormat] = useState<LoginForm>('upn');
 
   // Serverkonfiguration (aus der Domäne vorermittelt, anpassbar).
   const [autodiscover, setAutodiscover] = useState(true);
@@ -104,7 +113,8 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
   const [easPath, setEasPath] = useState(DEFAULT_EAS_PATH);
   const [port, setPort] = useState(DEFAULT_PORT);
   const [allowSelfSigned, setAllowSelfSigned] = useState(true);
-  const [loginFormat, setLoginFormat] = useState<LoginForm>('upn');
+  // Experten-Einstellungen (EAS-Pfad, Port, TLS, Zertifikat, EWS-Fallback) einklappbar.
+  const [showExpert, setShowExpert] = useState(false);
   // EAS-Hardfailure → EWS nur, wenn ausdrücklich erlaubt. Standard AUS ⇒ ausschließlich EAS.
   const [easFallbackToEws, setEasFallbackToEws] = useState(false);
   // Pflicht-Einwilligung: Organisation darf das Gerät über EAS aus der Ferne zurücksetzen.
@@ -168,13 +178,25 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
     };
   };
 
+  /**
+   * Effektiver Anmeldename aus den editierbaren Feldern. Bei DOMÄNE\Benutzer werden Domäne und
+   * Benutzer mit „\" verbunden (automatisch); sonst zählt nur das Benutzerfeld (UPN bzw. bar).
+   */
+  const effectiveLogin = (): string => {
+    const u = userField.trim();
+    if (loginFormat === 'downlevel') {
+      const d = domainField.trim();
+      return d.length > 0 && u.length > 0 ? `${d}\\${u}` : u;
+    }
+    return u;
+  };
+
   const buildCredentials = (): Credentials | null => {
     if (password.length === 0) {
       fail('Passwort fehlt', 'Bitte dein Passwort eingeben.', 'leeres Passwort');
       return null;
     }
-    const typed = username.trim();
-    const loginName = typed.length > 0 ? typed : deriveUsername(loginFormat, email);
+    const loginName = effectiveLogin();
     if (loginName.length === 0) {
       fail('Benutzername fehlt', 'Bitte einen Benutzernamen eingeben.', 'leerer Benutzername');
       return null;
@@ -206,25 +228,32 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
       return;
     }
     setError(null);
-    // Server-Host und Benutzernamen aus der Domäne vorermitteln (anpassbar).
+    // Server-Host, Benutzer- und Domänenfeld aus der E-Mail vorbelegen (alles anpassbar).
     const domain = domainFromEmail(trimmed);
     if (serverHost.trim().length === 0 && domain !== undefined) setServerHost(`mail.${domain}`);
-    if (username.trim().length === 0) setUsername(deriveUsername(loginFormat, trimmed));
+    if (userField.trim().length === 0) setUserField(defaultUserField(loginFormat, trimmed));
+    if (domainField.trim().length === 0) setDomainField(defaultDomainField(trimmed));
     setStep('config');
   };
 
   const continueFromConfig = (): void => {
     if (busy) return;
+    if (effectiveLogin().length === 0) {
+      fail('Benutzername fehlt', 'Bitte einen Benutzernamen eingeben.', 'leeres Benutzerfeld');
+      return;
+    }
     setError(null);
-    // Benutzernamen-Vorbelegung an das gewählte Format angleichen, falls noch nicht editiert.
-    if (username.trim().length === 0) setUsername(deriveUsername(loginFormat, email));
     setStep('credentials');
   };
 
   const changeFormat = (format: LoginForm): void => {
+    // Benutzerfeld passend zum Format neu vorbelegen, wenn es leer ist oder noch der
+    // Vorbelegung des alten Formats entspricht (eigene Eingaben bleiben erhalten).
+    const wasDefault =
+      userField.trim().length === 0 || userField.trim() === defaultUserField(loginFormat, email);
     setLoginFormat(format);
-    // Benutzernamen neu vorbelegen (Nutzer kann danach frei überschreiben).
-    setUsername(deriveUsername(format, email));
+    if (wasDefault) setUserField(defaultUserField(format, email));
+    if (domainField.trim().length === 0) setDomainField(defaultDomainField(email));
     resetDiscovery();
   };
 
@@ -393,6 +422,7 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
             <AccountRow email={email} onChange={() => setStep('email')} label="Ändern" s={s} />
             <Text style={s.subtitle}>Serverkonfiguration</Text>
 
+            <SectionTitle text="Server" s={s} />
             <ToggleRow
               label="Automatisch ermitteln (Autodiscover)"
               value={autodiscover}
@@ -404,7 +434,6 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
               s={s}
               t={t}
             />
-
             <FieldLabel text="Server (Host)" s={s} />
             <TextInput
               style={s.input}
@@ -421,66 +450,7 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
               }}
             />
 
-            <FieldLabel text="ActiveSync-Pfad (EAS)" s={s} />
-            <TextInput
-              style={s.input}
-              placeholder={DEFAULT_EAS_PATH}
-              placeholderTextColor={t.c.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={easPath}
-              onChangeText={(v) => {
-                setEasPath(v);
-                setAutodiscover(false);
-                resetDiscovery();
-              }}
-            />
-
-            <FieldLabel text="Port" s={s} />
-            <TextInput
-              style={s.input}
-              placeholder={DEFAULT_PORT}
-              placeholderTextColor={t.c.textSecondary}
-              keyboardType="number-pad"
-              value={port}
-              onChangeText={(v) => {
-                setPort(v);
-                setAutodiscover(false);
-                resetDiscovery();
-              }}
-            />
-
-            <ToggleRow
-              label="SSL/TLS verwenden"
-              value
-              enabled={false}
-              onChange={() => undefined}
-              s={s}
-              t={t}
-            />
-            <ReadonlyRow k="Minimum TLS-Version" v="TLS 1.2" s={s} />
-            <ReadonlyRow k="EAS-Protokollversion" v="Automatisch (ausgehandelt)" s={s} />
-            <ToggleRow
-              label="Selbstsigniertes/Firmenzertifikat zulassen"
-              value={allowSelfSigned}
-              enabled
-              onChange={setAllowSelfSigned}
-              s={s}
-              t={t}
-            />
-            <ToggleRow
-              label="Fallback auf EWS erlauben"
-              value={easFallbackToEws}
-              enabled
-              onChange={setEasFallbackToEws}
-              s={s}
-              t={t}
-            />
-            <Text style={s.hint}>
-              Standard: aus — es wird ausschließlich ActiveSync (EAS) verwendet. Nur aktivieren,
-              wenn dein Server EAS nicht unterstützt.
-            </Text>
-
+            <SectionTitle text="Anmeldung" s={s} />
             <FieldLabel text="Anmelde-/Benutzernamen-Format" s={s} />
             <Segmented
               options={[
@@ -493,10 +463,137 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
               s={s}
               t={t}
             />
+            {loginFormat === 'downlevel' ? (
+              <View style={s.twoCol}>
+                <View style={s.col}>
+                  <FieldLabel text="Domäne" s={s} />
+                  <TextInput
+                    style={s.input}
+                    placeholder="DOMÄNE"
+                    placeholderTextColor={t.c.textSecondary}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    value={domainField}
+                    onChangeText={(v) => {
+                      setDomainField(v);
+                      resetDiscovery();
+                    }}
+                  />
+                </View>
+                <View style={s.col}>
+                  <FieldLabel text="Benutzername" s={s} />
+                  <TextInput
+                    style={s.input}
+                    placeholder="benutzer"
+                    placeholderTextColor={t.c.textSecondary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={userField}
+                    onChangeText={(v) => {
+                      setUserField(v);
+                      resetDiscovery();
+                    }}
+                  />
+                </View>
+              </View>
+            ) : (
+              <>
+                <FieldLabel text="Benutzername" s={s} />
+                <TextInput
+                  style={s.input}
+                  placeholder={loginFormat === 'upn' ? 'name@firma.de' : 'benutzer'}
+                  placeholderTextColor={t.c.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType={loginFormat === 'upn' ? 'email-address' : 'default'}
+                  value={userField}
+                  onChangeText={(v) => {
+                    setUserField(v);
+                    resetDiscovery();
+                  }}
+                />
+              </>
+            )}
+            <Text style={s.fieldHint}>
+              Trägt der Benutzername von der E-Mail ab, kannst du ihn hier anpassen.
+            </Text>
             <View style={s.previewBox}>
-              <Text style={s.previewLabel}>Benutzername</Text>
-              <Text style={s.previewValue}>{deriveUsername(loginFormat, email) || '—'}</Text>
+              <Text style={s.previewLabel}>Anmeldung als</Text>
+              <Text style={s.previewValue}>{effectiveLogin() || '—'}</Text>
             </View>
+
+            <Pressable style={s.expertToggle} onPress={() => setShowExpert((v) => !v)} hitSlop={6}>
+              <Text style={s.expertToggleText}>Experten-Einstellungen</Text>
+              <Icon
+                name={showExpert ? 'chevronDown' : 'chevronRight'}
+                size={18}
+                color={t.c.brandPrimary}
+              />
+            </Pressable>
+            {showExpert ? (
+              <View style={s.expertBox}>
+                <SectionTitle text="ActiveSync / EWS" s={s} />
+                <FieldLabel text="ActiveSync-Pfad (EAS)" s={s} />
+                <TextInput
+                  style={s.input}
+                  placeholder={DEFAULT_EAS_PATH}
+                  placeholderTextColor={t.c.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={easPath}
+                  onChangeText={(v) => {
+                    setEasPath(v);
+                    setAutodiscover(false);
+                    resetDiscovery();
+                  }}
+                />
+                <FieldLabel text="Port" s={s} />
+                <TextInput
+                  style={s.input}
+                  placeholder={DEFAULT_PORT}
+                  placeholderTextColor={t.c.textSecondary}
+                  keyboardType="number-pad"
+                  value={port}
+                  onChangeText={(v) => {
+                    setPort(v);
+                    setAutodiscover(false);
+                    resetDiscovery();
+                  }}
+                />
+                <ToggleRow
+                  label="Fallback auf EWS erlauben"
+                  value={easFallbackToEws}
+                  enabled
+                  onChange={setEasFallbackToEws}
+                  s={s}
+                  t={t}
+                />
+                <Text style={s.fieldHint}>
+                  Standard: aus — es wird ausschließlich ActiveSync (EAS) verwendet. Nur aktivieren,
+                  wenn dein Server EAS nicht unterstützt.
+                </Text>
+
+                <SectionTitle text="Sicherheit / TLS" s={s} />
+                <ToggleRow
+                  label="SSL/TLS verwenden"
+                  value
+                  enabled={false}
+                  onChange={() => undefined}
+                  s={s}
+                  t={t}
+                />
+                <ReadonlyRow k="Minimum TLS-Version" v="TLS 1.2" s={s} />
+                <ReadonlyRow k="EAS-Protokollversion" v="Automatisch (ausgehandelt)" s={s} />
+                <ToggleRow
+                  label="Selbstsigniertes/Firmenzertifikat zulassen"
+                  value={allowSelfSigned}
+                  enabled
+                  onChange={setAllowSelfSigned}
+                  s={s}
+                  t={t}
+                />
+              </View>
+            ) : null}
 
             {errorBox}
             <PrimaryButton label="Weiter" busy={busy} onPress={continueFromConfig} s={s} t={t} />
@@ -507,18 +604,10 @@ export function LoginScreen({ container, onLoggedIn, onCancel }: Props): React.J
           <>
             <AccountRow email={email} onChange={() => setStep('config')} label="Zurück" s={s} />
             <Text style={s.subtitle}>Anmeldung</Text>
-            <TextInput
-              style={s.input}
-              placeholder="Benutzername"
-              placeholderTextColor={t.c.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={username}
-              onChangeText={(v) => {
-                setUsername(v);
-                resetDiscovery();
-              }}
-            />
+            <View style={s.previewBox}>
+              <Text style={s.previewLabel}>Anmeldung als</Text>
+              <Text style={s.previewValue}>{effectiveLogin() || '—'}</Text>
+            </View>
             <TextInput
               style={s.input}
               placeholder="Passwort"
@@ -676,6 +765,10 @@ function StepDots({ step, s, t }: { step: Step; s: Styles; t: AppTheme }): React
 
 function FieldLabel({ text, s }: { text: string; s: Styles }): React.JSX.Element {
   return <Text style={s.fieldLabel}>{text}</Text>;
+}
+
+function SectionTitle({ text, s }: { text: string; s: Styles }): React.JSX.Element {
+  return <Text style={s.sectionTitle}>{text}</Text>;
 }
 
 function ReadonlyRow({ k, v, s }: { k: string; v: string; s: Styles }): React.JSX.Element {
@@ -900,6 +993,31 @@ function makeStyles(t: AppTheme) {
       fontSize: typography.caption.size,
       marginTop: space.xs,
     },
+    col: { flex: 1 },
+    expertBox: {
+      backgroundColor: t.c.bgElevated,
+      borderRadius: radius.md,
+      marginTop: space.xs,
+      padding: space.md,
+    },
+    expertToggle: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: space.md,
+      paddingVertical: space.sm,
+    },
+    expertToggleText: {
+      color: t.c.brandPrimary,
+      fontSize: typography.body.size,
+      fontWeight: '600',
+    },
+    fieldHint: {
+      color: t.c.textSecondary,
+      fontSize: typography.caption.size,
+      marginBottom: space.xs,
+      marginTop: space.xxs,
+    },
     fieldLabel: {
       color: t.c.textSecondary,
       fontSize: typography.caption.size,
@@ -949,6 +1067,13 @@ function makeStyles(t: AppTheme) {
       marginTop: space.md,
       textAlign: 'center',
     },
+    sectionTitle: {
+      color: t.c.textPrimary,
+      fontSize: typography.body.size,
+      fontWeight: '700',
+      marginBottom: space.xxs,
+      marginTop: space.md,
+    },
     segment: {
       alignItems: 'center',
       borderRadius: radius.sm,
@@ -991,6 +1116,7 @@ function makeStyles(t: AppTheme) {
       fontSize: typography.body.size,
       paddingRight: space.sm,
     },
+    twoCol: { flexDirection: 'row', gap: space.sm },
     toggleRow: {
       alignItems: 'center',
       flexDirection: 'row',
