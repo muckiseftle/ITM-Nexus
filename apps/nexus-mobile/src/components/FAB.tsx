@@ -34,5 +34,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 60,
   },
-  wrap: { bottom: space.lg, position: 'absolute', right: space.lg },
+  // Deutlich über der schwebenden TabBar-Insel platziert, damit sich „Neue Mail" und Tableiste
+  // nicht überlagern (die Insel schwebt am unteren Rand).
+  wrap: { bottom: 104, position: 'absolute', right: space.lg },
 });

@@ -705,170 +705,176 @@ function AppInner(): React.JSX.Element {
   }
 
   return (
-    <SafeAreaView style={s.root}>
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle={t.mode === 'dark' ? 'light-content' : 'dark-content'}
-      />
-      <View style={s.body}>
-        <Screen
-          key={tab === 'mail' ? `mail:${mailRoute.name}` : tab}
-          mode={
-            tab === 'mail' &&
-            (mailRoute.name === 'message' ||
-              mailRoute.name === 'compose' ||
-              mailRoute.name === 'folders')
-              ? 'push'
-              : 'fade'
-          }
-          {...(tab === 'mail' && (mailRoute.name === 'message' || mailRoute.name === 'folders')
-            ? { onBack: () => setMailRoute({ name: 'list' }) }
-            : {})}
-        >
-          {tab === 'mail' ? (
-            mailRoute.name === 'message' ? (
-              <MessageScreen
-                container={container}
-                account={account}
-                messageId={mailRoute.messageId}
-                backLabel={folderName}
-                onBack={() => {
-                  setMailRoute({ name: 'list' });
-                }}
-                onCompose={(mode, message) => {
-                  setMailRoute({
-                    name: 'compose',
-                    initial: composerInitialFor(mode, message, accountEmail),
-                  });
-                }}
-                {...(isDraftFolder
-                  ? {
-                      onEdit: (m: MailMessage) =>
-                        setMailRoute({ name: 'compose', initial: draftInitialFor(m) }),
-                    }
-                  : {})}
-              />
-            ) : mailRoute.name === 'compose' ? (
-              <ComposerScreen
+    <View style={s.appRoot}>
+      <SafeAreaView style={s.root}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle={t.mode === 'dark' ? 'light-content' : 'dark-content'}
+        />
+        <View style={s.body}>
+          <Screen
+            key={tab === 'mail' ? `mail:${mailRoute.name}` : tab}
+            mode={
+              tab === 'mail' &&
+              (mailRoute.name === 'message' ||
+                mailRoute.name === 'compose' ||
+                mailRoute.name === 'folders')
+                ? 'push'
+                : 'fade'
+            }
+            {...(tab === 'mail' && (mailRoute.name === 'message' || mailRoute.name === 'folders')
+              ? { onBack: () => setMailRoute({ name: 'list' }) }
+              : {})}
+          >
+            {tab === 'mail' ? (
+              mailRoute.name === 'message' ? (
+                <MessageScreen
+                  container={container}
+                  account={account}
+                  messageId={mailRoute.messageId}
+                  backLabel={folderName}
+                  onBack={() => {
+                    setMailRoute({ name: 'list' });
+                  }}
+                  onCompose={(mode, message) => {
+                    setMailRoute({
+                      name: 'compose',
+                      initial: composerInitialFor(mode, message, accountEmail),
+                    });
+                  }}
+                  {...(isDraftFolder
+                    ? {
+                        onEdit: (m: MailMessage) =>
+                          setMailRoute({ name: 'compose', initial: draftInitialFor(m) }),
+                      }
+                    : {})}
+                />
+              ) : mailRoute.name === 'compose' ? (
+                <ComposerScreen
+                  container={container}
+                  account={account}
+                  accountEmail={accountEmail}
+                  {...(mailRoute.initial ? { initial: mailRoute.initial } : {})}
+                  onClose={() => {
+                    setMailRoute({ name: 'list' });
+                  }}
+                  onSent={() => {
+                    setMailRoute({ name: 'list' });
+                  }}
+                />
+              ) : mailRoute.name === 'folders' ? (
+                <FolderListScreen
+                  accountName={accountName}
+                  accountEmail={accountEmail}
+                  folders={folders}
+                  currentFolderId={currentFolder}
+                  onBack={() => setMailRoute({ name: 'list' })}
+                  onSelectFolder={(id) => {
+                    setCurrentFolder(id);
+                    setMailRoute({ name: 'list' });
+                  }}
+                  sharedMailboxes={sharedMailboxes}
+                  {...(container.sharedMailboxes !== undefined
+                    ? {
+                        onOpenSharedMailbox: (mb: SharedMailbox) => {
+                          setMailRoute({ name: 'list' });
+                          openSharedMailbox(mb);
+                        },
+                      }
+                    : {})}
+                />
+              ) : (
+                <MailboxScreen
+                  container={container}
+                  account={account}
+                  folderId={currentFolder}
+                  folderTitle={folderName}
+                  syncSignal={syncTick}
+                  onOpenMessage={openMessage}
+                  onAuthExpired={handleAuthExpired}
+                  onOpenDrawer={() => {
+                    void container.folders
+                      .listFolders(account)
+                      .then(setFolders)
+                      .catch(() => undefined);
+                    setMailRoute({ name: 'folders' });
+                  }}
+                  onCompose={() => {
+                    setMailRoute({ name: 'compose' });
+                  }}
+                />
+              )
+            ) : tab === 'calendar' ? (
+              <CalendarScreen
                 container={container}
                 account={account}
                 accountEmail={accountEmail}
-                {...(mailRoute.initial ? { initial: mailRoute.initial } : {})}
-                onClose={() => {
-                  setMailRoute({ name: 'list' });
-                }}
-                onSent={() => {
-                  setMailRoute({ name: 'list' });
-                }}
+                initialView={settings.calendarView}
+                onViewChange={(v) => updateSettings({ ...settings, calendarView: v })}
+                sharedMailboxes={sharedMailboxes}
+                calendarSources={settings.calendarSources}
+                onCalendarSourcesChange={(next) =>
+                  updateSettings({ ...settings, calendarSources: next })
+                }
               />
-            ) : mailRoute.name === 'folders' ? (
-              <FolderListScreen
+            ) : tab === 'contacts' ? (
+              <ContactsScreen container={container} account={account} />
+            ) : (
+              <SettingsScreen
                 accountName={accountName}
                 accountEmail={accountEmail}
-                folders={folders}
-                currentFolderId={currentFolder}
-                onBack={() => setMailRoute({ name: 'list' })}
-                onSelectFolder={(id) => {
-                  setCurrentFolder(id);
-                  setMailRoute({ name: 'list' });
-                }}
+                accounts={accountList}
+                onSwitchAccount={(email) => void switchAccount(email)}
+                onAddAccount={addAccount}
                 sharedMailboxes={sharedMailboxes}
+                settings={settings}
+                onChangeSettings={updateSettings}
+                onSignOut={signOut}
+                onRemoveAccount={removeAccount}
                 {...(container.sharedMailboxes !== undefined
                   ? {
-                      onOpenSharedMailbox: (mb: SharedMailbox) => {
-                        setMailRoute({ name: 'list' });
-                        openSharedMailbox(mb);
-                      },
+                      onAddSharedMailbox: addSharedMailbox,
+                      onRemoveSharedMailbox: removeSharedMailbox,
+                      onOpenSharedMailbox: openSharedMailbox,
                     }
                   : {})}
+                {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
+                {...(verifyAppLock !== undefined ? { onVerifyAppLock: verifyAppLock } : {})}
+                {...(clearCache !== undefined ? { onClearCache: clearCache } : {})}
+                {...(container.cacheStats !== undefined
+                  ? { onGetCacheStats: container.cacheStats }
+                  : {})}
+                {...(container.exportContactsToDevice !== undefined && account !== null
+                  ? { onExportContacts: () => container.exportContactsToDevice!(account) }
+                  : {})}
+                {...(container.exportCalendarToDevice !== undefined && account !== null
+                  ? { onExportCalendar: () => container.exportCalendarToDevice!(account) }
+                  : {})}
+                {...(container.activeProtocol !== undefined && account !== null
+                  ? { onGetProtocol: () => container.activeProtocol!(account) }
+                  : {})}
               />
-            ) : (
-              <MailboxScreen
-                container={container}
-                account={account}
-                folderId={currentFolder}
-                folderTitle={folderName}
-                syncSignal={syncTick}
-                onOpenMessage={openMessage}
-                onAuthExpired={handleAuthExpired}
-                onOpenDrawer={() => {
-                  void container.folders
-                    .listFolders(account)
-                    .then(setFolders)
-                    .catch(() => undefined);
-                  setMailRoute({ name: 'folders' });
-                }}
-                onCompose={() => {
-                  setMailRoute({ name: 'compose' });
-                }}
-              />
-            )
-          ) : tab === 'calendar' ? (
-            <CalendarScreen
-              container={container}
-              account={account}
-              accountEmail={accountEmail}
-              initialView={settings.calendarView}
-              onViewChange={(v) => updateSettings({ ...settings, calendarView: v })}
-              sharedMailboxes={sharedMailboxes}
-              calendarSources={settings.calendarSources}
-              onCalendarSourcesChange={(next) =>
-                updateSettings({ ...settings, calendarSources: next })
-              }
-            />
-          ) : tab === 'contacts' ? (
-            <ContactsScreen container={container} account={account} />
-          ) : (
-            <SettingsScreen
-              accountName={accountName}
-              accountEmail={accountEmail}
-              accounts={accountList}
-              onSwitchAccount={(email) => void switchAccount(email)}
-              onAddAccount={addAccount}
-              sharedMailboxes={sharedMailboxes}
-              settings={settings}
-              onChangeSettings={updateSettings}
-              onSignOut={signOut}
-              onRemoveAccount={removeAccount}
-              {...(container.sharedMailboxes !== undefined
-                ? {
-                    onAddSharedMailbox: addSharedMailbox,
-                    onRemoveSharedMailbox: removeSharedMailbox,
-                    onOpenSharedMailbox: openSharedMailbox,
-                  }
-                : {})}
-              {...(changePassword !== undefined ? { onChangePassword: changePassword } : {})}
-              {...(verifyAppLock !== undefined ? { onVerifyAppLock: verifyAppLock } : {})}
-              {...(clearCache !== undefined ? { onClearCache: clearCache } : {})}
-              {...(container.cacheStats !== undefined
-                ? { onGetCacheStats: container.cacheStats }
-                : {})}
-              {...(container.exportContactsToDevice !== undefined && account !== null
-                ? { onExportContacts: () => container.exportContactsToDevice!(account) }
-                : {})}
-              {...(container.exportCalendarToDevice !== undefined && account !== null
-                ? { onExportCalendar: () => container.exportCalendarToDevice!(account) }
-                : {})}
-              {...(container.activeProtocol !== undefined && account !== null
-                ? { onGetProtocol: () => container.activeProtocol!(account) }
-                : {})}
-            />
-          )}
-        </Screen>
-      </View>
+            )}
+          </Screen>
+        </View>
+      </SafeAreaView>
 
-      {/* Schwebende TabBar über dem Inhalt (Fade blendet Mails aus). Auf Mail-Unterseiten
-          (Nachricht/Verfassen/Postfach) ausgeblendet, damit sie deren Aktionsleisten nicht überlagert. */}
+      {/* Schwebende TabBar am ECHTEN unteren Rand (außerhalb der SafeArea → kein Canvas-Streifen
+          darunter). Auf Mail-Unterseiten (Nachricht/Verfassen/Postfach) ausgeblendet, damit sie
+          deren Aktionsleisten nicht überlagert. */}
       {tab === 'mail' && mailRoute.name !== 'list' ? null : (
         <TabBar tabs={TABS} active={tab} onSelect={setTab} />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
+    // Vollflächiger Wurzel-Container (bis zum echten Bildschirmrand) — die SafeArea liegt darin,
+    // die TabBar schwebt darüber am physischen unteren Rand (kein Safe-Area-Streifen dahinter).
+    appRoot: { backgroundColor: t.c.bgCanvas, flex: 1 },
     body: { flex: 1 },
     centered: {
       alignItems: 'center',

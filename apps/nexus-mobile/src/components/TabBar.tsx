@@ -61,7 +61,7 @@ export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>): 
 
   // Dynamisches Ein-/Ausklappen: Höhe schrumpft, dezenter Scale, Beschriftungen blenden aus.
   const islandStyle = useAnimatedStyle(() => ({
-    height: 62 - 16 * collapse.value,
+    height: 70 - 16 * collapse.value,
     transform: [{ scale: 1 - 0.06 * collapse.value }],
   }));
   const labelStyle = useAnimatedStyle(() => ({
@@ -102,7 +102,7 @@ export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>): 
               onPress={() => press(tab.key)}
             >
               <Animated.View style={[s.tabInner, { transform: [{ scale }] }]}>
-                <Icon name={tab.icon} size={24} color={tint} />
+                <Icon name={tab.icon} size={26} color={tint} />
                 <Reanimated.View style={labelStyle}>
                   <Text
                     numberOfLines={1}
@@ -145,13 +145,14 @@ function makeStyles(t: AppTheme) {
     },
     tab: { alignItems: 'center', flex: 1, justifyContent: 'center' },
     tabInner: { alignItems: 'center', justifyContent: 'center' },
-    // Schwebt über dem Inhalt (absolut): die Liste scrollt dahinter durch, KEINE Fläche dahinter.
+    // Schwebt am ECHTEN unteren Rand über dem Inhalt: die Liste scrollt dahinter durch. Das
+    // untere Padding hält die Insel über dem Home-Indicator (kein Streifen dahinter).
     wrap: {
       bottom: 0,
       left: 0,
-      paddingBottom: space.xs,
+      paddingBottom: space.lg,
       paddingHorizontal: space.md,
-      paddingTop: space.xxs,
+      paddingTop: space.xs,
       position: 'absolute',
       right: 0,
     },
