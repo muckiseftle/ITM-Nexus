@@ -3,9 +3,11 @@
  * dem Design-System (siehe docs/05-UX-und-Design.md). Die RN-Komponentenbibliothek konsumiert
  * diese Tokens.
  *
- * Designsprache „Calm & Airy": viel Weißraum, runde Flächen, EINE Leitfarbe (Indigo), keine
- * harten Trennlinien — Tiefe entsteht über Flächenkontrast + Radius + Abstand (NICHT über
- * Schatten/Rahmen auf gerundeten Flächen, die auf iOS 26 + New Architecture abstürzen).
+ * Designsprache „Bold & Dynamic": starke Kontraste, klare Hierarchien und lebendige Akzente.
+ * Kräftige Typografie + reduzierte Flächen schaffen Fokus; Indigo (`brand[600]` = #4F46E5) ist
+ * die Primärfarbe für Aktionen, Status und aktive Zustände. Tiefe entsteht weiter über
+ * Flächenkontrast + Radius + Abstand (NICHT über Schatten/Rahmen auf gerundeten Flächen, die auf
+ * iOS 26 + New Architecture abstürzen).
  */
 
 /** Indigo-Leitfarbenrampe (Tailwind-Indigo). `brand[600]` = Markenfarbe. */
@@ -62,7 +64,7 @@ export const avatarPalette = [
   '#0891B2', // cyan
 ] as const;
 
-/** 4-pt-Raster. */
+/** 8-pt-Raster (Skala aus dem „Bold & Dynamic"-Design-System). */
 export const space = {
   xxs: 4,
   xs: 8,
@@ -70,21 +72,25 @@ export const space = {
   md: 16,
   lg: 24,
   xl: 32,
-  xxl: 48,
+  xxl: 40,
 } as const;
 
 export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
-  xl: 22,
+  xl: 20,
   pill: 999,
 } as const;
 
+/**
+ * Typo-Skala „Bold & Dynamic": kräftige Titel/Headlines für klare Hierarchie, ruhiger Fließtext.
+ * `weight` als React-Native-`fontWeight`-String.
+ */
 export const typography = {
-  largeTitle: { size: 34, weight: '700', lineHeight: 41 },
+  largeTitle: { size: 34, weight: '800', lineHeight: 41 },
   title: { size: 28, weight: '700', lineHeight: 34 },
-  headline: { size: 20, weight: '600', lineHeight: 26 },
+  headline: { size: 20, weight: '700', lineHeight: 26 },
   body: { size: 16, weight: '400', lineHeight: 22 },
   caption: { size: 13, weight: '400', lineHeight: 18 },
 } as const;

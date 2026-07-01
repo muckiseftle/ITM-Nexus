@@ -37,7 +37,7 @@ function buildTheme(mode: ColorScheme): AppTheme {
   return {
     mode,
     c,
-    border: dark ? '#222A33' : '#ECEEF1',
+    border: dark ? '#2A2F3A' : '#E5E7EB',
     rowActive: dark ? '#1C232B' : '#EEF1F5',
     onBrand: '#FFFFFF',
     calPalette: [c.brandPrimary, c.accent, c.success, c.warning, c.danger],
