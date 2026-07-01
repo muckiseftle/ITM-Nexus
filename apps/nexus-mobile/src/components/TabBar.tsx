@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { space } from '@nexus/ui-kit';
 import { Icon, type IconName } from './Icon';
 import { useChrome } from './Chrome';
@@ -22,10 +21,12 @@ interface Props<K extends string> {
 }
 
 /**
- * Schwebende Tab-Leiste OHNE Fläche: die Icons stehen frei über einem weichen Verlauf (SVG), der
- * die darunter scrollenden Mails sanft ausblendet (kein Kasten, kein Schatten → iOS-26-sicher).
- * Beim Runterscrollen klappt sie animiert etwas ein (mehr Platz/Lesbarkeit); Hochscrollen oder ein
- * Tab-Tap klappt sie wieder aus. Die markenfarbene Pille gleitet weiterhin hinter den aktiven Tab.
+ * Schwebende, abgerundete „Insel"-Tab-Leiste: die Icons sitzen in einer Kapsel, die frei ÜBER dem
+ * Inhalt schwebt (die Mails scrollen dahinter durch — KEINE Fläche/kein Streifen dahinter). Die
+ * Insel selbst ist leicht transparent (getöntes „Frosted-Glass") und nutzt nur Rundung +
+ * Hintergrundfarbe (kein Schatten/Rahmen → iOS-26-sicher). Beim Runterscrollen klappt sie animiert
+ * etwas ein (mehr Platz); Hochscrollen oder ein Tab-Tap klappt sie wieder aus. Die markenfarbene
+ * Pille gleitet weiterhin hinter den aktiven Tab.
  */
 export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>): React.JSX.Element {
   const t = useTheme();
@@ -76,18 +77,6 @@ export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>): 
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
-      {/* Weicher Verlauf: transparent → Canvas, blendet scrollende Mails aus (statt harter Fläche). */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="tabfade" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={t.c.bgCanvas} stopOpacity={0} />
-            <Stop offset="0.5" stopColor={t.c.bgCanvas} stopOpacity={0.85} />
-            <Stop offset="1" stopColor={t.c.bgCanvas} stopOpacity={1} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#tabfade)" />
-      </Svg>
-
       <Reanimated.View style={[s.island, islandStyle]} onLayout={onLayout}>
         {width > 0 ? (
           <Animated.View
@@ -132,11 +121,14 @@ export function TabBar<K extends string>({ tabs, active, onSelect }: Props<K>): 
 }
 
 function makeStyles(t: AppTheme) {
+  // Leicht transparente Kapsel („Frosted-Glass"-Tönung): die dahinter scrollenden Mails schimmern
+  // dezent durch. Nur Rundung + (transluzente) Hintergrundfarbe — KEIN Schatten/Rahmen (iOS-26).
+  const glass = t.c.bgElevated + (t.mode === 'dark' ? 'D0' : 'E0');
   return StyleSheet.create({
     island: {
-      // Bewusst OHNE Fläche/Schatten/Rahmen (nur die Pille als aktiver Indikator). Der „schwebende"
-      // Eindruck entsteht über den Verlauf dahinter + Rundung der Pille.
       alignItems: 'center',
+      backgroundColor: glass,
+      borderRadius: 28,
       flexDirection: 'row',
       paddingHorizontal: PAD,
       paddingVertical: PAD,
@@ -153,12 +145,13 @@ function makeStyles(t: AppTheme) {
     },
     tab: { alignItems: 'center', flex: 1, justifyContent: 'center' },
     tabInner: { alignItems: 'center', justifyContent: 'center' },
+    // Schwebt über dem Inhalt (absolut): die Liste scrollt dahinter durch, KEINE Fläche dahinter.
     wrap: {
       bottom: 0,
       left: 0,
       paddingBottom: space.xs,
       paddingHorizontal: space.md,
-      paddingTop: space.xl,
+      paddingTop: space.xxs,
       position: 'absolute',
       right: 0,
     },
