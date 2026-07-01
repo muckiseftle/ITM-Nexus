@@ -7,6 +7,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { Avatar } from '../components/Avatar';
 import { Press } from '../components/Press';
 import { FAB } from '../components/FAB';
+import { useChrome } from '../components/Chrome';
 import { ContactDetailScreen } from './ContactDetailScreen';
 import { ContactEditScreen } from './ContactEditScreen';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
@@ -25,6 +26,7 @@ type Route =
 export function ContactsScreen({ container, account }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  const { handleScroll } = useChrome();
   const [query, setQuery] = useState('');
   const [contacts, setContacts] = useState<readonly Contact[]>([]);
   const [route, setRoute] = useState<Route>({ name: 'list' });
@@ -122,6 +124,8 @@ export function ContactsScreen({ container, account }: Props): React.JSX.Element
       <FlatList
         data={contacts}
         keyExtractor={(c) => c.id}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={contacts.length === 0 ? s.emptyWrap : s.listContent}
         ListEmptyComponent={<Text style={s.empty}>Keine Kontakte gefunden.</Text>}
         renderItem={({ item }) => (
@@ -159,7 +163,7 @@ function makeStyles(t: AppTheme) {
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
     empty: { color: t.c.textSecondary, fontSize: typography.body.size, textAlign: 'center' },
     emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
-    listContent: { paddingBottom: 96 },
+    listContent: { paddingBottom: 118 },
     mail: { color: t.c.textSecondary, fontSize: typography.caption.size },
     name: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '700' },
     row: {

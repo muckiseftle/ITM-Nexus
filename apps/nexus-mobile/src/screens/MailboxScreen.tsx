@@ -22,6 +22,7 @@ import { Segmented } from '../components/Segmented';
 import { FAB } from '../components/FAB';
 import { Press } from '../components/Press';
 import { SwipeableRow } from '../components/SwipeableRow';
+import { useChrome } from '../components/Chrome';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 
 /** Hermes-sichere Relativ-Zeit (ohne Intl): „9:42" · „Gestern" · „Mo" · „12.03.". */
@@ -76,6 +77,7 @@ export function MailboxScreen({
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  const { handleScroll } = useChrome();
 
   const [messages, setMessages] = useState<readonly MailMessage[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -219,6 +221,8 @@ export function MailboxScreen({
         data={filtered}
         keyExtractor={keyExtractor}
         contentContainerStyle={filtered.length === 0 ? s.emptyWrap : s.listContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -308,7 +312,7 @@ function makeStyles(t: AppTheme) {
     empty: { color: t.c.textSecondary, fontSize: typography.body.size, textAlign: 'center' },
     emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
     lead: { alignItems: 'center', height: 48, justifyContent: 'center', width: 10 },
-    listContent: { paddingBottom: 96 },
+    listContent: { paddingBottom: 118 },
     preview: {
       color: t.c.textSecondary,
       fontSize: typography.caption.size,

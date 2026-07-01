@@ -10,6 +10,7 @@ import { BottomSheet } from '../components/BottomSheet';
 import { Segmented } from '../components/Segmented';
 import { Press } from '../components/Press';
 import { FAB } from '../components/FAB';
+import { useChrome } from '../components/Chrome';
 import { EventDetailScreen } from './EventDetailScreen';
 import { EventEditScreen } from './EventEditScreen';
 import { paletteColor, useTheme, type AppTheme } from '../theme/ThemeContext';
@@ -80,6 +81,7 @@ export function CalendarScreen({
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  const { handleScroll } = useChrome();
   const today = useMemo(() => dStart(Date.now()), []);
   const [route, setRoute] = useState<EventRoute>({ name: 'calendar' });
   const canEdit = container.createEvent !== undefined;
@@ -538,7 +540,13 @@ export function CalendarScreen({
           <Segmented options={VIEWS} value={view} onChange={setView} />
         </View>
       </ScreenHeader>
-      <ScrollView contentContainerStyle={s.content}>{body}</ScrollView>
+      <ScrollView
+        contentContainerStyle={s.content}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        {body}
+      </ScrollView>
       {canEdit ? (
         <FAB icon="plus" onPress={() => setRoute({ name: 'edit', day: selected })} />
       ) : null}
@@ -622,7 +630,7 @@ function makeStyles(t: AppTheme) {
     },
     chipText: { color: t.c.textPrimary, fontSize: 9.5 },
     cmore: { color: t.c.textSecondary, fontSize: 9, paddingLeft: 5 },
-    content: { paddingBottom: space.xl },
+    content: { paddingBottom: 118 },
     d: { borderRadius: 3, height: 5, width: 5 },
     dayH: {
       color: t.c.textSecondary,

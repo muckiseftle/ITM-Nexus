@@ -55,6 +55,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { type IconName } from './components/Icon';
 import { LockScreen } from './components/LockScreen';
 import { Screen } from './components/Screen';
+import { ChromeProvider } from './components/Chrome';
 import { TabBar } from './components/TabBar';
 import { LoginScreen } from './screens/LoginScreen';
 import { FolderListScreen } from './screens/FolderListScreen';
@@ -138,9 +139,11 @@ export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={styles.root}>
       <ThemeProvider>
-        <ErrorBoundary>
-          <AppInner />
-        </ErrorBoundary>
+        <ChromeProvider>
+          <ErrorBoundary>
+            <AppInner />
+          </ErrorBoundary>
+        </ChromeProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
@@ -855,7 +858,11 @@ function AppInner(): React.JSX.Element {
         </Screen>
       </View>
 
-      <TabBar tabs={TABS} active={tab} onSelect={setTab} />
+      {/* Schwebende TabBar über dem Inhalt (Fade blendet Mails aus). Auf Mail-Unterseiten
+          (Nachricht/Verfassen/Postfach) ausgeblendet, damit sie deren Aktionsleisten nicht überlagert. */}
+      {tab === 'mail' && mailRoute.name !== 'list' ? null : (
+        <TabBar tabs={TABS} active={tab} onSelect={setTab} />
+      )}
     </SafeAreaView>
   );
 }

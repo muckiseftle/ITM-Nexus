@@ -170,7 +170,7 @@ function makeStyles(t: AppTheme) {
       overflow: 'hidden',
     },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    content: { padding: space.md, paddingBottom: space.xl },
+    content: { padding: space.md, paddingBottom: 118 },
     deleteBtn: {
       alignItems: 'center',
       flexDirection: 'row',

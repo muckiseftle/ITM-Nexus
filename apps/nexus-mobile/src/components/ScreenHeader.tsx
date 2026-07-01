@@ -75,7 +75,8 @@ function makeStyles(t: AppTheme) {
       backgroundColor: t.c.bgCanvas,
     },
     search: {
-      backgroundColor: t.c.bgElevated,
+      // Flach/modern: keine gefüllte Fläche, nur eine dezente Schattierung.
+      backgroundColor: t.c.textSecondary + '1A',
       borderRadius: radius.pill,
       color: t.c.textPrimary,
       fontSize: typography.body.size,

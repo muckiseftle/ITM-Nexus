@@ -76,7 +76,8 @@ function makeStyles(t: AppTheme) {
     labelActive: { color: t.c.brandPrimary, fontWeight: '700' },
     seg: { alignItems: 'center', flex: 1, paddingVertical: 8 },
     track: {
-      backgroundColor: t.c.bgElevated,
+      // Flach/modern: nur eine dezente Schattierung als Spur; der aktive Chip (Indikator) bleibt.
+      backgroundColor: t.c.textSecondary + '14',
       borderRadius: radius.pill,
       flexDirection: 'row',
       padding: PAD,

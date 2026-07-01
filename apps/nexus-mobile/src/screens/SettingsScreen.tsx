@@ -14,6 +14,7 @@ import { APP_MODE, PINNING } from '../config';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
+import { useChrome } from '../components/Chrome';
 import { BottomSheet, OptionSheet } from '../components/BottomSheet';
 import { INTERVAL_OPTS, WINDOW_OPTS, labelOf, type AppSettings } from '../composition/settings';
 import type { CacheStats } from '../composition/container';
@@ -106,6 +107,7 @@ export function SettingsScreen({
 }: Props): React.JSX.Element {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  const { handleScroll } = useChrome();
   const [cacheBusy, setCacheBusy] = useState(false);
   const [protocol, setProtocol] = useState<string | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
@@ -291,7 +293,12 @@ export function SettingsScreen({
   if (route === 'account') {
     return (
       <View style={s.screen}>
-        <ScrollView style={s.screen} contentContainerStyle={s.content}>
+        <ScrollView
+          style={s.screen}
+          contentContainerStyle={s.content}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
           <Pressable style={s.back} onPress={() => setRoute('root')} hitSlop={8}>
             <Icon name="chevronLeft" size={20} color={t.c.brandPrimary} />
             <Text style={s.backText}>Einstellungen</Text>
@@ -581,7 +588,12 @@ export function SettingsScreen({
   }
 
   return (
-    <ScrollView style={s.screen} contentContainerStyle={s.content}>
+    <ScrollView
+      style={s.screen}
+      contentContainerStyle={s.content}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+    >
       <Text style={s.headTitle}>Einstellungen</Text>
 
       <Text style={s.section}>Konten</Text>
@@ -763,7 +775,7 @@ function makeStyles(t: AppTheme) {
       overflow: 'hidden',
     },
     chev: { color: t.c.textSecondary, fontSize: typography.body.size },
-    content: { paddingBottom: space.xl },
+    content: { paddingBottom: 118 },
     dangerText: { color: t.c.danger, fontSize: typography.body.size },
     formRow: { flexDirection: 'row', gap: space.xs, marginTop: space.xs },
     grow: { flex: 1, minWidth: 0 },

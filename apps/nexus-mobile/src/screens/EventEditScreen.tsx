@@ -286,7 +286,7 @@ function makeStyles(t: AppTheme) {
     barSave: { color: t.c.brandPrimary, fontSize: typography.body.size, fontWeight: '700' },
     barTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
     container: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    content: { padding: space.md, paddingBottom: space.xl },
+    content: { padding: space.md, paddingBottom: 118 },
     dtValue: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
     dtWrap: {
       backgroundColor: t.c.card,
