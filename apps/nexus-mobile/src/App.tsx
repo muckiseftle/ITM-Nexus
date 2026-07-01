@@ -56,8 +56,8 @@ import { type IconName } from './components/Icon';
 import { LockScreen } from './components/LockScreen';
 import { Screen } from './components/Screen';
 import { TabBar } from './components/TabBar';
-import { FolderDrawer } from './components/FolderDrawer';
 import { LoginScreen } from './screens/LoginScreen';
+import { FolderListScreen } from './screens/FolderListScreen';
 import { MailboxScreen } from './screens/MailboxScreen';
 import { MessageScreen } from './screens/MessageScreen';
 import { ComposerScreen, type ComposerInitial } from './screens/ComposerScreen';
@@ -70,6 +70,7 @@ type Tab = 'mail' | 'calendar' | 'contacts' | 'settings';
 
 type MailRoute =
   | { readonly name: 'list' }
+  | { readonly name: 'folders' }
   | { readonly name: 'message'; readonly messageId: MessageId }
   | { readonly name: 'compose'; readonly initial?: ComposerInitial };
 
@@ -167,7 +168,6 @@ function AppInner(): React.JSX.Element {
   const [mailRoute, setMailRoute] = useState<MailRoute>({ name: 'list' });
   const [currentFolder, setCurrentFolder] = useState<FolderId>(toFolderId(DEMO_INBOX_ID));
   const [folders, setFolders] = useState<readonly MailFolder[]>([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   // Wird nach jedem erfolgreichen Hintergrund-Sync erhöht → Screens laden lokal neu.
   const [syncTick, setSyncTick] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -499,7 +499,6 @@ function AppInner(): React.JSX.Element {
     setAccountEmail(DEMO_EMAIL);
     setTab('mail');
     setMailRoute({ name: 'list' });
-    setDrawerOpen(false);
     setFolders([]);
     setCurrentFolder(toFolderId(DEMO_INBOX_ID));
     setSharedView(null);
@@ -517,7 +516,6 @@ function AppInner(): React.JSX.Element {
       setAccountEmail(email);
       setTab('mail');
       setMailRoute({ name: 'list' });
-      setDrawerOpen(false);
       setFolders([]);
       setCurrentFolder(toFolderId(DEMO_INBOX_ID));
       setSharedView(null);
@@ -714,11 +712,14 @@ function AppInner(): React.JSX.Element {
         <Screen
           key={tab === 'mail' ? `mail:${mailRoute.name}` : tab}
           mode={
-            tab === 'mail' && (mailRoute.name === 'message' || mailRoute.name === 'compose')
+            tab === 'mail' &&
+            (mailRoute.name === 'message' ||
+              mailRoute.name === 'compose' ||
+              mailRoute.name === 'folders')
               ? 'push'
               : 'fade'
           }
-          {...(tab === 'mail' && mailRoute.name === 'message'
+          {...(tab === 'mail' && (mailRoute.name === 'message' || mailRoute.name === 'folders')
             ? { onBack: () => setMailRoute({ name: 'list' }) }
             : {})}
         >
@@ -758,6 +759,27 @@ function AppInner(): React.JSX.Element {
                   setMailRoute({ name: 'list' });
                 }}
               />
+            ) : mailRoute.name === 'folders' ? (
+              <FolderListScreen
+                accountName={accountName}
+                accountEmail={accountEmail}
+                folders={folders}
+                currentFolderId={currentFolder}
+                onBack={() => setMailRoute({ name: 'list' })}
+                onSelectFolder={(id) => {
+                  setCurrentFolder(id);
+                  setMailRoute({ name: 'list' });
+                }}
+                sharedMailboxes={sharedMailboxes}
+                {...(container.sharedMailboxes !== undefined
+                  ? {
+                      onOpenSharedMailbox: (mb: SharedMailbox) => {
+                        setMailRoute({ name: 'list' });
+                        openSharedMailbox(mb);
+                      },
+                    }
+                  : {})}
+              />
             ) : (
               <MailboxScreen
                 container={container}
@@ -772,7 +794,7 @@ function AppInner(): React.JSX.Element {
                     .listFolders(account)
                     .then(setFolders)
                     .catch(() => undefined);
-                  setDrawerOpen(true);
+                  setMailRoute({ name: 'folders' });
                 }}
                 onCompose={() => {
                   setMailRoute({ name: 'compose' });
@@ -834,29 +856,6 @@ function AppInner(): React.JSX.Element {
       </View>
 
       <TabBar tabs={TABS} active={tab} onSelect={setTab} />
-
-      <FolderDrawer
-        visible={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        accountName={accountName}
-        accountEmail={accountEmail}
-        folders={folders}
-        currentFolderId={currentFolder}
-        onSelectFolder={(id) => {
-          setCurrentFolder(id);
-          setMailRoute({ name: 'list' });
-          setDrawerOpen(false);
-        }}
-        sharedMailboxes={sharedMailboxes}
-        {...(container.sharedMailboxes !== undefined
-          ? {
-              onOpenSharedMailbox: (mb: SharedMailbox) => {
-                setDrawerOpen(false);
-                openSharedMailbox(mb);
-              },
-            }
-          : {})}
-      />
     </SafeAreaView>
   );
 }

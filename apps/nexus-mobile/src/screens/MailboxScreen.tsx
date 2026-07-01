@@ -269,7 +269,7 @@ const MessageRow = React.memo(function MessageRow({
     >
       <Press onPress={() => onOpen(item.id)} style={s.row}>
         <View style={s.lead}>{unread ? <View style={s.unreadDot} /> : null}</View>
-        <Avatar name={sender} colorKey={item.from.address} size={46} />
+        <Avatar name={sender} colorKey={item.from.address} size={48} />
         <View style={s.rowBody}>
           <View style={s.rowTop}>
             <Text numberOfLines={1} style={[s.sender, unread ? s.senderUnread : null]}>
@@ -307,7 +307,7 @@ function makeStyles(t: AppTheme) {
     bannerText: { color: t.c.danger, fontSize: typography.caption.size },
     empty: { color: t.c.textSecondary, fontSize: typography.body.size, textAlign: 'center' },
     emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
-    lead: { alignItems: 'center', height: 46, justifyContent: 'center', width: 10 },
+    lead: { alignItems: 'center', height: 48, justifyContent: 'center', width: 10 },
     listContent: { paddingBottom: 96 },
     preview: {
       color: t.c.textSecondary,
@@ -327,11 +327,16 @@ function makeStyles(t: AppTheme) {
     rowRight: { alignItems: 'flex-end', gap: 6, marginLeft: space.xs, paddingTop: 4 },
     rowTop: { alignItems: 'center', flexDirection: 'row', gap: space.xs },
     screen: { backgroundColor: t.c.bgCanvas, flex: 1 },
-    sender: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size, fontWeight: '600' },
+    sender: { color: t.c.textPrimary, flex: 1, fontSize: typography.body.size, fontWeight: '700' },
     senderUnread: { fontWeight: '800' },
-    subject: { color: t.c.textPrimary, fontSize: typography.body.size, marginTop: 1 },
+    subject: {
+      color: t.c.textPrimary,
+      fontSize: typography.body.size,
+      fontWeight: '500',
+      marginTop: 1,
+    },
     subjectUnread: { fontWeight: '700' },
-    time: { color: t.c.textSecondary, fontSize: typography.caption.size },
+    time: { color: t.c.textSecondary, fontSize: typography.caption.size, fontWeight: '600' },
     unreadDot: { backgroundColor: t.c.brandPrimary, borderRadius: 5, height: 10, width: 10 },
   });
 }
