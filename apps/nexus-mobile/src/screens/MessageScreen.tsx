@@ -485,7 +485,7 @@ function makeStyles(t: AppTheme) {
     meta: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: space.xs },
     senderAddr: { color: t.c.textSecondary, fontSize: typography.caption.size },
     senderBody: { flex: 1, minWidth: 0 },
-    senderName: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    senderName: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '700' },
     senderRow: {
       alignItems: 'center',
       flexDirection: 'row',
@@ -495,9 +495,10 @@ function makeStyles(t: AppTheme) {
     starBtn: { alignItems: 'center', height: 40, justifyContent: 'center', width: 40 },
     subject: {
       color: t.c.textPrimary,
-      fontSize: 24,
-      fontWeight: '700',
-      lineHeight: 30,
+      fontSize: 26,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+      lineHeight: 32,
     },
     topbar: {
       alignItems: 'center',

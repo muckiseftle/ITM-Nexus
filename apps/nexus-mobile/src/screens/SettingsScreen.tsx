@@ -769,8 +769,9 @@ function makeStyles(t: AppTheme) {
     grow: { flex: 1, minWidth: 0 },
     headTitle: {
       color: t.c.textPrimary,
-      fontSize: typography.title.size,
-      fontWeight: '700',
+      fontSize: typography.largeTitle.size,
+      fontWeight: '800',
+      letterSpacing: 0.2,
       paddingHorizontal: space.md,
       paddingVertical: space.sm,
     },
@@ -802,7 +803,7 @@ function makeStyles(t: AppTheme) {
       padding: space.md,
     },
     itemSub: { color: t.c.textSecondary, fontSize: typography.caption.size, marginTop: 2 },
-    itemTitle: { color: t.c.textPrimary, fontSize: typography.body.size },
+    itemTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
     itemValue: { color: t.c.textSecondary, fontSize: typography.body.size },
     miniAva: {
       alignItems: 'center',
@@ -843,9 +844,9 @@ function makeStyles(t: AppTheme) {
       paddingVertical: 3,
     },
     rm: {
-      borderColor: '#E6B9B9',
+      // Gefüllte Danger-Tönung statt Rahmen (kein borderWidth auf gerundeter View → iOS-26-sicher).
+      backgroundColor: t.c.danger + '1A',
       borderRadius: radius.pill,
-      borderWidth: 1,
       paddingHorizontal: space.md,
       paddingVertical: 6,
     },

@@ -129,7 +129,7 @@ export function ContactsScreen({ container, account }: Props): React.JSX.Element
             <Avatar
               name={item.displayName}
               colorKey={item.emailAddresses[0]?.address ?? item.displayName}
-              size={44}
+              size={48}
             />
             <View style={s.body}>
               <Text numberOfLines={1} style={s.name}>
@@ -161,7 +161,7 @@ function makeStyles(t: AppTheme) {
     emptyWrap: { flexGrow: 1, justifyContent: 'center', padding: space.lg },
     listContent: { paddingBottom: 96 },
     mail: { color: t.c.textSecondary, fontSize: typography.caption.size },
-    name: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    name: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '700' },
     row: {
       alignItems: 'center',
       flexDirection: 'row',

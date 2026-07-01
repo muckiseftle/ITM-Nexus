@@ -653,7 +653,7 @@ function makeStyles(t: AppTheme) {
     },
     evBody: { flex: 1, minWidth: 0 },
     evMeta: { color: t.c.textSecondary, fontSize: typography.caption.size },
-    evTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '600' },
+    evTitle: { color: t.c.textPrimary, fontSize: typography.body.size, fontWeight: '700' },
     evc: {
       alignItems: 'center',
       borderRadius: 12,
@@ -730,8 +730,9 @@ function makeStyles(t: AppTheme) {
       marginTop: 2,
       width: 32,
     },
-    wddSel: { borderColor: t.c.brandPrimary, borderWidth: 2 },
-    wddText: { color: t.c.textPrimary, fontWeight: '600' },
+    // Ausgewählter Tag als gefüllte Fläche (KEIN Rahmen auf gerundeter View → iOS-26-Crash-Schutz).
+    wddSel: { backgroundColor: t.mode === 'dark' ? '#1B2740' : '#EAF0FE' },
+    wddText: { color: t.c.textPrimary, fontWeight: '700' },
     wddTextToday: { color: t.onBrand },
     wddToday: { backgroundColor: t.c.brandPrimary },
     wdn: { color: t.c.textSecondary, fontSize: 11, textAlign: 'center' },
